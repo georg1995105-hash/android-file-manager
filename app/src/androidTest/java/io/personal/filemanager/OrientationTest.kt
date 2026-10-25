@@ -1,6 +1,8 @@
 package io.personal.filemanager
 
+import android.app.UiAutomation
 import android.content.res.Configuration
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -36,9 +38,29 @@ class OrientationTest {
         assertEquals("ориентация: $where", Configuration.ORIENTATION_LANDSCAPE, orientation)
     }
 
+    private fun isLandscape(): Boolean {
+        var o = 0
+        compose.activityRule.scenario.onActivity { o = it.resources.configuration.orientation }
+        return o == Configuration.ORIENTATION_LANDSCAPE
+    }
+
     @Test
     fun landscapeKeptInViewerAndAfterReturn() {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         compose.waitText("Мои файлы")
+        // Устройство горизонтально: телефон поворачивается на 90°, планшет уже горизонтален.
+        if (!isLandscape()) automation.setRotation(UiAutomation.ROTATION_FREEZE_90)
+        else automation.setRotation(UiAutomation.ROTATION_FREEZE_CURRENT)
+        try {
+            compose.waitUntil(10_000) { isLandscape() }
+            compose.waitText("Мои файлы")
+            runChecks()
+        } finally {
+            automation.setRotation(UiAutomation.ROTATION_UNFREEZE)
+        }
+    }
+
+    private fun runChecks() {
         assertLandscape("главная")
         compose.shot("l01_home")
         compose.openTile("Фото")

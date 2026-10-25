@@ -66,10 +66,9 @@ adb logcat -c
 
 rotate 0
 run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest"
-# Горизонтальная ориентация: телефон поворачивается на 90°, планшет уже горизонтален.
-if [ "$DEVICE" = "phone" ]; then rotate 1; else rotate 0; fi
+# Горизонтальная ориентация: тест сам поворачивает экран через UiAutomation (команды adb на эмуляторе
+# телефона не меняли поворот дисплея).
 run_tests landscape "$PKG.OrientationTest"
-rotate 0
 
 mkdir -p device-shots
 adb pull "$SHOTS/." device-shots/ >/dev/null 2>&1 || true

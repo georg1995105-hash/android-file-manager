@@ -88,7 +88,11 @@ class ViewerSelectionTest {
         // Следующий — видео: воспроизводится, двойное касание справа — +10 с.
         compose.onRoot().performTouchInput { swipeLeft() }
         Thread.sleep(2_500)
-        showControls()
+        // Панели нужны видимыми (автоскрытие уже проверено на фото выше).
+        if (!controlsShown()) {
+            compose.onRoot().performTouchInput { click(center) }
+            compose.waitUntil(5_000) { controlsShown() }
+        }
         compose.waitText("3 из 4")
         assertTrue(
             compose.onAllNodes(hasContentDescription("Пауза") or hasContentDescription("Воспроизвести"))

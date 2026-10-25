@@ -65,7 +65,7 @@ sleep 8
 adb logcat -c
 
 rotate 0
-run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest"
+run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest,$PKG.GridViewTest"
 # Горизонтальная ориентация: тест сам поворачивает экран через UiAutomation (команды adb на эмуляторе
 # телефона не меняли поворот дисплея).
 run_tests landscape "$PKG.OrientationTest"

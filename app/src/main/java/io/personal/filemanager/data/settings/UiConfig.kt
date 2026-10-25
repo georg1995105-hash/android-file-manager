@@ -47,6 +47,41 @@ data class ControlConfig(
     val visible: Boolean,
 )
 
+/** Вид файлового раздела. */
+enum class FileViewMode { LIST, GRID }
+
+/**
+ * Настройки вида файловых разделов: режим по разделу (ключ — «RECENT», «FILES», «PHOTOS», «SEARCH»…)
+ * и число файлов в ряду сетки отдельно для телефона/планшета и вертикального/горизонтального положения.
+ */
+object FileViewPrefs {
+    val PHONE_COLUMNS = 2..5
+    val TABLET_COLUMNS = 3..7
+    private val gridByDefault = setOf("PHOTOS", "VIDEOS")
+
+    fun defaultMode(section: String): FileViewMode = if (section in gridByDefault) FileViewMode.GRID else FileViewMode.LIST
+    fun range(tablet: Boolean): IntRange = if (tablet) TABLET_COLUMNS else PHONE_COLUMNS
+    fun columnsKey(tablet: Boolean, landscape: Boolean): String =
+        (if (tablet) "tablet" else "phone") + (if (landscape) "_landscape" else "_portrait")
+
+    fun defaultColumns(tablet: Boolean, landscape: Boolean): Int = when {
+        !tablet && !landscape -> 3
+        !tablet -> 5
+        !landscape -> 4
+        else -> 6
+    }
+
+    val columnKeys: List<String> = listOf(false, true).flatMap { t -> listOf(false, true).map { l -> columnsKey(t, l) } }
+    fun rangeForKey(key: String): IntRange = range(key.startsWith("tablet"))
+}
+
+fun UiConfig.viewMode(section: String): FileViewMode =
+    viewModes[section]?.let { v -> FileViewMode.entries.firstOrNull { it.name == v } } ?: FileViewPrefs.defaultMode(section)
+
+fun UiConfig.gridColumns(tablet: Boolean, landscape: Boolean): Int =
+    gridColumns[FileViewPrefs.columnsKey(tablet, landscape)]?.takeIf { it in FileViewPrefs.range(tablet) }
+        ?: FileViewPrefs.defaultColumns(tablet, landscape)
+
 /** Плиток в ряду на главной: 0 — автоматически по ширине экрана. */
 const val TILES_PER_ROW_AUTO = 0
 val TILES_PER_ROW_OPTIONS = listOf(TILES_PER_ROW_AUTO, 2, 3, 4, 5, 6)
@@ -59,6 +94,8 @@ data class UiConfig(
     val tabs: List<TabConfig>,
     val tilesPerRow: Int = TILES_PER_ROW_AUTO,
     val viewerControls: List<ControlConfig> = defaultViewerControls(),
+    val viewModes: Map<String, String> = emptyMap(),
+    val gridColumns: Map<String, Int> = emptyMap(),
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -153,6 +190,12 @@ object UiConfigCodec {
             tabs = tabs.ifEmpty { UiConfig.defaultTabsConfig() },
             tilesPerRow = config.tilesPerRow.takeIf { it in TILES_PER_ROW_OPTIONS } ?: TILES_PER_ROW_AUTO,
             viewerControls = controls + missingControls,
+            viewModes = config.viewModes.filter { (k, v) ->
+                k.length in 1..32 && FileViewMode.entries.any { it.name == v }
+            },
+            gridColumns = config.gridColumns.filter { (k, v) ->
+                k in FileViewPrefs.columnKeys && v in FileViewPrefs.rangeForKey(k)
+            },
         )
     }
 }

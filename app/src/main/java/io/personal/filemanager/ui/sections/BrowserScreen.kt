@@ -1,5 +1,8 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.components.rememberFileView
+import io.personal.filemanager.ui.components.ViewModeButton
+import io.personal.filemanager.ui.components.FilesPane
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +66,6 @@ import io.personal.filemanager.ui.ops.LocalFileOps
 import io.personal.filemanager.ui.components.AllFilesAccessRequired
 import io.personal.filemanager.ui.components.DateShown
 import io.personal.filemanager.ui.components.EmptyState
-import io.personal.filemanager.ui.components.FileListPane
 import io.personal.filemanager.ui.components.LoadingBox
 import io.personal.filemanager.ui.components.RefreshWhileVisible
 import io.personal.filemanager.ui.components.ScreenTopBar
@@ -117,7 +119,7 @@ class BrowserViewModel(private val container: AppContainer) : ViewModel() {
  * Текущая папка переживает поворот экрана; «назад» поднимается на уровень выше.
  */
 @Composable
-fun BrowserScreen(title: String, rootPath: String) {
+fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val hasAccess = rememberAllFilesAccess()
@@ -127,6 +129,7 @@ fun BrowserScreen(title: String, rootPath: String) {
     var path by rememberSaveable(rootPath) { mutableStateOf(rootPath) }
     var sortMenu by remember { mutableStateOf(false) }
     var createDialog by remember { mutableStateOf(false) }
+    val view = rememberFileView(viewKey)
 
     // Доступ проверяется системой при каждом чтении, поэтому после выдачи разрешения список появится сам.
     RefreshWhileVisible(null) { vm.load(path) }
@@ -164,6 +167,7 @@ fun BrowserScreen(title: String, rootPath: String) {
                 IconButton(onClick = { navigator.openSearch() }) {
                     Icon(Icons.Filled.Search, contentDescription = "Поиск")
                 }
+                ViewModeButton(view)
             },
         )
         if (!hasAccess) {
@@ -184,8 +188,9 @@ fun BrowserScreen(title: String, rootPath: String) {
                 is FolderResult.Ok -> if (r.entries.isEmpty()) {
                     EmptyState(Icons.Filled.FolderOpen, "Пустая папка", "Здесь нет файлов" + if (!prefs.showHidden) " (скрытые не показаны)." else ".")
                 } else {
-                    FileListPane(
+                    FilesPane(
                         entries = r.entries,
+                        view = view,
                         dateShown = DateShown.MODIFIED,
                         onOpen = { entry -> if (entry.isDirectory) go(entry.path) else navigator.openFile(entry, r.entries) },
                     )

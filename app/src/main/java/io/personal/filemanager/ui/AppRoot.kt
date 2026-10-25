@@ -205,7 +205,7 @@ private fun SectionScreen(id: SectionId) {
     val storage = appContainer().storage
     when (id) {
         SectionId.FILES -> BrowserScreen(title = "Внутренняя память", rootPath = storage.rootPath)
-        SectionId.DOWNLOADS -> BrowserScreen(title = SectionId.DOWNLOADS.title, rootPath = storage.downloadsPath)
+        SectionId.DOWNLOADS -> BrowserScreen(title = SectionId.DOWNLOADS.title, rootPath = storage.downloadsPath, viewKey = "DOWNLOADS")
         SectionId.RECENT -> MediaListScreen(id, MediaCategory.RECENT)
         SectionId.PHOTOS -> MediaListScreen(id, MediaCategory.PHOTOS)
         SectionId.VIDEOS -> MediaListScreen(id, MediaCategory.VIDEOS)

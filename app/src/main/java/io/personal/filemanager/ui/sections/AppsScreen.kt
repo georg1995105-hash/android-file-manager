@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.components.rememberFileView
+import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.tapClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -88,7 +90,12 @@ fun AppsScreen() {
     val navigator = LocalNavigator.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        ScreenTopBar(title = SectionId.APPS.title, onBack = { navigator.back() })
+        val apkView = rememberFileView(MediaCategory.APKS.name)
+        ScreenTopBar(
+            title = SectionId.APPS.title,
+            onBack = { navigator.back() },
+            actions = { if (tab == 1) ViewModeButton(apkView) },
+        )
         PrimaryTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Установленные") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("APK-файлы") })

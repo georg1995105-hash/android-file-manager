@@ -103,4 +103,25 @@ class UiConfigTest {
         val kept = UiConfigCodec.decode(UiConfigCodec.encode(UiConfig.defaults().copy(tilesPerRow = 4)))
         assertEquals(4, kept.tilesPerRow)
     }
+
+    @Test
+    fun fileViewPrefsDefaultsAndNormalization() {
+        val d = UiConfig.defaults()
+        assertEquals(FileViewMode.GRID, d.viewMode("PHOTOS"))
+        assertEquals(FileViewMode.LIST, d.viewMode("RECENT"))
+        assertEquals(3, d.gridColumns(tablet = false, landscape = false))
+        assertEquals(6, d.gridColumns(tablet = true, landscape = true))
+        val custom = d.copy(
+            viewModes = mapOf("RECENT" to "GRID", "PHOTOS" to "LIST", "FILES" to "MOSAIC"),
+            gridColumns = mapOf("phone_portrait" to 5, "tablet_portrait" to 7, "phone_landscape" to 9, "watch" to 2),
+        )
+        val n = UiConfigCodec.decode(UiConfigCodec.encode(custom))
+        assertEquals(FileViewMode.GRID, n.viewMode("RECENT"))
+        assertEquals(FileViewMode.LIST, n.viewMode("PHOTOS"))
+        assertEquals(FileViewMode.LIST, n.viewMode("FILES"))     // неизвестный режим — по умолчанию
+        assertEquals(5, n.gridColumns(tablet = false, landscape = false))
+        assertEquals(7, n.gridColumns(tablet = true, landscape = false))
+        assertEquals(5, n.gridColumns(tablet = false, landscape = true)) // 9 вне диапазона 2..5 — по умолчанию
+        assertFalse("watch" in n.gridColumns)
+    }
 }

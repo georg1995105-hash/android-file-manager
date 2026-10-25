@@ -51,4 +51,17 @@ class FormatTest {
         assertEquals(15, usedPercent(76_400_000_000, 512_000_000_000)) // 14,9 % → 15
         assertEquals(0, usedPercent(5, 0))
     }
+
+    @Test
+    fun gridStampShowsDayMonthAndExactTime() {
+        val zone = java.time.ZoneId.of("Europe/Moscow")
+        val ms = java.time.ZonedDateTime.of(2026, 10, 25, 16, 15, 42, 0, zone).toInstant().toEpochMilli()
+        val stamp = gridStamp(ms, zone)!!
+        assertEquals("25.10", stamp.day)
+        assertEquals("16:15", stamp.time)
+        assertEquals("25.10 · 16:15", stamp.oneLine)
+        assertEquals("05.01", gridStamp(java.time.ZonedDateTime.of(2026, 1, 5, 9, 3, 0, 0, zone).toInstant().toEpochMilli(), zone)!!.day)
+        assertEquals(null, gridStamp(0L, zone))
+        assertEquals(null, gridStamp(null, zone))
+    }
 }

@@ -48,6 +48,21 @@ fun formatShortDate(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault(), no
     return date.format(formatter)
 }
 
+private val dayMonthFormatter = DateTimeFormatter.ofPattern("dd.MM", RU)
+private val hourMinuteFormatter = DateTimeFormatter.ofPattern("HH:mm", RU)
+
+/** Дата и время под миниатюрой в сетке: «25.10» и «16:15» (вместе — «25.10 · 16:15»). */
+data class GridStamp(val day: String, val time: String) {
+    val oneLine: String get() = "$day · $time"
+}
+
+/** null — время неизвестно (0 или отрицательное): ничего не подставляется. */
+fun gridStamp(epochMillis: Long?, zone: ZoneId = ZoneId.systemDefault()): GridStamp? {
+    if (epochMillis == null || epochMillis <= 0) return null
+    val date = ZonedDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), zone)
+    return GridStamp(date.format(dayMonthFormatter), date.format(hourMinuteFormatter))
+}
+
 /** Полная дата для «Сведений». */
 fun formatFullDate(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String {
     if (epochMillis <= 0) return "неизвестно"

@@ -1,5 +1,9 @@
 package io.personal.filemanager.ui.components
 
+import androidx.compose.ui.platform.LocalDensity
+import java.time.ZoneId
+import io.personal.filemanager.core.gridStamp
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.rememberScrollState
@@ -189,9 +193,9 @@ fun FileListPane(
     onOpen: ((FileEntry) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 16.dp),
     header: (LazyListScope.() -> Unit)? = null,
+    selection: SelectionState = remember { SelectionState() },
 ) {
     val navigator = LocalNavigator.current
-    val selection = remember { SelectionState() }
     val files = remember(entries) { entries.filter { !it.isDirectory } }
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     // «Назад» в режиме выбора снимает выбор, а не уходит с экрана.
@@ -240,62 +244,66 @@ fun FileListPane(
     detailsFor?.let { entry -> FileDetailsSheet(entry, onDismiss = { detailsFor = null }) }
 }
 
-/** Сетка миниатюр (Фото/Видео) с теми же действиями, что и список. */
+/**
+ * Сетка файлов с теми же действиями, что и список: [columns] файлов в ряду, под миниатюрой — имя, дата и время
+ * («25.10 · 16:15»; в узкой ячейке — в две строки, часы и минуты не скрываются).
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileGridPane(
     entries: List<FileEntry>,
     modifier: Modifier = Modifier,
+    columns: Int = 3,
+    dateShown: DateShown = DateShown.MODIFIED,
+    onOpen: ((FileEntry) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 16.dp),
     header: (LazyGridScope.() -> Unit)? = null,
+    selection: SelectionState = remember { SelectionState() },
 ) {
     val navigator = LocalNavigator.current
-    val selection = remember { SelectionState() }
+    val files = remember(entries) { entries.filter { !it.isDirectory } }
+    val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     BackHandler(enabled = selection.active) { selection.clear() }
+    LaunchedEffect(entries) {
+        val present = entries.mapTo(HashSet()) { it.path }
+        if (selection.paths.any { it !in present }) selection.set(selection.paths.filter { it in present })
+    }
 
-    Box(modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        // Ширина ячейки определяет подписи: узкая — дата и время в две строки, широкая — имя в две строки.
+        val cellWidth = (maxWidth - GRID_SIDE * 2 - GRID_GAP * (columns - 1)) / columns
+        // «25.10 · 16:15» ≈ 84 dp при обычном шрифте; крупный шрифт Android — раньше переход на две строки.
+        val compactStamp = cellWidth - 8.dp < 84.dp * LocalDensity.current.fontScale
+        val nameLines = if (cellWidth >= 120.dp) 2 else 1
+        val zone = remember { ZoneId.systemDefault() }
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 104.dp),
+            columns = GridCells.Fixed(columns),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 12.dp,
-                end = 12.dp,
-                bottom = contentPadding.calculateBottomPadding(),
+                start = GRID_SIDE,
+                end = GRID_SIDE,
+                top = 4.dp,
+                bottom = contentPadding.calculateBottomPadding() + if (selection.active) 140.dp else 0.dp,
             ),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(GRID_GAP),
+            verticalArrangement = Arrangement.spacedBy(GRID_GAP),
         ) {
             header?.invoke(this)
-            items(entries, key = { it.path }) { entry ->
-                val selected = entry.path in selection.paths
-                Box(
-                    Modifier
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .then(if (selected) Modifier.border(3.dp, AppColors.Accent, RoundedCornerShape(10.dp)) else Modifier)
-                        .combinedClickable(
-                            onClick = {
-                                if (selection.active) selection.toggle(entry.path) else navigator.openFile(entry, entries)
-                            },
-                            // Удержание включает выбор (как в списке); действия — в панели выбора.
-                            onLongClick = { selection.toggle(entry.path) },
-                        ),
-                ) {
-                    GridThumbnail(entry)
-                    if (selection.active) {
-                        Icon(
-                            if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                            contentDescription = null,
-                            tint = if (selected) AppColors.Accent else Color.White,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(6.dp)
-                                .size(22.dp),
-                        )
-                    }
-                }
+            items(entries, key = { it.path }, contentType = { "file" }) { entry ->
+                GridCell(
+                    entry = entry,
+                    selected = entry.path in selection.paths,
+                    selectionMode = selection.active,
+                    dateShown = dateShown,
+                    zone = zone,
+                    compactStamp = compactStamp,
+                    nameLines = nameLines,
+                    onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
+                    // Удержание включает выбор (как в списке); действия — в панели выбора.
+                    onLongClick = { selection.toggle(entry.path) },
+                )
             }
         }
         SelectionBar(selection, entries, Modifier.align(Alignment.BottomCenter), onAllActions = { menuFor = it })
@@ -304,12 +312,88 @@ fun FileGridPane(
         FileActionsSheet(
             entry = entry,
             onDismiss = { menuFor = null },
-            onOpen = { navigator.openFile(entry, entries) },
+            onOpen = { open(entry) },
             onSelect = { selection.toggle(entry.path) },
             onDetails = { detailsFor = entry },
         )
     }
     detailsFor?.let { entry -> FileDetailsSheet(entry, onDismiss = { detailsFor = null }) }
+}
+
+private val GRID_SIDE = 12.dp
+private val GRID_GAP = 6.dp
+
+/** Время для подписи: в «Новых» по дате появления — дата добавления; если она неизвестна — честно «изм.». */
+private fun FileEntry.stampTime(mode: DateShown): Pair<Long?, Boolean> =
+    if (mode == DateShown.ADDED && dateAdded != null) dateAdded to false
+    else if (mode == DateShown.ADDED) lastModified.takeIf { it > 0 } to true
+    else lastModified.takeIf { it > 0 } to false
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GridCell(
+    entry: FileEntry,
+    selected: Boolean,
+    selectionMode: Boolean,
+    dateShown: DateShown,
+    zone: ZoneId,
+    compactStamp: Boolean,
+    nameLines: Int,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val (time, modifiedFallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
+    val stamp = remember(time, zone) { gridStamp(time, zone) }
+    Column(
+        Modifier
+            .clip(shape)
+            .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(4.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(10.dp))
+                .then(if (selected) Modifier.border(3.dp, AppColors.Accent, RoundedCornerShape(10.dp)) else Modifier),
+        ) {
+            GridThumbnail(entry)
+            if (selected) Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.22f)))
+            if (selectionMode) {
+                Icon(
+                    if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                    contentDescription = if (selected) "Выбрано" else "Не выбрано",
+                    tint = if (selected) AppColors.Accent else Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(5.dp)
+                        .size(24.dp)
+                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(50)),
+                )
+            }
+        }
+        Spacer(Modifier.size(4.dp))
+        Text(
+            entry.name,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = nameLines,
+            minLines = nameLines,
+            overflow = TextOverflow.Ellipsis,
+        )
+        val prefix = if (modifiedFallback) "изм. " else ""
+        val stampStyle = MaterialTheme.typography.labelSmall
+        val stampColor = MaterialTheme.colorScheme.onSurfaceVariant
+        when {
+            stamp == null -> Text("время неизвестно", style = stampStyle, color = stampColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            compactStamp -> {
+                Text(prefix + stamp.day, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
+                Text(stamp.time, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
+            }
+            else -> Text(prefix + stamp.oneLine, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
+        }
+    }
 }
 
 fun LazyGridScope.fullWidthItem(content: @Composable () -> Unit) {
@@ -510,11 +594,12 @@ private fun GridThumbnail(entry: FileEntry) {
                     Icons.Filled.PlayCircle,
                     contentDescription = null,
                     tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(32.dp),
                 )
             }
         } else {
-            KindBadge(entry.kind, 48.dp)
+            // Папки, документы, архивы, APK (иконка приложения) — понятный значок типа.
+            FileThumbnail(entry, 56.dp)
         }
     }
 }

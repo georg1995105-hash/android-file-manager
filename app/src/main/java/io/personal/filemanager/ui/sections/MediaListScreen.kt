@@ -1,5 +1,8 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.components.rememberFileView
+import io.personal.filemanager.ui.components.ViewModeButton
+import io.personal.filemanager.ui.components.FilesPane
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -40,8 +43,6 @@ import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.components.AllFilesAccessRequired
 import io.personal.filemanager.ui.components.DateShown
 import io.personal.filemanager.ui.components.EmptyState
-import io.personal.filemanager.ui.components.FileGridPane
-import io.personal.filemanager.ui.components.FileListPane
 import io.personal.filemanager.ui.components.LoadingBox
 import io.personal.filemanager.ui.components.RefreshWhileVisible
 import io.personal.filemanager.ui.components.ScreenTopBar
@@ -115,6 +116,7 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
     val state by vm.state.collectAsStateWithLifecycle()
     val recentSort by vm.recentSort.collectAsStateWithLifecycle()
     var sortMenu by remember { mutableStateOf(false) }
+    val view = rememberFileView(category.name)
 
     val isRecent = category == MediaCategory.RECENT
     val subtitle = when {
@@ -133,6 +135,7 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
                 IconButton(onClick = { navigator.openSearch() }) {
                     Icon(Icons.Filled.Search, contentDescription = "Поиск")
                 }
+                ViewModeButton(view)
                 if (isRecent) {
                     Row {
                         IconButton(onClick = { sortMenu = true }) {
@@ -162,6 +165,7 @@ private fun mediaListViewModel(category: MediaCategory): MediaListViewModel =
 /** Содержимое списка без заголовка (используется и во вкладке «APK-файлы»). */
 @Composable
 fun MediaListBody(category: MediaCategory, vm: MediaListViewModel = mediaListViewModel(category)) {
+    val view = rememberFileView(category.name)
     val hasAccess = rememberAllFilesAccess()
     val state by vm.state.collectAsStateWithLifecycle()
     val recentSort by vm.recentSort.collectAsStateWithLifecycle()
@@ -176,29 +180,18 @@ fun MediaListBody(category: MediaCategory, vm: MediaListViewModel = mediaListVie
         state.loading -> LoadingBox()
         state.error != null -> EmptyState(Icons.Filled.FolderOpen, "Ошибка", state.error.orEmpty())
         state.entries.isEmpty() -> EmptyState(Icons.Filled.FolderOpen, "Пока пусто", emptyText(category))
-        category == MediaCategory.PHOTOS || category == MediaCategory.VIDEOS ->
-            FileGridPane(entries = state.entries, contentPadding = PaddingValues(bottom = 16.dp))
-        else -> FileListPane(
+        else -> FilesPane(
             entries = state.entries,
+            view = view,
+            // «Новые» по дате появления — под файлом дата добавления в память; иначе — дата изменения.
             dateShown = if (isRecent && recentSort == RecentSort.ADDED) DateShown.ADDED else DateShown.MODIFIED,
-            header = if (isRecent) {
-                {
-                    item {
-                        Text(
-                            if (recentSort == RecentSort.ADDED) {
-                                "Свежие сверху по дате появления файла в памяти телефона. " +
-                                    "Android не хранит точную дату скачивания для каждого файла."
-                            } else {
-                                "Свежие сверху по дате последнего изменения файла."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-            } else {
+            headerText = if (!isRecent) {
                 null
+            } else if (recentSort == RecentSort.ADDED) {
+                "Свежие сверху по дате появления файла в памяти телефона. " +
+                    "Android не хранит точную дату скачивания для каждого файла."
+            } else {
+                "Свежие сверху по дате последнего изменения файла."
             },
         )
     }

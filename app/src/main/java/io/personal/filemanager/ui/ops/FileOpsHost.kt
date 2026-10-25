@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui.ops
 
+import io.personal.filemanager.core.pluralRu
+import androidx.compose.foundation.layout.heightIn
 import android.widget.Toast
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -225,8 +227,9 @@ fun FileOpsHost(
             onDismissRequest = { deleteTargets = null },
             title = { Text(if (trashable) "Переместить в корзину?" else "Удалить безвозвратно?") },
             text = {
-                Text(
-                    describe(targets) + "\n\n" + if (trashable) {
+                TargetsList(
+                    targets,
+                    if (trashable) {
                         "Восстановить можно в «Корзине» (меню ⋮ на главной)."
                     } else {
                         "Для этого места корзина недоступна — удаление нельзя будет отменить."
@@ -257,7 +260,7 @@ fun FileOpsHost(
         AlertDialog(
             onDismissRequest = { permanentTargets = null },
             title = { Text("Удалить без возможности восстановления?") },
-            text = { Text(describe(targets) + "\n\nЭто действие нельзя отменить.") },
+            text = { TargetsList(targets, "Это действие нельзя отменить.") },
             confirmButton = {
                 TextButton(onClick = {
                     permanentTargets = null
@@ -296,6 +299,32 @@ fun FileOpsHost(
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         )
+    }
+}
+
+/** Какие именно файлы будут удалены: имена (первые 12) и остаток, затем пояснение. */
+@Composable
+private fun TargetsList(targets: List<FileEntry>, note: String) {
+    val shown = 12
+    Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+        Text(
+            if (targets.size == 1) "Выбран 1 объект:" else "Выбрано: ${pluralRu(targets.size, "объект", "объекта", "объектов")}",
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Spacer(Modifier.height(6.dp))
+        targets.take(shown).forEach { t ->
+            Text(
+                "• " + t.name + if (t.isDirectory) " (папка)" else "",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (targets.size > shown) {
+            Text("…и ещё ${targets.size - shown}", style = MaterialTheme.typography.bodyMedium)
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(note, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

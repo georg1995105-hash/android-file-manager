@@ -1,5 +1,8 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.components.rememberFileView
+import io.personal.filemanager.ui.components.ViewModeButton
+import io.personal.filemanager.ui.components.FilesPane
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,7 +44,6 @@ import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.components.AllFilesAccessRequired
 import io.personal.filemanager.ui.components.DateShown
 import io.personal.filemanager.ui.components.EmptyState
-import io.personal.filemanager.ui.components.FileListPane
 import io.personal.filemanager.ui.components.LoadingBox
 import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.components.rememberAllFilesAccess
@@ -85,6 +87,7 @@ fun SearchScreen() {
     val state by vm.state.collectAsStateWithLifecycle()
     var text by rememberSaveable { mutableStateOf("") }
     val focus = remember { FocusRequester() }
+    val view = rememberFileView("SEARCH")
 
     LaunchedEffect(Unit) {
         if (text.isNotBlank() && state.results == null) vm.search(text)
@@ -105,6 +108,7 @@ fun SearchScreen() {
                 else -> "Найдено: " + pluralRu(results.size, "файл", "файла", "файлов")
             },
             onBack = { navigator.back() },
+            actions = { ViewModeButton(view) },
         )
         Box(Modifier.weight(1f)) {
             when {
@@ -112,7 +116,7 @@ fun SearchScreen() {
                 state.loading && results == null -> LoadingBox()
                 results == null -> EmptyState(Icons.Filled.Search, "Что найти?", "Введите часть имени файла внизу экрана.")
                 results.isEmpty() -> EmptyState(Icons.Filled.SearchOff, "Ничего не найдено", "Проверьте написание или введите другую часть имени.")
-                else -> FileListPane(entries = results, dateShown = DateShown.MODIFIED)
+                else -> FilesPane(entries = results, view = view, dateShown = DateShown.MODIFIED)
             }
         }
         OutlinedTextField(

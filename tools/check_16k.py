@@ -41,11 +41,11 @@ def main(path: str) -> int:
             aligns = load_aligns(z.read(info))
             ok_elf = all(a >= PAGE for a in aligns) or abi in ("armeabi-v7a", "x86")
             header_off = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
-            ok_zip = info.compress_type != zipfile.STORED or header_off % PAGE == 0
+            ok_zip = info.compress_type != zipfile.ZIP_STORED or header_off % PAGE == 0
             status = "OK" if ok_elf and ok_zip else "FAIL"
             if status == "FAIL" and abi in ("arm64-v8a", "x86_64"):
                 bad += 1
-            print(f"{status} {info.filename} LOAD align={sorted(set(aligns))} stored={info.compress_type == zipfile.STORED} zip16k={ok_zip}")
+            print(f"{status} {info.filename} LOAD align={sorted(set(aligns))} stored={info.compress_type == zipfile.ZIP_STORED} zip16k={ok_zip}")
     print("16KB: " + ("PASS" if bad == 0 else f"FAIL ({bad})"))
     return 1 if bad else 0
 

@@ -126,4 +126,8 @@ dependencies {
 // Скриншот-тесты (Robolectric) запускаются отдельно: ./gradlew testDebugUnitTest -Pscreenshots --tests "*ScreenshotTest"
 tasks.withType<Test>().configureEach {
     if (!project.hasProperty("screenshots")) exclude("**/ScreenshotTest*")
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }

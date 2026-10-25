@@ -54,7 +54,7 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon testDebugUnitTest -Pscreenshots --tests "*ScreenshotTest" 2>&1 | tee screenshots.log || {
             echo "===== SCREENSHOT ERRORS ====="
-            grep -E '^e: |FAILED|Exception|Caused by' screenshots.log | head -40
+            grep -E '^e: |FAILED|Exception|Caused by|^\s+at (org.robolectric|androidx.compose)' screenshots.log | head -120
             exit 1
           }
 

@@ -53,6 +53,7 @@ import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.core.usedPercent
 import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.settings.TileConfig
+import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.appContainer
@@ -72,11 +73,17 @@ fun HomeScreen() {
     val vm = appViewModel { HomeViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
     val config by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
+
+    RefreshWhileVisible(vm.changes) { vm.refresh() }
+    HomeContent(state, config)
+}
+
+/** Главная без источников данных — для экрана и для скриншот-тестов. */
+@Composable
+fun HomeContent(state: HomeState, config: UiConfig?) {
     val navigator = LocalNavigator.current
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
-
-    RefreshWhileVisible(vm.changes) { vm.refresh() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

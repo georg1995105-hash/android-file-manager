@@ -73,6 +73,20 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
+    // Основной APK — arm64-v8a (vivo X300 Pro) + универсальный из тех же исходников (ТЗ §1).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = true
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -100,7 +114,16 @@ dependencies {
     implementation(libs.coil.video)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+}
+
+// Скриншот-тесты (Robolectric) запускаются отдельно: ./gradlew testDebugUnitTest -Pscreenshots --tests "*ScreenshotTest"
+tasks.withType<Test>().configureEach {
+    if (!project.hasProperty("screenshots")) exclude("**/ScreenshotTest*")
 }

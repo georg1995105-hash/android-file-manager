@@ -94,9 +94,19 @@ class TileSettingsViewModel(private val container: AppContainer) : ViewModel() {
 
 @Composable
 fun TileSettingsScreen() {
-    val navigator = LocalNavigator.current
     val vm = appViewModel { TileSettingsViewModel(it) }
     val tiles by vm.tiles.collectAsStateWithLifecycle()
+    TileSettingsContent(tiles, onMove = onMove, onUpdate = vm::update, onReset = vm::reset)
+}
+
+@Composable
+fun TileSettingsContent(
+    tiles: List<TileConfig>?,
+    onMove: (Int, Int) -> Unit,
+    onUpdate: (String, (TileConfig) -> TileConfig) -> Unit,
+    onReset: () -> Unit,
+) {
+    val navigator = LocalNavigator.current
     var editing by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -137,7 +147,7 @@ fun TileSettingsScreen() {
             ReorderableColumn(
                 items = list,
                 keyOf = { it.id },
-                onMove = vm::move,
+                onMove = onMove,
                 modifier = Modifier.padding(horizontal = 12.dp),
             ) { tile, _, handle, dragging ->
                 val id = SectionId.fromKey(tile.id) ?: return@ReorderableColumn
@@ -147,8 +157,8 @@ fun TileSettingsScreen() {
                     suggested = id.suggestedIcons,
                     handle = handle,
                     dragging = dragging,
-                    onPickIcon = { icon -> vm.update(tile.id) { it.copy(icon = icon) } },
-                    onToggleVisible = { vm.update(tile.id) { it.copy(visible = !it.visible) } },
+                    onPickIcon = { icon -> onUpdate(tile.id) { it.copy(icon = icon) } },
+                    onToggleVisible = { onUpdate(tile.id) { it.copy(visible = !it.visible) } },
                     onChange = { editing = tile.id },
                 )
             }
@@ -161,7 +171,7 @@ fun TileSettingsScreen() {
             title = SectionId.fromKey(editingTile.id)?.title.orEmpty(),
             iconKey = editingTile.icon,
             colorKey = editingTile.color,
-            onChange = { icon, color -> vm.update(editingTile.id) { it.copy(icon = icon, color = color) } },
+            onChange = { icon, color -> onUpdate(editingTile.id) { it.copy(icon = icon, color = color) } },
             onDismiss = { editing = null },
         )
     }
@@ -170,7 +180,7 @@ fun TileSettingsScreen() {
             onDismissRequest = { confirmReset = false },
             title = { Text("Сбросить разделы?") },
             text = { Text("Порядок, значки, цвета и видимость плиток вернутся к исходным. Нижняя панель не изменится.") },
-            confirmButton = { TextButton(onClick = { confirmReset = false; vm.reset() }) { Text("Сбросить") } },
+            confirmButton = { TextButton(onClick = { confirmReset = false; onReset() }) { Text("Сбросить") } },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Отмена") } },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         )

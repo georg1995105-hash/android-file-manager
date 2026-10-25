@@ -105,6 +105,31 @@ fun TabSettingsScreen() {
     val navigator = LocalNavigator.current
     val vm = appViewModel { TabSettingsViewModel(it) }
     val draft by vm.draft.collectAsStateWithLifecycle()
+    TabSettingsContent(
+        draft = draft,
+        actions = TabEditActions(
+            move = vm::move,
+            remove = vm::remove,
+            add = vm::add,
+            restyle = vm::restyle,
+            reset = vm::reset,
+            save = { vm.save { navigator.back() } },
+        ),
+    )
+}
+
+class TabEditActions(
+    val move: (Int, Int) -> Unit,
+    val remove: (String) -> Unit,
+    val add: (SectionId) -> Unit,
+    val restyle: (String, String, String) -> Unit,
+    val reset: () -> Unit,
+    val save: () -> Unit,
+)
+
+@Composable
+fun TabSettingsContent(draft: List<TabConfig>?, actions: TabEditActions) {
+    val navigator = LocalNavigator.current
     var editing by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize()) {
@@ -144,7 +169,7 @@ fun TabSettingsScreen() {
                         .clip(RoundedCornerShape(12.dp))
                         .border(1.dp, AppColors.CardBorder, RoundedCornerShape(12.dp))
                         .background(AppColors.Card)
-                        .clickable { vm.reset() }
+                        .clickable { actions.reset() }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
@@ -156,7 +181,7 @@ fun TabSettingsScreen() {
                         modifier = Modifier.padding(16.dp),
                     )
                 }
-                ReorderableColumn(items = tabs, keyOf = { it.id }, onMove = vm::move) { tab, index, handle, _ ->
+                ReorderableColumn(items = tabs, keyOf = { it.id }, onMove = actions.move) { tab, index, handle, _ ->
                     val id = SectionId.fromKey(tab.id) ?: return@ReorderableColumn
                     Column {
                         if (index > 0) HorizontalDivider(color = AppColors.Divider, modifier = Modifier.padding(start = 56.dp))
@@ -176,7 +201,7 @@ fun TabSettingsScreen() {
                             CircleAction(onClick = { editing = tab.id }) {
                                 Icon(Icons.Filled.Edit, contentDescription = "Изменить значок «${id.title}»", modifier = Modifier.size(18.dp))
                             }
-                            IconButton(onClick = { vm.remove(tab.id) }) {
+                            IconButton(onClick = { actions.remove(tab.id) }) {
                                 Icon(Icons.Filled.RemoveCircleOutline, contentDescription = "Убрать «${id.title}»")
                             }
                         }
@@ -205,7 +230,7 @@ fun TabSettingsScreen() {
                             SectionIcon(s.defaultIcon, s.defaultColor, 30.dp)
                             Spacer(Modifier.width(16.dp))
                             Text(s.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { vm.add(s) }, enabled = !full) {
+                            IconButton(onClick = { actions.add(s) }, enabled = !full) {
                                 Icon(Icons.Filled.AddCircleOutline, contentDescription = "Добавить «${s.title}»")
                             }
                         }
@@ -241,7 +266,7 @@ fun TabSettingsScreen() {
                     colors = ButtonDefaults.buttonColors(containerColor = AppColors.Card, contentColor = AppColors.TextPrimary),
                 ) { Text("Отмена") }
                 Button(
-                    onClick = { vm.save { navigator.back() } },
+                    onClick = { actions.save() },
                     enabled = tabs.isNotEmpty(),
                     modifier = Modifier.weight(1f).height(48.dp),
                 ) { Text("Сохранить") }
@@ -255,7 +280,7 @@ fun TabSettingsScreen() {
             title = SectionId.fromKey(editingTab.id)?.title.orEmpty(),
             iconKey = editingTab.icon,
             colorKey = editingTab.color,
-            onChange = { icon, color -> vm.restyle(editingTab.id, icon, color) },
+            onChange = { icon, color -> actions.restyle(editingTab.id, icon, color) },
             onDismiss = { editing = null },
         )
     }

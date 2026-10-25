@@ -171,7 +171,7 @@ private fun selectTab(nav: NavHostController, id: SectionId) {
 }
 
 @Composable
-private fun BottomTabBar(tabs: List<TabConfig>, current: SectionId?, onSelect: (SectionId) -> Unit) {
+internal fun BottomTabBar(tabs: List<TabConfig>, current: SectionId?, onSelect: (SectionId) -> Unit) {
     NavigationBar(containerColor = AppColors.Surface, tonalElevation = 0.dp) {
         tabs.forEach { tab ->
             val id = SectionId.fromKey(tab.id) ?: return@forEach

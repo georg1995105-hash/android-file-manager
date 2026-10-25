@@ -76,7 +76,12 @@ class OperationsManager(
     fun conflicts(paths: List<String>, destDir: File): List<String> = ops.conflicts(paths.map(::File), destDir)
 
     /** Запуск длинной операции в фоне. false — уже выполняется другая. */
-    fun launch(title: String, cancellable: Boolean = true, block: suspend (onProgress: (OpProgress) -> Unit, isCancelled: () -> Boolean) -> OpReport?): Boolean {
+    fun launch(
+        title: String,
+        cancellable: Boolean = true,
+        onDone: ((OpReport?) -> Unit)? = null,
+        block: suspend (onProgress: (OpProgress) -> Unit, isCancelled: () -> Boolean) -> OpReport?,
+    ): Boolean {
         if (_running.value != null) {
             _messages.tryEmit("Дождитесь завершения текущей операции")
             return false
@@ -96,6 +101,7 @@ class OperationsManager(
                 _messages.tryEmit(summary(title, report))
             }
             _version.value++
+            if (onDone != null) withContext(Dispatchers.Main) { onDone(report) }
         }
         return true
     }
@@ -112,9 +118,9 @@ class OperationsManager(
         if (started) _clipboard.value = null
     }
 
-    fun moveToTrash(paths: List<String>) {
-        launch("Удаление в корзину", cancellable = false) { _, _ -> ops.moveToTrash(paths.map(::File)) }
-    }
+    /** [onDone] — на главном потоке после завершения (null-отчёт: операция не выполнялась). */
+    fun moveToTrash(paths: List<String>, onDone: ((OpReport?) -> Unit)? = null): Boolean =
+        launch("Удаление в корзину", cancellable = false, onDone = onDone) { _, _ -> ops.moveToTrash(paths.map(::File)) }
 
     fun deletePermanently(paths: List<String>) {
         launch("Удаление", cancellable = false) { _, _ -> ops.deletePermanently(paths.map(::File)) }

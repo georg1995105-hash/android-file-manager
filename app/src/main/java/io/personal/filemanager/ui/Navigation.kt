@@ -47,8 +47,8 @@ interface AppNavigator {
 
 val LocalNavigator = staticCompositionLocalOf<AppNavigator> { error("AppNavigator не задан") }
 
-/** Список изображений для перелистывания во встроенном просмотре (живёт в памяти процесса). */
-object ImageViewerSession {
+/** Фото и видео для перелистывания во встроенном просмотре (живёт в памяти процесса). */
+object MediaViewerSession {
     @Volatile
     var paths: List<String> = emptyList()
 }

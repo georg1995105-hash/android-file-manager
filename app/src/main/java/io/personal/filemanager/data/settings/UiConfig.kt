@@ -23,12 +23,42 @@ data class TabConfig(
     val color: String,
 )
 
+/** Кнопки нижней панели просмотра фото/видео (порядок и видимость настраиваются). */
+enum class ViewerControl(val title: String, val defaultVisible: Boolean) {
+    PLAY_PAUSE("Пуск/пауза (видео)", true),
+    SHARE("Поделиться", true),
+    ROTATE("Поворот экрана", true),
+    FULLSCREEN("Полный экран", true),
+    INFO("Сведения", true),
+    DELETE("В корзину", true),
+    PREV("Предыдущий файл", false),
+    NEXT("Следующий файл", false),
+    OPEN_EXTERNAL("Открыть в другом приложении", false),
+    ;
+
+    companion object {
+        fun fromKey(key: String): ViewerControl? = entries.firstOrNull { it.name == key }
+    }
+}
+
+@Serializable
+data class ControlConfig(
+    val id: String,
+    val visible: Boolean,
+)
+
+/** Плиток в ряду на главной: 0 — автоматически по ширине экрана. */
+const val TILES_PER_ROW_AUTO = 0
+val TILES_PER_ROW_OPTIONS = listOf(TILES_PER_ROW_AUTO, 2, 3, 4, 5, 6)
+
 /** Персонализация главной и нижней панели. version — для будущих миграций формата. */
 @Serializable
 data class UiConfig(
     val version: Int = CURRENT_VERSION,
     val tiles: List<TileConfig>,
     val tabs: List<TabConfig>,
+    val tilesPerRow: Int = TILES_PER_ROW_AUTO,
+    val viewerControls: List<ControlConfig> = defaultViewerControls(),
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -56,6 +86,9 @@ data class UiConfig(
         }
 
         fun defaultTabsConfig(): List<TabConfig> = defaultTabs.map(::defaultTab)
+
+        fun defaultViewerControls(): List<ControlConfig> =
+            ViewerControl.entries.map { ControlConfig(it.name, it.defaultVisible) }
     }
 }
 
@@ -106,10 +139,20 @@ object UiConfigCodec {
             )
         }.take(MAX_TABS)
 
+        val seenControls = mutableSetOf<ViewerControl>()
+        val controls = config.viewerControls.mapNotNull { c ->
+            val id = ViewerControl.fromKey(c.id) ?: return@mapNotNull null
+            if (!seenControls.add(id)) return@mapNotNull null
+            ControlConfig(id.name, c.visible)
+        }
+        val missingControls = ViewerControl.entries.filter { it !in seenControls }.map { ControlConfig(it.name, it.defaultVisible) }
+
         return UiConfig(
             version = UiConfig.CURRENT_VERSION,
             tiles = tiles + missing,
             tabs = tabs.ifEmpty { UiConfig.defaultTabsConfig() },
+            tilesPerRow = config.tilesPerRow.takeIf { it in TILES_PER_ROW_OPTIONS } ?: TILES_PER_ROW_AUTO,
+            viewerControls = controls + missingControls,
         )
     }
 }

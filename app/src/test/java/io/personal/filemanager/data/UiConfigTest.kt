@@ -70,4 +70,37 @@ class UiConfigTest {
         val all = SectionId.entries.map { UiConfig.defaultTab(it) }
         assertEquals(MAX_TABS, UiConfigCodec.normalize(UiConfig.defaults().copy(tabs = all)).tabs.size)
     }
+
+    @Test
+    fun configFromPreviousVersionGetsNewDefaults() {
+        // Формат 0.7.1: без tilesPerRow и viewerControls — плитки и вкладки пользователя сохраняются.
+        val old = """{"version":1,"tiles":[{"id":"PHOTOS","visible":false,"icon":"camera","color":"red"}],""" +
+            """"tabs":[{"id":"FILES","icon":"folder","color":"blue"}]}"""
+        val c = UiConfigCodec.decode(old)
+        assertEquals(TILES_PER_ROW_AUTO, c.tilesPerRow)
+        assertEquals(UiConfig.defaultViewerControls(), c.viewerControls)
+        assertEquals("PHOTOS", c.tiles.first().id)
+        assertFalse(c.tiles.first().visible)
+        assertEquals(listOf("FILES"), c.tabs.map { it.id })
+    }
+
+    @Test
+    fun viewerControlsAndTilesPerRowNormalized() {
+        val c = UiConfig.defaults().copy(
+            tilesPerRow = 42,
+            viewerControls = listOf(
+                ControlConfig("DELETE", false),
+                ControlConfig("UNKNOWN", true),
+                ControlConfig("DELETE", true),
+                ControlConfig("SHARE", true),
+            ),
+        )
+        val n = UiConfigCodec.decode(UiConfigCodec.encode(c))
+        assertEquals(TILES_PER_ROW_AUTO, n.tilesPerRow)
+        assertEquals(listOf("DELETE", "SHARE"), n.viewerControls.take(2).map { it.id })
+        assertFalse(n.viewerControls.first().visible)
+        assertEquals(ViewerControl.entries.size, n.viewerControls.size)
+        val kept = UiConfigCodec.decode(UiConfigCodec.encode(UiConfig.defaults().copy(tilesPerRow = 4)))
+        assertEquals(4, kept.tilesPerRow)
+    }
 }

@@ -56,9 +56,8 @@ import io.personal.filemanager.ui.settings.TabSettingsScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
 import io.personal.filemanager.ui.theme.AppColors
-import io.personal.filemanager.ui.viewer.ImageViewerScreen
+import io.personal.filemanager.ui.viewer.MediaViewerScreen
 import io.personal.filemanager.ui.viewer.TextViewerScreen
-import io.personal.filemanager.ui.viewer.VideoPlayerScreen
 import io.personal.filemanager.ui.viewer.PdfViewerScreen
 import io.personal.filemanager.ui.viewer.findActivity
 
@@ -85,13 +84,14 @@ fun AppRoot() {
 
             override fun openFile(entry: FileEntry, siblings: List<FileEntry>) {
                 when (entry.kind) {
-                    FileKind.IMAGE -> {
-                        ImageViewerSession.paths = siblings.filter { it.kind == FileKind.IMAGE }.map { it.path }
+                    FileKind.IMAGE, FileKind.VIDEO -> {
+                        // Соседние фото и видео листаются в одном просмотре.
+                        MediaViewerSession.paths = siblings.filter { it.kind == FileKind.IMAGE || it.kind == FileKind.VIDEO }
+                            .map { it.path }
                             .ifEmpty { listOf(entry.path) }
-                        nav.navigate(Routes.image(entry.path))
+                        nav.navigate(if (entry.kind == FileKind.IMAGE) Routes.image(entry.path) else Routes.video(entry.path))
                     }
                     FileKind.TEXT -> nav.navigate(Routes.text(entry.path))
-                    FileKind.VIDEO -> nav.navigate(Routes.video(entry.path))
                     FileKind.APK -> nav.navigate(Routes.apk(entry.path))
                     FileKind.PDF -> nav.navigate(Routes.pdf(entry.path))
                     FileKind.ARCHIVE -> if (ArchiveFormats.detect(entry.name) != null) {
@@ -158,7 +158,7 @@ fun AppRoot() {
                     composable(
                         Routes.IMAGE,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
-                    ) { entry -> ImageViewerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    ) { entry -> MediaViewerScreen(entry.arguments?.getString("path").orEmpty()) }
                     composable(
                         Routes.TEXT,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
@@ -166,7 +166,7 @@ fun AppRoot() {
                     composable(
                         Routes.VIDEO,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
-                    ) { entry -> VideoPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    ) { entry -> MediaViewerScreen(entry.arguments?.getString("path").orEmpty()) }
                     composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
                     composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
                     composable(Routes.TRASH) { TrashScreen() }

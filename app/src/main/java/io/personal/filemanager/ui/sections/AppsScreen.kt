@@ -85,7 +85,7 @@ fun AppsScreen() {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Установленные") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("APK-файлы") })
         }
-        if (tab == 0) InstalledAppsList() else MediaListBody(SectionId.APPS, MediaCategory.APKS)
+        if (tab == 0) InstalledAppsList() else MediaListBody(MediaCategory.APKS)
     }
 }
 

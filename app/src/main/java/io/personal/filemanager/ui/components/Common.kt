@@ -189,13 +189,13 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier, trailing: @Compo
 }
 
 @Composable
-fun Pill(text: String, color: Color = AppColors.OnAccentContainer, background: Color = AppColors.AccentContainer, modifier: Modifier = Modifier) {
+fun Pill(text: String, modifier: Modifier = Modifier, color: Color = AppColors.OnAccentContainer, containerColor: Color = AppColors.AccentContainer) {
     Text(
         text,
         color = color,
         style = MaterialTheme.typography.labelLarge,
         modifier = modifier
-            .background(background, RoundedCornerShape(50))
+            .background(containerColor, RoundedCornerShape(50))
             .padding(horizontal = 14.dp, vertical = 6.dp),
     )
 }

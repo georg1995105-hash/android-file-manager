@@ -37,7 +37,20 @@ jobs:
           key: pfm-debug-keystore-v1
 
       - name: Unit tests and debug APK
-        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug 2>&1 | tee build.log
+
+      # Краткая сводка ошибок в конце лога (для удалённого разбора без полного лога).
+      - name: Error summary
+        if: failure()
+        run: |
+          echo "===== COMPILER ERRORS ====="
+          grep -E '^e: ' build.log | head -80 || true
+          echo "===== FAILED TESTS ====="
+          grep -E 'FAILED|Test.*>.*FAILED|AssertionError|expected:' build.log | head -60 || true
+          echo "===== WHAT WENT WRONG ====="
+          grep -A8 'What went wrong' build.log | head -60 || true
 
       - name: Inspect APK
         id: apk

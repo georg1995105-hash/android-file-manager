@@ -1,5 +1,13 @@
 package io.personal.filemanager.ui.home
 
+import androidx.compose.material3.LocalContentColor
+import io.personal.filemanager.core.TileLayout
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.activity.compose.BackHandler
 import io.personal.filemanager.ui.components.SelectionBar
 import io.personal.filemanager.ui.components.SelectionState
@@ -98,7 +106,11 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
         if (selection.paths.any { it !in present }) selection.set(selection.paths.filter { it in present })
     }
 
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val tiles = config?.tiles?.filter { it.visible }.orEmpty()
+    // Колонки по ширине (телефон/планшет, вертикально/горизонтально) и настройке «Плиток в ряду».
+    val columns = TileLayout.columns(config?.tilesPerRow ?: 0, maxWidth.value.toInt(), tiles.size)
+    val compactHeight = maxHeight < 480.dp
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 16.dp),
@@ -122,8 +134,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
                 ConfigureButton(onClick = { navigator.openTileSettings() })
             }
         }
-        val tiles = config?.tiles?.filter { it.visible }.orEmpty()
-        items(tiles.chunked(3)) { row ->
+        items(tiles.chunked(columns), contentType = { "tiles" }) { row ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -137,10 +148,11 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
                         title = id.title,
                         subtitle = state.stats[id],
                         onClick = { navigator.openSection(id) },
+                        minHeight = if (compactHeight) 108.dp else 128.dp,
                         modifier = Modifier.weight(1f),
                     )
                 }
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
         if (config != null && tiles.isEmpty()) {
@@ -348,10 +360,11 @@ private fun SectionTile(
     subtitle: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    minHeight: Dp = 128.dp,
 ) {
     Column(
         modifier = modifier
-            .heightIn(min = 128.dp)
+            .heightIn(min = minHeight)
             .clip(RoundedCornerShape(18.dp))
             .card()
             .tapClickable(onClick = onClick)
@@ -361,12 +374,18 @@ private fun SectionTile(
     ) {
         SectionIcon(tile.icon, tile.color, 44.dp)
         Spacer(Modifier.height(10.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.bodyMedium,
+        // Название в одну строку: в узкой плитке шрифт уменьшается, а не рвёт слово по слогам.
+        val titleStyle = MaterialTheme.typography.bodyMedium.copy(
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
-            maxLines = 2,
+            color = LocalContentColor.current,
+        )
+        BasicText(
+            title,
+            style = titleStyle,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = titleStyle.fontSize, stepSize = 0.5.sp),
         )
         if (subtitle != null) {
             Spacer(Modifier.height(2.dp))

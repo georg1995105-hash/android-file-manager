@@ -1,5 +1,14 @@
 package io.personal.filemanager.ui.settings
 
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.SharingStarted
+import io.personal.filemanager.data.settings.TILES_PER_ROW_OPTIONS
+import io.personal.filemanager.data.settings.TILES_PER_ROW_AUTO
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,9 +80,15 @@ import kotlinx.coroutines.launch
 class TileSettingsViewModel(private val container: AppContainer) : ViewModel() {
     private val _tiles = MutableStateFlow<List<TileConfig>?>(null)
     val tiles: StateFlow<List<TileConfig>?> = _tiles.asStateFlow()
+    val tilesPerRow: StateFlow<Int> = container.settings.uiConfig.map { it.tilesPerRow }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, TILES_PER_ROW_AUTO)
 
     init {
         viewModelScope.launch { _tiles.value = container.settings.uiConfig.first().tiles }
+    }
+
+    fun setTilesPerRow(value: Int) {
+        viewModelScope.launch { container.settings.updateUiConfig { it.copy(tilesPerRow = value) } }
     }
 
     private fun set(list: List<TileConfig>) {
@@ -96,15 +111,26 @@ class TileSettingsViewModel(private val container: AppContainer) : ViewModel() {
 fun TileSettingsScreen() {
     val vm = appViewModel { TileSettingsViewModel(it) }
     val tiles by vm.tiles.collectAsStateWithLifecycle()
-    TileSettingsContent(tiles, onMove = vm::move, onUpdate = vm::update, onReset = vm::reset)
+    val perRow by vm.tilesPerRow.collectAsStateWithLifecycle()
+    TileSettingsContent(
+        tiles,
+        onMove = vm::move,
+        onUpdate = vm::update,
+        onReset = vm::reset,
+        tilesPerRow = perRow,
+        onTilesPerRow = vm::setTilesPerRow,
+    )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TileSettingsContent(
     tiles: List<TileConfig>?,
     onMove: (Int, Int) -> Unit,
     onUpdate: (String, (TileConfig) -> TileConfig) -> Unit,
     onReset: () -> Unit,
+    tilesPerRow: Int = TILES_PER_ROW_AUTO,
+    onTilesPerRow: ((Int) -> Unit)? = null,
 ) {
     val navigator = LocalNavigator.current
     var editing by remember { mutableStateOf<String?>(null) }
@@ -143,6 +169,32 @@ fun TileSettingsContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
+            if (onTilesPerRow != null) {
+                Text(
+                    "Плиток в ряду",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp),
+                )
+                FlowRow(
+                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TILES_PER_ROW_OPTIONS.forEach { n ->
+                        FilterChip(
+                            selected = n == tilesPerRow,
+                            onClick = { onTilesPerRow(n) },
+                            label = { Text(if (n == TILES_PER_ROW_AUTO) "Авто" else n.toString()) },
+                        )
+                    }
+                }
+                Text(
+                    "«Авто» подбирает число по ширине экрана: 3 на телефоне вертикально, больше — горизонтально и на " +
+                        "планшете. Если плитки стали бы слишком узкими, их в ряду будет меньше.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
             Spacer(Modifier.height(8.dp))
             ReorderableColumn(
                 items = list,
@@ -214,7 +266,7 @@ private fun TileCard(
             SectionIcon(tile.icon, tile.color, 44.dp, Modifier.alpha(if (tile.visible) 1f else 0.4f))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     if (tile.visible) "На главной" else "Скрыт",
                     style = MaterialTheme.typography.bodySmall,

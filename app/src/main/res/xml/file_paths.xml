@@ -9,4 +9,6 @@
     <root-path name="storage" path="storage" />
     <!-- Временные файлы для просмотра элементов архива без полной распаковки -->
     <cache-path name="archive_preview" path="archive-preview/" />
+    <!-- Экспортированные для отправки APK -->
+    <cache-path name="shared_apk" path="shared-apk/" />
 </paths>

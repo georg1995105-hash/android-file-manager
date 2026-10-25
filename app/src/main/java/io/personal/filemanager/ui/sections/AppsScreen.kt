@@ -30,6 +30,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,6 +46,8 @@ import androidx.lifecycle.viewModelScope
 import io.personal.filemanager.AppContainer
 import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.data.InstalledApp
+import io.personal.filemanager.data.FileEntry
+import java.io.File
 import io.personal.filemanager.data.MediaCategory
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
@@ -73,7 +81,7 @@ class AppsViewModel(private val container: AppContainer) : ViewModel() {
 
 /**
  * «Приложения»: установленные (запуск, системные сведения) и локальные APK-файлы.
- * Экспорт APK / split-наборов и установка — этап 4.
+ * Экспорт APK и split-наборов (.apks), отправка; установка APK-файлов — через экран APK.
  */
 @Composable
 fun AppsScreen() {
@@ -134,9 +142,7 @@ private fun InstalledAppsList() {
                             maxLines = 1,
                         )
                     }
-                    IconButton(onClick = { FileActions.openAppDetails(context, app.packageName) }) {
-                        Icon(Icons.Filled.Info, contentDescription = "Сведения о «${app.label}»")
-                    }
+                    AppMenu(app)
                 }
             }
         }
@@ -165,3 +171,50 @@ private fun AppIcon(packageName: String) {
         KindBadge(FileKind.APK, 44.dp)
     }
 }
+
+/** Действия с установленным приложением: экспорт APK/набора, отправка, системные сведения. */
+@Composable
+private fun AppMenu(app: InstalledApp) {
+    val context = LocalContext.current
+    val container = appContainer()
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = "Действия с «${app.label}»")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Запустить") },
+                onClick = {
+                    open = false
+                    if (appLaunch(context, app.packageName) == null) FileActions.toast(context, "Приложение нельзя запустить")
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(if (app.apkPaths.size > 1) "Экспорт набора (.apks)" else "Экспорт APK") },
+                onClick = {
+                    open = false
+                    val dest = File(container.storage.downloadsPath, EXPORT_DIR)
+                    container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Поделиться APK") },
+                onClick = {
+                    open = false
+                    val dest = File(context.cacheDir, "shared-apk").apply { deleteRecursively(); mkdirs() }
+                    container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest) { file ->
+                        FileActions.share(context, listOf(FileEntry.from(file)))
+                    }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Сведения (системные)") },
+                onClick = { open = false; FileActions.openAppDetails(context, app.packageName) },
+            )
+        }
+    }
+}
+
+/** Папка экспорта внутри «Загрузок». */
+const val EXPORT_DIR = "Экспорт APK"

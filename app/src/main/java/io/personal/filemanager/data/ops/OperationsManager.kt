@@ -3,6 +3,8 @@ package io.personal.filemanager.data.ops
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.os.storage.StorageManager
+import io.personal.filemanager.data.apps.ApkSets
+import io.personal.filemanager.data.apps.ExportResult
 import io.personal.filemanager.data.archive.ArchiveCreator
 import io.personal.filemanager.data.archive.ArchiveEngine
 import io.personal.filemanager.data.archive.ArchiveFormat
@@ -161,6 +163,28 @@ class OperationsManager(private val context: Context, private val scope: Corouti
                     skipped = r.skipped.map { "${it.first}: ${it.second}" },
                     created = listOfNotNull(r.outputDir?.absolutePath),
                 )
+            }
+        }
+    }
+
+    /**
+     * Экспорт установочных файлов приложения (APK или набор .apks). [onDone] вызывается в UI-потоке
+     * с готовым файлом (например, чтобы сразу поделиться).
+     */
+    fun exportApk(label: String, version: String?, apkPaths: List<String>, destDir: File, onDone: ((File) -> Unit)? = null) {
+        launch("Экспорт APK") { onProgress, isCancelled ->
+            val name = listOfNotNull(label, version).joinToString("_")
+            when (val r = ApkSets.export(apkPaths.map(::File), destDir, name, { d, t -> onProgress(OpProgress(t, d, apkPaths.size, 0, label)) }, isCancelled)) {
+                is ExportResult.Ok -> {
+                    if (onDone != null) withContext(Dispatchers.Main) { onDone(r.file) }
+                    OpReport(
+                        done = listOf(r.file.name),
+                        created = listOf(r.file.absolutePath),
+                        note = if (r.parts > 1) "набор из ${r.parts} APK: ${r.file.name}" else r.file.name,
+                    )
+                }
+                is ExportResult.Failed -> OpReport(failed = listOf(label to r.reason))
+                ExportResult.Cancelled -> OpReport(cancelled = true)
             }
         }
     }

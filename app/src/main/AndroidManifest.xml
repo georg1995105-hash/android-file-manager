@@ -40,6 +40,10 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".data.apps.InstallResultReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

@@ -13,11 +13,21 @@ data class InstalledApp(
     val versionName: String?,
     val sizeBytes: Long,
     val isSystem: Boolean,
-    /** base.apk + split-файлы. Экспорт набора — этап 4. */
+    /** base.apk + split-файлы (для экспорта набора .apks). */
     val apkPaths: List<String>,
 )
 
-data class ApkInfo(val label: String?, val packageName: String?, val versionName: String?)
+data class ApkInfo(
+    val label: String?,
+    val packageName: String?,
+    val versionName: String?,
+    val versionCode: Long = 0,
+    val minSdk: Int = 0,
+    val targetSdk: Int = 0,
+)
+
+/** Что уже установлено на телефоне для пакета (если приложение видно нашему приложению). */
+data class InstalledVersion(val versionName: String?, val versionCode: Long)
 
 /** Установленные приложения через PackageManager в рамках видимости из <queries> (лаунчер-приложения). */
 class AppsRepository(private val context: Context) {
@@ -47,6 +57,12 @@ class AppsRepository(private val context: Context) {
         }.sortedBy { it.label.lowercase() }
     }
 
+    @Suppress("DEPRECATION")
+    fun installedVersion(packageName: String): InstalledVersion? = runCatching {
+        val info = pm.getPackageInfo(packageName, 0)
+        InstalledVersion(info.versionName, info.longVersionCode)
+    }.getOrNull()
+
     fun icon(packageName: String): Drawable? = runCatching { pm.getApplicationIcon(packageName) }.getOrNull()
 
     fun launchIntent(packageName: String): Intent? = pm.getLaunchIntentForPackage(packageName)
@@ -64,6 +80,9 @@ class AppsRepository(private val context: Context) {
             label = app?.loadLabel(pm)?.toString(),
             packageName = info.packageName,
             versionName = info.versionName,
+            versionCode = info.longVersionCode,
+            minSdk = app?.minSdkVersion ?: 0,
+            targetSdk = app?.targetSdkVersion ?: 0,
         ) to app?.loadIcon(pm)
     }.getOrNull()
 }

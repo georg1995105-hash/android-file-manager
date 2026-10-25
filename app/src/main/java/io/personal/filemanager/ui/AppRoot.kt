@@ -34,6 +34,7 @@ import io.personal.filemanager.data.MediaCategory
 import io.personal.filemanager.data.settings.TabConfig
 import io.personal.filemanager.ui.home.HomeScreen
 import io.personal.filemanager.ui.icons.IconCatalog
+import io.personal.filemanager.ui.sections.ApkScreen
 import io.personal.filemanager.ui.sections.AppsScreen
 import io.personal.filemanager.ui.sections.BrowserScreen
 import io.personal.filemanager.ui.sections.MediaListScreen
@@ -82,6 +83,7 @@ fun AppRoot() {
                     }
                     FileKind.TEXT -> nav.navigate(Routes.text(entry.path))
                     FileKind.VIDEO -> nav.navigate(Routes.video(entry.path))
+                    FileKind.APK -> nav.navigate(Routes.apk(entry.path))
                     FileKind.ARCHIVE -> if (ArchiveFormats.detect(entry.name) != null) {
                         nav.navigate(Routes.archive(entry.path))
                     } else {
@@ -162,6 +164,10 @@ fun AppRoot() {
                         Routes.ARCHIVE,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> ArchiveScreen(entry.arguments?.getString("path").orEmpty()) }
+                    composable(
+                        Routes.APK,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> ApkScreen(entry.arguments?.getString("path").orEmpty()) }
                 }
             }
         }

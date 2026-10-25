@@ -8,6 +8,9 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Rule
+import org.junit.rules.RuleChain
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -17,8 +20,14 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class OrientationTest {
-    @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
+
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(compose).around(object : TestWatcher() {
+        override fun failed(e: Throwable?, description: Description) {
+            runCatching { compose.shot("FAIL_orientation") }
+        }
+    })
 
     private fun assertLandscape(where: String) {
         compose.waitForIdle()

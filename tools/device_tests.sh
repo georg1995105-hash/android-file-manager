@@ -20,7 +20,9 @@ grant_files() {
 rotate() {
   adb shell settings put system accelerometer_rotation 0
   adb shell settings put system user_rotation "$1"
+  adb shell wm user-rotation lock "$1" >/dev/null 2>&1 || true
   sleep 3
+  adb shell dumpsys window displays | grep -m2 -E "mCurrentRotation|cur=" || true
 }
 
 RESULTS=()

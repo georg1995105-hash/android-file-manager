@@ -70,7 +70,7 @@ class OperationsManager(
 
     /** Короткое сообщение пользователю (показывается всплывающей подсказкой). */
     fun notify(message: String) {
-        _messages.tryEmit(message)
+        scope.launch(Dispatchers.Main) { _messages.emit(message) }
     }
 
     fun conflicts(paths: List<String>, destDir: File): List<String> = ops.conflicts(paths.map(::File), destDir)
@@ -98,10 +98,13 @@ class OperationsManager(
             if (report != null) {
                 rescan(report.created + report.removed)
                 report.moved.forEach { (old, new) -> runCatching { personal?.relocateFavoriteTree(old, new) } }
-                _messages.tryEmit(summary(title, report))
             }
-            _version.value++
-            if (onDone != null) withContext(Dispatchers.Main) { onDone(report) }
+            // Итог — в главном потоке: подписчики показывают Toast и меняют интерфейс.
+            withContext(Dispatchers.Main) {
+                if (report != null) _messages.tryEmit(summary(title, report))
+                _version.value++
+                onDone?.invoke(report)
+            }
         }
         return true
     }

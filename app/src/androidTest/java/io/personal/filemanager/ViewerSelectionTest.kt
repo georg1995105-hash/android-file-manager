@@ -21,6 +21,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.FixMethodOrder
 import org.junit.Rule
+import org.junit.rules.RuleChain
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
@@ -34,8 +37,15 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class ViewerSelectionTest {
-    @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
+
+    /** При падении — скриншот текущего экрана (до закрытия активности). */
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(compose).around(object : TestWatcher() {
+        override fun failed(e: Throwable?, description: Description) {
+            runCatching { compose.shot("FAIL_${description.methodName}") }
+        }
+    })
 
     private fun openFixture(name: String) {
         compose.waitText("Мои файлы")
@@ -44,8 +54,10 @@ class ViewerSelectionTest {
         compose.onAllNodesWithText("Download").onFirst().performClick()
         compose.waitText("pfm-fixtures")
         compose.onAllNodesWithText("pfm-fixtures").onFirst().performClick()
-        compose.waitText(name)
+        compose.waitText("cp1251.txt")
+        // Файл может быть ниже края экрана (планшет горизонтально) — сначала прокрутка.
         compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(androidx.compose.ui.test.hasText(name))
+        compose.waitText(name)
         compose.onAllNodesWithText(name).onFirst().performClick()
     }
 

@@ -1,5 +1,8 @@
 package io.personal.filemanager.ui.viewer
 
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
@@ -155,14 +158,29 @@ fun MediaViewerScreen(path: String) {
     var duration by remember { mutableLongStateOf(0L) }
     var seekHint by remember { mutableStateOf<String?>(null) }
     var seekHintLeft by remember { mutableStateOf(true) }
-    val holdControls = menuOpen || customizeOpen || videoInfoOpen || detailsFor != null || confirmDelete != null || dragging
+    // Панели держатся, пока палец реально на ползунке (а не по флагу, который мог не сброситься).
+    val sliderInteraction = remember { MutableInteractionSource() }
+    val sliderPressed by sliderInteraction.collectIsPressedAsState()
+    val sliderDragged by sliderInteraction.collectIsDraggedAsState()
+    val holdControls = menuOpen || customizeOpen || videoInfoOpen || detailsFor != null || confirmDelete != null ||
+        sliderPressed || sliderDragged
 
     fun touch() {
         interaction++
     }
 
+    // Флаг перетаскивания без пальца на ползунке не должен «замораживать» позицию.
+    LaunchedEffect(dragging, sliderPressed, sliderDragged) {
+        if (dragging && !sliderPressed && !sliderDragged) {
+            delay(500)
+            dragging = false
+        }
+    }
     // Текущая страница: видео загружается и играет только после остановки перелистывания.
-    LaunchedEffect(settledPath) { vm.onCurrent(settledPath) }
+    LaunchedEffect(settledPath) {
+        dragging = false
+        vm.onCurrent(settledPath)
+    }
 
     // Ориентация: просмотр фиксирует ту, в которой открыт (без датчика); кнопка поворота меняет её явно.
     // При выходе восстанавливается исходная настройка активности.
@@ -360,6 +378,7 @@ fun MediaViewerScreen(path: String) {
                             },
                             valueRange = 0f..duration.coerceAtLeast(1L).toFloat(),
                             colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White),
+                            interactionSource = sliderInteraction,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(horizontal = 8.dp),

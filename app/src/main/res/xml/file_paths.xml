@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Провайдер не экспортирован: другие приложения получают доступ только к конкретному URI,
+  который мы явно передаём через Intent с FLAG_GRANT_READ_URI_PERMISSION.
+-->
+<paths>
+    <external-path name="internal" path="." />
+    <!-- Съёмные носители (/storage/XXXX-XXXX) -->
+    <root-path name="storage" path="storage" />
+</paths>

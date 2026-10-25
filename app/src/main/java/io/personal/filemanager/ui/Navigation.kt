@@ -11,12 +11,14 @@ object Routes {
     const val SEARCH = "search"
     const val IMAGE = "image?path={path}"
     const val TEXT = "text?path={path}"
+    const val VIDEO = "video?path={path}"
     const val SETTINGS_TILES = "settings/tiles"
     const val SETTINGS_TABS = "settings/tabs"
 
     fun section(id: SectionId) = "section/${id.name}"
     fun image(path: String) = "image?path=${Uri.encode(path)}"
     fun text(path: String) = "text?path=${Uri.encode(path)}"
+    fun video(path: String) = "video?path=${Uri.encode(path)}"
 }
 
 interface AppNavigator {

@@ -45,6 +45,7 @@ import io.personal.filemanager.ui.theme.AccentColors
 import io.personal.filemanager.ui.theme.AppColors
 import io.personal.filemanager.ui.viewer.ImageViewerScreen
 import io.personal.filemanager.ui.viewer.TextViewerScreen
+import io.personal.filemanager.ui.viewer.VideoPlayerScreen
 import io.personal.filemanager.ui.viewer.findActivity
 
 @Composable
@@ -76,6 +77,7 @@ fun AppRoot() {
                         nav.navigate(Routes.image(entry.path))
                     }
                     FileKind.TEXT -> nav.navigate(Routes.text(entry.path))
+                    FileKind.VIDEO -> nav.navigate(Routes.video(entry.path))
                     // Папка из поиска/недавних — открываем в обзоре файлов.
                     FileKind.FOLDER -> FileActions.toast(context, "Откройте папку через «Файлы»: ${entry.path}")
                     else -> FileActions.openExternally(context, entry)
@@ -135,6 +137,10 @@ fun AppRoot() {
                     Routes.TEXT,
                     arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                 ) { entry -> TextViewerScreen(entry.arguments?.getString("path").orEmpty()) }
+                composable(
+                    Routes.VIDEO,
+                    arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                ) { entry -> VideoPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
                 composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
                 composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
             }

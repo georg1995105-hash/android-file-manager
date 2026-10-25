@@ -10,7 +10,9 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Восстановление расписания автокопий после перезагрузки (JobScheduler, setPersisted). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- INTERNET намеренно отсутствует. -->
+    <!-- Сеть — только для значков сайтов в «Ссылках» (HTTPS, к самому сайту ссылки; можно выключить в меню).
+         Других обращений к сети нет; незашифрованный HTTP запрещён (по умолчанию для targetSdk 28+). -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <!-- Только приложения с иконкой в лаунчере: список и запуск в разделе «Приложения». -->

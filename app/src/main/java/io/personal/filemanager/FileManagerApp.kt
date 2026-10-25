@@ -2,6 +2,7 @@ package io.personal.filemanager
 
 import android.app.Application
 import coil3.ImageLoader
+import io.personal.filemanager.data.links.SiteIconLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.video.VideoFrameDecoder
@@ -31,6 +32,7 @@ class AppContainer(val app: Application) {
     val personal = PersonalRepository(app)
     val operations = OperationsManager(app, appScope, personal)
     val backups = BackupManager(app, personal, settings)
+    val siteIcons = SiteIconLoader(app, appScope)
 }
 
 class FileManagerApp : Application(), SingletonImageLoader.Factory {

@@ -1,5 +1,13 @@
 package io.personal.filemanager.ui.personal
 
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.produceState
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import io.personal.filemanager.ui.components.tapClickable
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -79,6 +87,8 @@ fun LinksScreen() {
     var query by rememberSaveable { mutableStateOf("") }
     var editing by remember { mutableStateOf<Link?>(null) }
     var deleting by remember { mutableStateOf<Link?>(null) }
+    val iconsOn by container.settings.linkIcons.collectAsStateWithLifecycle(initialValue = true)
+    var topMenu by remember { mutableStateOf(false) }
 
     fun newLink() = Link(0, "", "", "", 0, 0)
 
@@ -98,6 +108,15 @@ fun LinksScreen() {
                         }
                     }) { Text("Экспорт") }
                 }
+                Box {
+                    IconButton(onClick = { topMenu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Меню") }
+                    DropdownMenu(expanded = topMenu, onDismissRequest = { topMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (iconsOn) "Не загружать значки сайтов" else "Загружать значки сайтов") },
+                            onClick = { topMenu = false; scope.launch { container.settings.setLinkIcons(!iconsOn) } },
+                        )
+                    }
+                }
             },
         )
         val filtered = list.orEmpty().filter {
@@ -109,7 +128,8 @@ fun LinksScreen() {
                 list.isEmpty() -> EmptyState(
                     Icons.Filled.Link,
                     "Ссылок пока нет",
-                    "Ссылки хранятся только на телефоне. Открываются в установленном браузере; само приложение в интернет не выходит.",
+                    "Ссылки хранятся только на телефоне и открываются в установленном браузере. Приложение обращается к сайту " +
+                        "ссылки только за его значком (по HTTPS, без передачи других данных); это можно выключить в меню.",
                     action = { Button(onClick = { editing = newLink() }) { Text("Добавить ссылку") } },
                 )
                 filtered.isEmpty() -> EmptyState(Icons.Filled.Search, "Ничего не найдено", "Измените запрос.")
@@ -122,6 +142,8 @@ fun LinksScreen() {
                                 .padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            SiteIcon(link.url, enabled = iconsOn)
+                            Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(link.title.ifBlank { link.url }, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(link.url, style = MaterialTheme.typography.bodySmall, color = AppColors.Accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -286,3 +308,27 @@ private suspend fun exportLinks(container: io.personal.filemanager.AppContainer,
     container.operations.rescan(listOf(target.absolutePath))
     target
 }
+
+/** Значок сайта слева от ссылки: загружается в фоне с кэшем; нет значка — стандартный. */
+@Composable
+private fun SiteIcon(url: String, enabled: Boolean) {
+    val loader = appContainer().siteIcons
+    val bitmap by produceState(initialValue = if (enabled) loader.cached(url) else null, url, enabled) {
+        if (enabled && value == null) value = loader.icon(url)
+    }
+    val image = remember(bitmap) { bitmap?.asImageBitmap() }
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(AppColors.Card),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (image != null) {
+            Image(image, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(28.dp))
+        } else {
+            Icon(Icons.Filled.Language, contentDescription = null, tint = AppColors.Accent, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+

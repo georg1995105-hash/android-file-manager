@@ -24,6 +24,7 @@ class SettingsRepository(context: Context) {
     private val keyBrowserSort = stringPreferencesKey("browser_sort")
     private val keyBrowserDesc = stringPreferencesKey("browser_desc")
     private val keyShowHidden = stringPreferencesKey("show_hidden")
+    private val keyLinkIcons = stringPreferencesKey("link_icons")
 
     // Резервные копии (состояние, не секреты).
     private val keyBackupLastManual = stringPreferencesKey("backup_last_manual")
@@ -41,6 +42,13 @@ class SettingsRepository(context: Context) {
     }
 
     val uiConfig: Flow<UiConfig> = data.map { UiConfigCodec.decode(it[keyUiConfig]) }
+
+    /** Загружать значки сайтов в «Ссылках» (единственное обращение приложения к сети). */
+    val linkIcons: Flow<Boolean> = data.map { it[keyLinkIcons] != "false" }
+
+    suspend fun setLinkIcons(enabled: Boolean) {
+        store.edit { it[keyLinkIcons] = enabled.toString() }
+    }
 
     val recentSort: Flow<RecentSort> = data.map { prefs ->
         RecentSort.entries.firstOrNull { it.name == prefs[keyRecentSort] } ?: RecentSort.ADDED

@@ -1,5 +1,6 @@
 package io.personal.filemanager.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -191,8 +192,10 @@ fun FileListPane(
 ) {
     val navigator = LocalNavigator.current
     val selection = remember { SelectionState() }
-    val files = entries.filter { !it.isDirectory }
+    val files = remember(entries) { entries.filter { !it.isDirectory } }
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
+    // «Назад» в режиме выбора снимает выбор, а не уходит с экрана.
+    BackHandler(enabled = selection.active) { selection.clear() }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
 
@@ -221,6 +224,7 @@ fun FileListPane(
             selection = selection,
             entries = entries,
             modifier = Modifier.align(Alignment.BottomCenter),
+            onAllActions = { menuFor = it },
         )
     }
 
@@ -249,6 +253,7 @@ fun FileGridPane(
     val selection = remember { SelectionState() }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
+    BackHandler(enabled = selection.active) { selection.clear() }
 
     Box(modifier.fillMaxSize()) {
         LazyVerticalGrid(
@@ -274,7 +279,8 @@ fun FileGridPane(
                             onClick = {
                                 if (selection.active) selection.toggle(entry.path) else navigator.openFile(entry, entries)
                             },
-                            onLongClick = { if (selection.active) selection.toggle(entry.path) else menuFor = entry },
+                            // Удержание включает выбор (как в списке); действия — в панели выбора.
+                            onLongClick = { selection.toggle(entry.path) },
                         ),
                 ) {
                     GridThumbnail(entry)
@@ -292,7 +298,7 @@ fun FileGridPane(
                 }
             }
         }
-        SelectionBar(selection, entries, Modifier.align(Alignment.BottomCenter))
+        SelectionBar(selection, entries, Modifier.align(Alignment.BottomCenter), onAllActions = { menuFor = it })
     }
     menuFor?.let { entry ->
         FileActionsSheet(
@@ -310,12 +316,18 @@ fun LazyGridScope.fullWidthItem(content: @Composable () -> Unit) {
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
 }
 
+/** Панель режима выбора: количество, «Выбрать все», действия. [onAllActions] — полное меню для одного файла. */
 @Composable
-private fun SelectionBar(selection: SelectionState, entries: List<FileEntry>, modifier: Modifier = Modifier) {
+fun SelectionBar(
+    selection: SelectionState,
+    entries: List<FileEntry>,
+    modifier: Modifier = Modifier,
+    onAllActions: ((FileEntry) -> Unit)? = null,
+) {
     if (!selection.active) return
     val context = LocalContext.current
     val fileOps = LocalFileOps.current
-    val chosen = entries.filter { it.path in selection.paths }
+    val chosen = remember(entries, selection.paths) { entries.filter { it.path in selection.paths } }
     var more by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
@@ -355,6 +367,12 @@ private fun SelectionBar(selection: SelectionState, entries: List<FileEntry>, mo
                     Icon(Icons.Filled.MoreVert, contentDescription = "Ещё")
                 }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                    if (chosen.size == 1 && onAllActions != null) {
+                        DropdownMenuItem(
+                            text = { Text("Все действия…") },
+                            onClick = { more = false; val one = chosen.first(); selection.clear(); onAllActions(one) },
+                        )
+                    }
                     if (chosen.size == 1) {
                         DropdownMenuItem(
                             text = { Text("Переименовать") },

@@ -1,6 +1,6 @@
 package io.personal.filemanager.ui.personal
 
-import androidx.compose.foundation.clickable
+import io.personal.filemanager.ui.components.tapClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -74,7 +74,7 @@ fun FavoritesScreen() {
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = available) { open(fav, navigator) }
+                            .tapClickable(enabled = available) { open(fav, navigator) }
                             .padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

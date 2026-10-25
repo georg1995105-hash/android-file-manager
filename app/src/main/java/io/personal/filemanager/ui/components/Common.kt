@@ -2,6 +2,7 @@ package io.personal.filemanager.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,6 +102,13 @@ fun SectionIcon(iconKey: String, colorKey: String, size: Dp, modifier: Modifier 
 }
 
 /** Карточка в стиле макета: тёмная, скруглённая, с тонкой рамкой. */
+/**
+ * Нажатие, которое не срабатывает при удержании: долгое нажатие не открывает раздел, экран или
+ * приложение (у обычного clickable касание срабатывает при отпускании, даже после долгого удержания).
+ */
+fun Modifier.tapClickable(enabled: Boolean = true, onLongClick: () -> Unit = {}, onClick: () -> Unit): Modifier =
+    combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
+
 fun Modifier.card(shape: RoundedCornerShape = RoundedCornerShape(18.dp)): Modifier =
     this
         .background(AppColors.Card, shape)

@@ -1,11 +1,11 @@
 package io.personal.filemanager.ui.personal
 
+import io.personal.filemanager.ui.components.tapClickable
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -118,7 +118,7 @@ fun LinksScreen() {
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clickable { openUrl(context, link.url) }
+                                .tapClickable { openUrl(context, link.url) }
                                 .padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

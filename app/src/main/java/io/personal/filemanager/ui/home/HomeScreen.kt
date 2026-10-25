@@ -1,8 +1,11 @@
 package io.personal.filemanager.ui.home
 
+import androidx.activity.compose.BackHandler
+import io.personal.filemanager.ui.components.SelectionBar
+import io.personal.filemanager.ui.components.SelectionState
+import io.personal.filemanager.ui.components.tapClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,7 +91,14 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
     val navigator = LocalNavigator.current
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
+    val selection = remember { SelectionState() }
+    BackHandler(enabled = selection.active) { selection.clear() }
+    LaunchedEffect(state.recent) {
+        val present = state.recent.mapTo(HashSet()) { it.path }
+        if (selection.paths.any { it !in present }) selection.set(selection.paths.filter { it in present })
+    }
 
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 16.dp),
@@ -166,13 +176,21 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
             FileRow(
                 entry = entry,
                 dateShown = DateShown.ADDED,
-                selected = false,
-                selectionMode = false,
-                onClick = { navigator.openFile(entry, state.recent) },
-                onLongClick = { menuFor = entry },
+                selected = entry.path in selection.paths,
+                selectionMode = selection.active,
+                onClick = { if (selection.active) selection.toggle(entry.path) else navigator.openFile(entry, state.recent) },
+                onLongClick = { selection.toggle(entry.path) },
                 onMenu = { menuFor = entry },
             )
         }
+        if (selection.active) item { Spacer(Modifier.height(140.dp)) }
+    }
+    SelectionBar(
+        selection = selection,
+        entries = state.recent,
+        modifier = Modifier.align(Alignment.BottomCenter),
+        onAllActions = { menuFor = it },
+    )
     }
 
     menuFor?.let { entry ->
@@ -236,7 +254,7 @@ private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifie
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .card(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
+            .tapClickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -313,7 +331,7 @@ private fun ConfigureButton(onClick: () -> Unit) {
             .clip(RoundedCornerShape(50))
             .border(1.dp, AppColors.CardBorder, RoundedCornerShape(50))
             .background(AppColors.Card)
-            .clickable(onClick = onClick)
+            .tapClickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -336,7 +354,7 @@ private fun SectionTile(
             .heightIn(min = 128.dp)
             .clip(RoundedCornerShape(18.dp))
             .card()
-            .clickable(onClick = onClick)
+            .tapClickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,

@@ -1,7 +1,7 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.components.tapClickable
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -120,7 +120,7 @@ private fun InstalledAppsList() {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable {
+                        .tapClickable {
                             val intent = appLaunch(context, app.packageName)
                             if (intent == null) FileActions.toast(context, "Приложение нельзя запустить")
                         }

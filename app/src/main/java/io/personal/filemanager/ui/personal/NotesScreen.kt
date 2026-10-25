@@ -1,7 +1,7 @@
 package io.personal.filemanager.ui.personal
 
+import io.personal.filemanager.ui.components.tapClickable
 import android.content.Intent
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -113,7 +113,7 @@ fun NotesScreen() {
                         Column(
                             Modifier
                                 .fillMaxWidth()
-                                .clickable { navigator.open(Routes.note(note.id)) }
+                                .tapClickable { navigator.open(Routes.note(note.id)) }
                                 .padding(horizontal = 20.dp, vertical = 12.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

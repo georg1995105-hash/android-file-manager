@@ -24,7 +24,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
@@ -187,7 +187,7 @@ fun ImageViewerScreen(path: String) {
                     )
                 }
                 IconButton(onClick = { FileActions.openExternally(context, entry()) }) {
-                    Icon(Icons.Filled.OpenInNew, contentDescription = "Открыть в другом приложении", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Открыть в другом приложении", tint = Color.White)
                 }
                 IconButton(onClick = { detailsFor = entry() }) {
                     Icon(Icons.Filled.Info, contentDescription = "Сведения", tint = Color.White)

@@ -33,7 +33,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
@@ -346,11 +346,11 @@ fun FileActionsSheet(
             Text(entry.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         HorizontalDivider(color = AppColors.Divider)
-        SheetAction(Icons.Filled.OpenInNew, "Открыть") { onDismiss(); onOpen() }
+        SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть") { onDismiss(); onOpen() }
         if (!entry.isDirectory) {
             SheetAction(Icons.Filled.Share, "Поделиться") { onDismiss(); FileActions.share(context, listOf(entry)) }
             if (entry.kind != FileKind.OTHER) {
-                SheetAction(Icons.Filled.OpenInNew, "Открыть в другом приложении") {
+                SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть в другом приложении") {
                     onDismiss(); FileActions.openExternally(context, entry)
                 }
             }

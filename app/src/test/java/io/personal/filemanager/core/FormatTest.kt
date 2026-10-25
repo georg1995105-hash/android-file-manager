@@ -48,7 +48,7 @@ class FormatTest {
 
     @Test
     fun percent() {
-        assertEquals(14, usedPercent(76_400_000_000, 512_000_000_000))
+        assertEquals(15, usedPercent(76_400_000_000, 512_000_000_000)) // 14,9 % → 15
         assertEquals(0, usedPercent(5, 0))
     }
 }

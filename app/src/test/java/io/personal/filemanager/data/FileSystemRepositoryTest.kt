@@ -5,6 +5,7 @@ import io.personal.filemanager.data.settings.BrowserSort
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -77,6 +78,20 @@ class FileSystemRepositoryTest {
     fun missingOrNotADirectory() {
         assertEquals(FolderResult.NotFound, repo.list(File(root, "нет такой").path, BrowserPrefs()))
         assertEquals(FolderResult.NotFound, repo.list(File(root, "archive.zip").path, BrowserPrefs()))
+    }
+
+    @Test
+    fun unreadableFolderReportsAccessDenied() {
+        // Под root права не действуют (локальная песочница) — проверяется в CI.
+        Assume.assumeFalse(System.getProperty("user.name") == "root")
+        val locked = File(root, "закрыто").apply { mkdir() }
+        File(locked, "file.txt").writeText("x")
+        locked.setReadable(false, false)
+        try {
+            assertEquals(FolderResult.AccessDenied, repo.list(locked.path, BrowserPrefs()))
+        } finally {
+            locked.setReadable(true, false)
+        }
     }
 
     @Test

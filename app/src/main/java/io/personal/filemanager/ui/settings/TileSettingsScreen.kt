@@ -96,7 +96,7 @@ class TileSettingsViewModel(private val container: AppContainer) : ViewModel() {
 fun TileSettingsScreen() {
     val vm = appViewModel { TileSettingsViewModel(it) }
     val tiles by vm.tiles.collectAsStateWithLifecycle()
-    TileSettingsContent(tiles, onMove = onMove, onUpdate = vm::update, onReset = vm::reset)
+    TileSettingsContent(tiles, onMove = vm::move, onUpdate = vm::update, onReset = vm::reset)
 }
 
 @Composable

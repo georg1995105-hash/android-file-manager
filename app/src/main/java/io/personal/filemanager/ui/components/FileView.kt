@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui.components
 
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.LazyListScope
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -149,6 +151,15 @@ fun FilesPane(
     val headerStyle = MaterialTheme.typography.bodySmall
     val headerColor = MaterialTheme.colorScheme.onSurfaceVariant
     if (view.mode == FileViewMode.GRID) {
+        val gridHeader: (LazyGridScope.() -> Unit)? = if (headerText == null) {
+            null
+        } else {
+            {
+                fullWidthItem {
+                    Text(headerText, style = headerStyle, color = headerColor, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                }
+            }
+        }
         FileGridPane(
             entries = entries,
             modifier = modifier,
@@ -156,21 +167,26 @@ fun FilesPane(
             dateShown = dateShown,
             onOpen = onOpen,
             contentPadding = contentPadding,
-            header = headerText?.let { text ->
-                { fullWidthItem { Text(text, style = headerStyle, color = headerColor, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) } }
-            },
+            header = gridHeader,
             selection = selection,
         )
     } else {
+        val listHeader: (LazyListScope.() -> Unit)? = if (headerText == null) {
+            null
+        } else {
+            {
+                item {
+                    Text(headerText, style = headerStyle, color = headerColor, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                }
+            }
+        }
         FileListPane(
             entries = entries,
             dateShown = dateShown,
             modifier = modifier,
             onOpen = onOpen,
             contentPadding = contentPadding,
-            header = headerText?.let { text ->
-                { item { Text(text, style = headerStyle, color = headerColor, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) } }
-            },
+            header = listHeader,
             selection = selection,
         )
     }

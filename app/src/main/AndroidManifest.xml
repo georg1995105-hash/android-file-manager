@@ -8,6 +8,8 @@
         tools:ignore="ScopedStorage" />
     <!-- Открытие локальных APK в штатном системном установщике (только с подтверждением пользователя). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Восстановление расписания автокопий после перезагрузки (JobScheduler, setPersisted). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- INTERNET намеренно отсутствует. -->
 
     <queries>
@@ -39,6 +41,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".data.backup.AutoBackupJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <receiver
             android:name=".data.apps.InstallResultReceiver"

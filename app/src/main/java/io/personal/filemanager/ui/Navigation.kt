@@ -17,6 +17,9 @@ object Routes {
     const val TRASH = "trash"
     const val ARCHIVE = "archive?path={path}"
     const val APK = "apk?path={path}"
+    const val NOTE = "note?id={id}"
+    const val BROWSER = "browser?path={path}"
+    const val BACKUP = "backup"
 
     fun section(id: SectionId) = "section/${id.name}"
     fun image(path: String) = "image?path=${Uri.encode(path)}"
@@ -24,6 +27,8 @@ object Routes {
     fun video(path: String) = "video?path=${Uri.encode(path)}"
     fun archive(path: String) = "archive?path=${Uri.encode(path)}"
     fun apk(path: String) = "apk?path=${Uri.encode(path)}"
+    fun note(id: Long) = "note?id=$id"
+    fun browser(path: String) = "browser?path=${Uri.encode(path)}"
 }
 
 interface AppNavigator {

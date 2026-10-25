@@ -38,10 +38,18 @@ import io.personal.filemanager.ui.sections.ApkScreen
 import io.personal.filemanager.ui.sections.AppsScreen
 import io.personal.filemanager.ui.sections.BrowserScreen
 import io.personal.filemanager.ui.sections.MediaListScreen
-import io.personal.filemanager.ui.sections.PlannedSectionScreen
 import io.personal.filemanager.ui.sections.SearchScreen
 import io.personal.filemanager.ui.sections.TrashScreen
 import io.personal.filemanager.ui.ops.FileOpsHost
+import io.personal.filemanager.ui.ops.FileOpsExtensions
+import io.personal.filemanager.ui.personal.FavoritesScreen
+import io.personal.filemanager.ui.personal.LinksScreen
+import io.personal.filemanager.ui.personal.NoteEditorScreen
+import io.personal.filemanager.ui.personal.NotesScreen
+import io.personal.filemanager.ui.settings.BackupScreen
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import java.io.File
 import io.personal.filemanager.ui.archive.ArchiveScreen
 import io.personal.filemanager.data.archive.ArchiveFormats
 import io.personal.filemanager.ui.settings.TabSettingsScreen
@@ -89,8 +97,8 @@ fun AppRoot() {
                     } else {
                         FileActions.openExternally(context, entry)
                     }
-                    // Папка из поиска/недавних — открываем в обзоре файлов.
-                    FileKind.FOLDER -> FileActions.toast(context, "Откройте папку через «Файлы»: ${entry.path}")
+                    // Папка из поиска/избранного — открываем в обзоре файлов.
+                    FileKind.FOLDER -> nav.navigate(Routes.browser(entry.path))
                     else -> FileActions.openExternally(context, entry)
                 }
             }
@@ -118,7 +126,7 @@ fun AppRoot() {
     }
 
     CompositionLocalProvider(LocalNavigator provides navigator) {
-        FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp) {
+        FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {
             Scaffold(
                 containerColor = AppColors.Background,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -165,6 +173,18 @@ fun AppRoot() {
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> ArchiveScreen(entry.arguments?.getString("path").orEmpty()) }
                     composable(
+                        Routes.NOTE,
+                        arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = 0L }),
+                    ) { entry -> NoteEditorScreen(entry.arguments?.getLong("id") ?: 0L) }
+                    composable(
+                        Routes.BROWSER,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry ->
+                        val path = entry.arguments?.getString("path").orEmpty()
+                        BrowserScreen(title = File(path).name.ifEmpty { path }, rootPath = path)
+                    }
+                    composable(Routes.BACKUP) { BackupScreen() }
+                    composable(
                         Routes.APK,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> ApkScreen(entry.arguments?.getString("path").orEmpty()) }
@@ -186,7 +206,9 @@ private fun SectionScreen(id: SectionId) {
         SectionId.DOCUMENTS -> MediaListScreen(id, MediaCategory.DOCUMENTS)
         SectionId.ARCHIVES -> MediaListScreen(id, MediaCategory.ARCHIVES)
         SectionId.APPS -> AppsScreen()
-        SectionId.NOTES, SectionId.LINKS, SectionId.FAVORITES -> PlannedSectionScreen(id)
+        SectionId.NOTES -> NotesScreen()
+        SectionId.LINKS -> LinksScreen()
+        SectionId.FAVORITES -> FavoritesScreen()
     }
 }
 
@@ -225,6 +247,26 @@ internal fun BottomTabBar(tabs: List<TabConfig>, current: SectionId?, onSelect: 
                 },
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent),
             )
+        }
+    }
+}
+
+/** Избранное в меню действий файла: отметка хранится в локальной базе (путь, без копии файла). */
+@Composable
+private fun rememberFavoritesExtension(): FileOpsExtensions {
+    val container = appContainer()
+    val paths by remember { container.personal.favorites.map { list -> list.map { it.path }.toSet() } }
+        .collectAsStateWithLifecycle(initialValue = emptySet())
+    return remember(paths) {
+        object : FileOpsExtensions {
+            override val supportsFavorites = true
+            override fun isFavorite(path: String) = path in paths
+            override fun toggleFavorite(entry: FileEntry) {
+                container.appScope.launch {
+                    val added = container.personal.toggleFavorite(entry.path, entry.name, entry.isDirectory)
+                    container.operations.notify(if (added) "Добавлено в избранное" else "Убрано из избранного")
+                }
+            }
         }
     }
 }

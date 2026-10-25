@@ -219,6 +219,10 @@ private fun HomeHeader() {
                     text = { Text("Корзина") },
                     onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
                 )
+                DropdownMenuItem(
+                    text = { Text("Резервные копии") },
+                    onClick = { menuOpen = false; navigator.open(Routes.BACKUP) },
+                )
             }
         }
     }

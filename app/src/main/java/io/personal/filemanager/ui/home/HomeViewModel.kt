@@ -6,6 +6,7 @@ import io.personal.filemanager.AppContainer
 import io.personal.filemanager.core.SectionId
 import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.core.formatSizeAndCount
+import io.personal.filemanager.core.pluralRu
 import io.personal.filemanager.data.CategoryStats
 import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.MediaCategory
@@ -71,7 +72,13 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                 }
                 (media + recentStats + appsStats).awaitAll()
             }
+            val personal = runCatching { container.personal.snapshot() }.getOrNull()
             val texts = buildMap {
+                personal?.let { (notes, links, favorites) ->
+                    put(SectionId.NOTES, pluralRu(notes.size, "заметка", "заметки", "заметок"))
+                    put(SectionId.LINKS, pluralRu(links.size, "ссылка", "ссылки", "ссылок"))
+                    put(SectionId.FAVORITES, pluralRu(favorites.size, "объект", "объекта", "объектов"))
+                }
                 stats.forEach { (id, s) -> if (s != null) put(id, formatSizeAndCount(s.totalBytes, s.count)) }
                 storage?.let { put(SectionId.FILES, "занято ${formatSize(it.usedBytes)}") }
             }

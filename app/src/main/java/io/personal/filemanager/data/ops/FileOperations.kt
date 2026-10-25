@@ -32,6 +32,8 @@ data class OpReport(
     val removed: List<String> = emptyList(),
     /** Пояснение для пользователя (куда распаковано и т. п.). */
     val note: String? = null,
+    /** Перемещённые объекты: старый путь → новый (для обновления избранного). */
+    val moved: List<Pair<String, String>> = emptyList(),
 ) {
     val ok: Boolean get() = failed.isEmpty() && !cancelled
 }
@@ -157,6 +159,7 @@ class FileOperations(
         val skipped = mutableListOf<String>()
         val created = mutableListOf<String>()
         val removed = mutableListOf<String>()
+        val moved = mutableListOf<Pair<String, String>>()
         var cancelled = false
 
         for (src in valid) {
@@ -192,6 +195,7 @@ class FileOperations(
                 if (move && sameVolume && !target.exists() && src.renameTo(target)) {
                     created += target.absolutePath
                     removed += src.absolutePath
+                    moved += src.absolutePath to target.absolutePath
                 } else {
                     copyTree(src, target, ctx, policy, created)
                     if (move) {
@@ -202,6 +206,7 @@ class FileOperations(
                             continue
                         }
                         removed += src.absolutePath
+                        moved += src.absolutePath to target.absolutePath
                     }
                 }
                 done += src.path
@@ -214,7 +219,7 @@ class FileOperations(
             ctx.doneItems++
         }
         ctx.report()
-        return OpReport(done, skipped, failed, cancelled, created, removed)
+        return OpReport(done, skipped, failed, cancelled, created, removed, moved = moved)
     }
 
     private fun copyTree(src: File, target: File, ctx: Ctx, policy: ConflictPolicy, created: MutableList<String>) {

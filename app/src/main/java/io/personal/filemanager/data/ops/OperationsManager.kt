@@ -3,6 +3,7 @@ package io.personal.filemanager.data.ops
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.os.storage.StorageManager
+import io.personal.filemanager.data.db.PersonalRepository
 import io.personal.filemanager.data.apps.ApkSets
 import io.personal.filemanager.data.apps.ExportResult
 import io.personal.filemanager.data.archive.ArchiveCreator
@@ -34,7 +35,11 @@ data class RunningOperation(val title: String, val progress: OpProgress? = null,
  * не блокируют UI, показывают прогресс и отменяются. После изменений индекс Android (MediaStore)
  * обновляется для затронутых путей — списки «Новые»/категорий обновятся сами.
  */
-class OperationsManager(private val context: Context, private val scope: CoroutineScope) {
+class OperationsManager(
+    private val context: Context,
+    private val scope: CoroutineScope,
+    private val personal: PersonalRepository? = null,
+) {
     val trash = TrashStore { file -> FileOperations.defaultVolumeRoot(file)?.let { File(it, TrashStore.TRASH_DIR) } }
     val ops = FileOperations(trash)
 
@@ -63,6 +68,11 @@ class OperationsManager(private val context: Context, private val scope: Corouti
 
     fun cancel() = cancelFlag.set(true)
 
+    /** Короткое сообщение пользователю (показывается всплывающей подсказкой). */
+    fun notify(message: String) {
+        _messages.tryEmit(message)
+    }
+
     fun conflicts(paths: List<String>, destDir: File): List<String> = ops.conflicts(paths.map(::File), destDir)
 
     /** Запуск длинной операции в фоне. false — уже выполняется другая. */
@@ -82,6 +92,7 @@ class OperationsManager(private val context: Context, private val scope: Corouti
             _running.value = null
             if (report != null) {
                 rescan(report.created + report.removed)
+                report.moved.forEach { (old, new) -> runCatching { personal?.relocateFavoriteTree(old, new) } }
                 _messages.tryEmit(summary(title, report))
             }
             _version.value++
@@ -113,6 +124,7 @@ class OperationsManager(private val context: Context, private val scope: Corouti
         val result = ops.rename(File(path), newName)
         if (result is RenameResult.Ok) {
             rescan(listOf(path, result.file.absolutePath))
+            runCatching { personal?.relocateFavoriteTree(path, result.file.absolutePath) }
             _version.value++
         }
         result

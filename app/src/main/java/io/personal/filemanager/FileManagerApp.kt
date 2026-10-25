@@ -11,6 +11,8 @@ import io.personal.filemanager.data.MediaRepository
 import io.personal.filemanager.data.PlaybackPositions
 import io.personal.filemanager.data.StorageRepository
 import io.personal.filemanager.data.ops.OperationsManager
+import io.personal.filemanager.data.db.PersonalRepository
+import io.personal.filemanager.data.backup.BackupManager
 import io.personal.filemanager.data.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +28,9 @@ class AppContainer(val app: Application) {
     val media = MediaRepository(app)
     val fileSystem = FileSystemRepository()
     val apps = AppsRepository(app)
-    val operations = OperationsManager(app, appScope)
+    val personal = PersonalRepository(app)
+    val operations = OperationsManager(app, appScope, personal)
+    val backups = BackupManager(app, personal, settings)
 }
 
 class FileManagerApp : Application(), SingletonImageLoader.Factory {

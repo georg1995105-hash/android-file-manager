@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -53,6 +55,7 @@ import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.components.card
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BackupScreen() {
     val navigator = LocalNavigator.current
@@ -142,9 +145,10 @@ fun BackupScreen() {
             Section("Ручная копия") {
                 Text("Последняя проверенная: " + describe(s.lastManual), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { createDialog = true }, enabled = busy == null) { Text("Создать копию") }
-                    OutlinedButton(onClick = { openLauncher.launch(arrayOf("*/*")) }, enabled = busy == null) { Text("Восстановить") }
+                // На узком экране кнопки переносятся целиком, а не по слогам.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { createDialog = true }, enabled = busy == null) { Text("Создать копию", maxLines = 1) }
+                    OutlinedButton(onClick = { openLauncher.launch(arrayOf("*/*")) }, enabled = busy == null) { Text("Восстановить", maxLines = 1) }
                 }
             }
             Section("Автокопирование") {

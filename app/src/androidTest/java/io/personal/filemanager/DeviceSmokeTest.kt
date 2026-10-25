@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -12,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.FixMethodOrder
@@ -51,6 +53,8 @@ class DeviceSmokeTest {
     }
 
     private fun openTile(title: String) {
+        // Плитка может быть ниже края экрана (ленивый список): сначала прокрутить к ней.
+        compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText(title))
         compose.onAllNodesWithText(title).onFirst().performClick()
         compose.waitForIdle()
     }

@@ -170,7 +170,7 @@ fun NotesScreen() {
  */
 @OptIn(FlowPreview::class)
 class NoteEditorViewModel(private val container: AppContainer, initialId: Long) : ViewModel() {
-    data class State(val loaded: Boolean = false, val note: Note? = null, val saved: Boolean = true)
+    data class State(val loaded: Boolean = false, val note: Note? = null, val saved: Boolean = true, val stored: Boolean = false)
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
@@ -193,7 +193,7 @@ class NoteEditorViewModel(private val container: AppContainer, initialId: Long) 
                 pinned = it.pinned
                 created = it.created
             }
-            _state.value = State(loaded = true, note = existing)
+            _state.value = State(loaded = true, note = existing, stored = existing != null)
         }
     }
 
@@ -213,7 +213,7 @@ class NoteEditorViewModel(private val container: AppContainer, initialId: Long) 
         if (_state.value.saved) return
         if (id == 0L && title.isBlank() && body.isBlank()) return
         id = container.personal.saveNote(Note(id, title, body, created, System.currentTimeMillis(), pinned))
-        _state.value = _state.value.copy(saved = true)
+        _state.value = _state.value.copy(saved = true, stored = true)
     }
 
     fun flush() {
@@ -227,7 +227,7 @@ class NoteEditorViewModel(private val container: AppContainer, initialId: Long) 
         id = 0
         title = ""
         body = ""
-        _state.value = _state.value.copy(saved = true)
+        _state.value = _state.value.copy(saved = true, stored = false)
     }
 
     val text: String get() = (if (title.isNotBlank()) "# $title\n\n" else "") + body
@@ -276,7 +276,7 @@ fun NoteEditorScreen(noteId: Long) {
 
     Column(Modifier.fillMaxSize().imePadding()) {
         ScreenTopBar(
-            title = if (noteId == 0L && state.note == null) "Новая заметка" else "Заметка",
+            title = if (state.stored) "Заметка" else "Новая заметка",
             subtitle = if (state.saved) "Сохранено" else "Сохранение…",
             onBack = { vm.flush(); navigator.back() },
             actions = {

@@ -16,6 +16,34 @@ with open(os.path.join(out, "data.json"), "w", encoding="utf-8") as f:
 with zipfile.ZipFile(os.path.join(out, "fixture.zip"), "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr("readme.txt", "Тестовый архив\n")
     z.writestr("папка/вложенный.txt", "вложенный файл\n")
+
+
+def write_pdf(path):
+    """Минимальный корректный одностраничный PDF (без внешних библиотек)."""
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        None,
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    stream = b"BT /F1 36 Tf 72 720 Td (PFM test PDF) Tj ET"
+    objs[3] = b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream"
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, o in enumerate(objs, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + o + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    for off in offsets:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    with open(path, "wb") as f:
+        f.write(out)
+
+
+write_pdf(os.path.join(out, "doc.pdf"))
 subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=1920x1080",
                 "-frames:v", "1", os.path.join(out, "photo.jpg")], check=True)
 subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30",

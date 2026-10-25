@@ -181,6 +181,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
+      # Эмулятору нужно ~7.4 ГБ под userdata; на стандартном раннере свободно меньше.
+      # Удаляем предустановленные SDK, не нужные проекту (Java и Android SDK не трогаем).
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost \
+            /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/julia* /usr/local/share/powershell \
+            /usr/local/share/chromium /usr/local/lib/node_modules || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          df -h / | tail -1
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
@@ -210,6 +220,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disk-size: 4096M
+          emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: bash tools/device_tests.sh

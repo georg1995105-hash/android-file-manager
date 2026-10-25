@@ -104,6 +104,16 @@ class DeviceSmokeTest {
     }
 
     @Test
+    fun e2_pdf() {
+        openTile("Документы")
+        waitText("doc.pdf", 20_000)
+        compose.onNodeWithText("doc.pdf").performClick()
+        waitText("Страница 1 из 1")
+        Thread.sleep(1_000)
+        shot("d07b_pdf")
+    }
+
+    @Test
     fun f_notesCreate() {
         openTile("Заметки")
         compose.waitUntil(10_000) {

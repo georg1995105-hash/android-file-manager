@@ -20,6 +20,7 @@ object Routes {
     const val NOTE = "note?id={id}"
     const val BROWSER = "browser?path={path}"
     const val BACKUP = "backup"
+    const val PDF = "pdf?path={path}"
 
     fun section(id: SectionId) = "section/${id.name}"
     fun image(path: String) = "image?path=${Uri.encode(path)}"
@@ -28,6 +29,7 @@ object Routes {
     fun archive(path: String) = "archive?path=${Uri.encode(path)}"
     fun apk(path: String) = "apk?path=${Uri.encode(path)}"
     fun note(id: Long) = "note?id=$id"
+    fun pdf(path: String) = "pdf?path=${Uri.encode(path)}"
     fun browser(path: String) = "browser?path=${Uri.encode(path)}"
 }
 

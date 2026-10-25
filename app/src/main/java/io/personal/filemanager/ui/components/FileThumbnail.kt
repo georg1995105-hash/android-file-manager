@@ -37,14 +37,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.AsyncImage
 import io.personal.filemanager.FileManagerApp
 import io.personal.filemanager.core.FileKind
 import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.ui.theme.AccentColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 @Suppress("DEPRECATION")
 fun kindIcon(kind: FileKind): Pair<ImageVector, Color> = when (kind) {
@@ -81,13 +80,14 @@ fun FileThumbnail(entry: FileEntry, size: Dp, modifier: Modifier = Modifier) {
     when (entry.kind) {
         FileKind.IMAGE, FileKind.VIDEO -> {
             Box(modifier.size(size).clip(RoundedCornerShape(size / 4))) {
-                SubcomposeAsyncImage(
-                    model = File(entry.path),
+                // Значок типа под миниатюрой: виден, пока она грузится или если её нет. AsyncImage без
+                // подкомпозиции — дешевле в длинных списках.
+                KindBadge(entry.kind, size)
+                AsyncImage(
+                    model = MediaThumb.of(entry),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    loading = { KindBadge(entry.kind, size) },
-                    error = { KindBadge(entry.kind, size) },
                 )
                 if (entry.kind == FileKind.VIDEO) {
                     Icon(

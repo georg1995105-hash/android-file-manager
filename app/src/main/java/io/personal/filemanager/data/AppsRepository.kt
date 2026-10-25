@@ -57,6 +57,29 @@ class AppsRepository(private val context: Context) {
         }.sortedBy { it.label.lowercase() }
     }
 
+    @Volatile
+    private var statsCache: Pair<Long, CategoryStats>? = null
+
+    /**
+     * Число и общий размер приложений для плитки главной — без загрузки подписей (дорого) и с кэшем
+     * на 2 минуты: главная обновляется при каждом возврате на неё.
+     */
+    fun launchableStats(): CategoryStats {
+        val now = System.currentTimeMillis()
+        statsCache?.let { (at, stats) -> if (now - at < STATS_TTL_MS) return stats }
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val packages = pm.queryIntentActivities(intent, 0).map { it.activityInfo.packageName }.distinct()
+            .filter { it != context.packageName }
+        var total = 0L
+        var count = 0
+        for (pkg in packages) {
+            val app = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull() ?: continue
+            total += (listOfNotNull(app.sourceDir) + app.splitSourceDirs.orEmpty()).sumOf { File(it).length() }
+            count++
+        }
+        return CategoryStats(total, count).also { statsCache = now to it }
+    }
+
     @Suppress("DEPRECATION")
     fun installedVersion(packageName: String): InstalledVersion? = runCatching {
         val info = pm.getPackageInfo(packageName, 0)
@@ -86,3 +109,5 @@ class AppsRepository(private val context: Context) {
         ) to app?.loadIcon(pm)
     }.getOrNull()
 }
+
+private const val STATS_TTL_MS = 120_000L

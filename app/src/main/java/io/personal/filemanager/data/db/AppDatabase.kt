@@ -201,6 +201,13 @@ class PersonalRepository(context: Context) {
 
     // ---------- Снимок и восстановление (резервные копии) ----------
 
+    /** Количества записей для плиток главной (без чтения самих заметок). */
+    suspend fun counts(): Triple<Int, Int, Int> = withContext(Dispatchers.IO) {
+        val db = helper.readableDatabase
+        fun count(table: String) = db.rawQuery("SELECT COUNT(*) FROM $table", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        Triple(count("notes"), count("links"), count("favorites"))
+    }
+
     suspend fun snapshot(): Triple<List<Note>, List<Link>, List<Favorite>> = withContext(Dispatchers.IO) {
         val db = helper.readableDatabase
         Triple(

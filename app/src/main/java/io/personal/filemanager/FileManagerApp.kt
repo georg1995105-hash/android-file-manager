@@ -2,6 +2,7 @@ package io.personal.filemanager
 
 import android.app.Application
 import coil3.ImageLoader
+import io.personal.filemanager.ui.components.MediaThumbFetcher
 import io.personal.filemanager.data.links.SiteIconLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -46,6 +47,10 @@ class FileManagerApp : Application(), SingletonImageLoader.Factory {
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
-            .components { add(VideoFrameDecoder.Factory()) }
+            .components {
+                add(VideoFrameDecoder.Factory())
+                add(MediaThumbFetcher.Factory())
+                add(MediaThumbFetcher.Key())
+            }
             .build()
 }

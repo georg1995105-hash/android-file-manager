@@ -18,6 +18,8 @@ data class FileEntry(
     val dateAdded: Long? = null,
     val mimeType: String? = null,
     val childCount: Int? = null,
+    /** _ID в MediaStore, если запись получена из индекса (для системных миниатюр). */
+    val mediaId: Long? = null,
 ) {
     val kind: FileKind get() = FileTypes.kindOf(name, isDirectory)
     val extension: String get() = FileTypes.extensionOf(name)

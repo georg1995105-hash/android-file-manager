@@ -86,6 +86,7 @@ class MediaRepository(context: Context) {
         val iAdded = getColumnIndexOrThrow(FileColumns.DATE_ADDED)
         val iModified = getColumnIndexOrThrow(FileColumns.DATE_MODIFIED)
         val iMime = getColumnIndexOrThrow(FileColumns.MIME_TYPE)
+        val iId = getColumnIndex(FileColumns._ID)
         val result = ArrayList<FileEntry>(count)
         while (moveToNext()) {
             val path = getString(iData) ?: continue
@@ -99,6 +100,7 @@ class MediaRepository(context: Context) {
                 lastModified = getLong(iModified) * 1000L,
                 dateAdded = getLong(iAdded).takeIf { it > 0 }?.times(1000L),
                 mimeType = getString(iMime),
+                mediaId = if (iId >= 0) getLong(iId) else null,
             )
         }
         return result

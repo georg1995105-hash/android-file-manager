@@ -498,12 +498,12 @@ private fun DetailLine(label: String, value: String) {
 private fun GridThumbnail(entry: FileEntry) {
     Box(Modifier.fillMaxSize().background(AppColors.Card), contentAlignment = Alignment.Center) {
         if (entry.kind == FileKind.IMAGE || entry.kind == FileKind.VIDEO) {
-            coil3.compose.SubcomposeAsyncImage(
-                model = java.io.File(entry.path),
+            KindBadge(entry.kind, 48.dp)
+            coil3.compose.AsyncImage(
+                model = MediaThumb.of(entry),
                 contentDescription = entry.name,
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                error = { KindBadge(entry.kind, 48.dp) },
             )
             if (entry.kind == FileKind.VIDEO) {
                 Icon(

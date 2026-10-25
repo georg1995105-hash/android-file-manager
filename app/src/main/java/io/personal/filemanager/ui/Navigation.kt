@@ -14,6 +14,7 @@ object Routes {
     const val VIDEO = "video?path={path}"
     const val SETTINGS_TILES = "settings/tiles"
     const val SETTINGS_TABS = "settings/tabs"
+    const val TRASH = "trash"
 
     fun section(id: SectionId) = "section/${id.name}"
     fun image(path: String) = "image?path=${Uri.encode(path)}"
@@ -27,6 +28,9 @@ interface AppNavigator {
     fun openSearch()
     fun openTileSettings()
     fun openTabSettings()
+
+    /** Переход на произвольный маршрут из [Routes]. */
+    fun open(route: String)
     fun back()
 }
 

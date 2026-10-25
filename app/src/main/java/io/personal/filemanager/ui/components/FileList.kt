@@ -1,6 +1,19 @@
 package io.personal.filemanager.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import io.personal.filemanager.ui.ops.LocalFileOps
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -301,27 +314,61 @@ fun LazyGridScope.fullWidthItem(content: @Composable () -> Unit) {
 private fun SelectionBar(selection: SelectionState, entries: List<FileEntry>, modifier: Modifier = Modifier) {
     if (!selection.active) return
     val context = LocalContext.current
+    val fileOps = LocalFileOps.current
     val chosen = entries.filter { it.path in selection.paths }
-    Row(
+    var more by remember { mutableStateOf(false) }
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(12.dp)
             .navigationBarsPadding()
             .card(RoundedCornerShape(20.dp))
             .padding(horizontal = 4.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = { selection.clear() }) {
-            Icon(Icons.Filled.Close, contentDescription = "Отменить выбор")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { selection.clear() }) {
+                Icon(Icons.Filled.Close, contentDescription = "Отменить выбор")
+            }
+            Text("Выбрано: ${chosen.size}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = { selection.set(entries.map { it.path }) }) {
+                Icon(Icons.Filled.SelectAll, contentDescription = "Выбрать все")
+            }
         }
-        Text("Выбрано: ${chosen.size}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-        IconButton(onClick = { selection.set(entries.filter { !it.isDirectory }.map { it.path }) }) {
-            Icon(Icons.Filled.SelectAll, contentDescription = "Выбрать все файлы")
-        }
-        TextButton(onClick = { FileActions.share(context, chosen) }) {
-            Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Поделиться")
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            IconButton(onClick = { FileActions.share(context, chosen) }) {
+                Icon(Icons.Filled.Share, contentDescription = "Поделиться")
+            }
+            IconButton(onClick = { fileOps.copy(chosen); selection.clear() }) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = "Копировать")
+            }
+            IconButton(onClick = { fileOps.move(chosen); selection.clear() }) {
+                Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Переместить")
+            }
+            IconButton(onClick = { fileOps.delete(chosen); selection.clear() }) {
+                Icon(Icons.Filled.Delete, contentDescription = "Удалить")
+            }
+            Box {
+                IconButton(onClick = { more = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Ещё")
+                }
+                DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                    if (chosen.size == 1) {
+                        DropdownMenuItem(
+                            text = { Text("Переименовать") },
+                            onClick = { more = false; fileOps.rename(chosen.first()); selection.clear() },
+                        )
+                    }
+                    if (fileOps.supportsArchives) {
+                        DropdownMenuItem(
+                            text = { Text("Сжать в архив") },
+                            onClick = { more = false; fileOps.compress(chosen); selection.clear() },
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -336,6 +383,7 @@ fun FileActionsSheet(
     onDetails: () -> Unit,
 ) {
     val context = LocalContext.current
+    val fileOps = LocalFileOps.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppColors.Surface) {
         Row(
             Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -346,20 +394,38 @@ fun FileActionsSheet(
             Text(entry.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         HorizontalDivider(color = AppColors.Divider)
-        SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть") { onDismiss(); onOpen() }
-        if (!entry.isDirectory) {
-            SheetAction(Icons.Filled.Share, "Поделиться") { onDismiss(); FileActions.share(context, listOf(entry)) }
-            if (entry.kind != FileKind.OTHER) {
-                SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть в другом приложении") {
-                    onDismiss(); FileActions.openExternally(context, entry)
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть") { onDismiss(); onOpen() }
+            if (!entry.isDirectory) {
+                SheetAction(Icons.Filled.Share, "Поделиться") { onDismiss(); FileActions.share(context, listOf(entry)) }
+                if (entry.kind != FileKind.OTHER) {
+                    SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть в другом приложении") {
+                        onDismiss(); FileActions.openExternally(context, entry)
+                    }
                 }
             }
             if (onSelect != null) {
                 SheetAction(Icons.Filled.CheckCircle, "Выбрать") { onDismiss(); onSelect() }
             }
+            if (fileOps.supportsArchives && entry.kind == FileKind.ARCHIVE) {
+                SheetAction(Icons.Filled.Unarchive, "Распаковать…") { onDismiss(); fileOps.extract(entry) }
+            }
+            if (fileOps.supportsArchives) {
+                SheetAction(Icons.Filled.Archive, "Сжать в архив") { onDismiss(); fileOps.compress(listOf(entry)) }
+            }
+            SheetAction(Icons.Filled.ContentCopy, "Копировать") { onDismiss(); fileOps.copy(listOf(entry)) }
+            SheetAction(Icons.AutoMirrored.Filled.DriveFileMove, "Переместить") { onDismiss(); fileOps.move(listOf(entry)) }
+            SheetAction(Icons.Filled.DriveFileRenameOutline, "Переименовать") { onDismiss(); fileOps.rename(entry) }
+            if (fileOps.supportsFavorites) {
+                val fav = fileOps.isFavorite(entry.path)
+                SheetAction(if (fav) Icons.Filled.Star else Icons.Filled.StarBorder, if (fav) "Убрать из избранного" else "В избранное") {
+                    onDismiss(); fileOps.toggleFavorite(entry)
+                }
+            }
+            SheetAction(Icons.Filled.Delete, "Удалить") { onDismiss(); fileOps.delete(listOf(entry)) }
+            SheetAction(Icons.Filled.Info, "Сведения") { onDismiss(); onDetails() }
+            Spacer(Modifier.navigationBarsPadding().padding(bottom = 8.dp))
         }
-        SheetAction(Icons.Filled.Info, "Сведения") { onDismiss(); onDetails() }
-        Spacer(Modifier.navigationBarsPadding().padding(bottom = 8.dp))
     }
 }
 

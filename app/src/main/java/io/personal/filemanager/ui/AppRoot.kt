@@ -39,6 +39,8 @@ import io.personal.filemanager.ui.sections.BrowserScreen
 import io.personal.filemanager.ui.sections.MediaListScreen
 import io.personal.filemanager.ui.sections.PlannedSectionScreen
 import io.personal.filemanager.ui.sections.SearchScreen
+import io.personal.filemanager.ui.sections.TrashScreen
+import io.personal.filemanager.ui.ops.FileOpsHost
 import io.personal.filemanager.ui.settings.TabSettingsScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
@@ -96,6 +98,10 @@ fun AppRoot() {
                 nav.navigate(Routes.SETTINGS_TABS) { launchSingleTop = true }
             }
 
+            override fun open(route: String) {
+                nav.navigate(route) { launchSingleTop = true }
+            }
+
             override fun back() {
                 if (!nav.popBackStack()) context.findActivity()?.finish()
             }
@@ -103,46 +109,49 @@ fun AppRoot() {
     }
 
     CompositionLocalProvider(LocalNavigator provides navigator) {
-        Scaffold(
-            containerColor = AppColors.Background,
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            bottomBar = {
-                val tabs = config?.tabs
-                if (showBar && tabs != null) {
-                    BottomTabBar(tabs = tabs, current = currentSection, onSelect = { id -> selectTab(nav, id) })
+        FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp) {
+            Scaffold(
+                containerColor = AppColors.Background,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                bottomBar = {
+                    val tabs = config?.tabs
+                    if (showBar && tabs != null) {
+                        BottomTabBar(tabs = tabs, current = currentSection, onSelect = { id -> selectTab(nav, id) })
+                    }
+                },
+            ) { inner ->
+                NavHost(
+                    navController = nav,
+                    startDestination = Routes.HOME,
+                    modifier = Modifier
+                        .padding(inner)
+                        .consumeWindowInsets(inner),
+                ) {
+                    composable(Routes.HOME) { HomeScreen() }
+                    composable(
+                        Routes.SECTION,
+                        arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                    ) { entry ->
+                        val id = entry.arguments?.getString("id")?.let(SectionId::fromKey) ?: SectionId.FILES
+                        SectionScreen(id)
+                    }
+                    composable(Routes.SEARCH) { SearchScreen() }
+                    composable(
+                        Routes.IMAGE,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> ImageViewerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    composable(
+                        Routes.TEXT,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> TextViewerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    composable(
+                        Routes.VIDEO,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> VideoPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
+                    composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
+                    composable(Routes.TRASH) { TrashScreen() }
                 }
-            },
-        ) { inner ->
-            NavHost(
-                navController = nav,
-                startDestination = Routes.HOME,
-                modifier = Modifier
-                    .padding(inner)
-                    .consumeWindowInsets(inner),
-            ) {
-                composable(Routes.HOME) { HomeScreen() }
-                composable(
-                    Routes.SECTION,
-                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
-                ) { entry ->
-                    val id = entry.arguments?.getString("id")?.let(SectionId::fromKey) ?: SectionId.FILES
-                    SectionScreen(id)
-                }
-                composable(Routes.SEARCH) { SearchScreen() }
-                composable(
-                    Routes.IMAGE,
-                    arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
-                ) { entry -> ImageViewerScreen(entry.arguments?.getString("path").orEmpty()) }
-                composable(
-                    Routes.TEXT,
-                    arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
-                ) { entry -> TextViewerScreen(entry.arguments?.getString("path").orEmpty()) }
-                composable(
-                    Routes.VIDEO,
-                    arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
-                ) { entry -> VideoPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
-                composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
-                composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
             }
         }
     }

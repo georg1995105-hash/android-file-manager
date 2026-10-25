@@ -34,6 +34,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +58,8 @@ import io.personal.filemanager.data.settings.BrowserSort
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.appViewModel
+import io.personal.filemanager.ui.appContainer
+import io.personal.filemanager.ui.ops.LocalFileOps
 import io.personal.filemanager.ui.components.AllFilesAccessRequired
 import io.personal.filemanager.ui.components.DateShown
 import io.personal.filemanager.ui.components.EmptyState
@@ -127,6 +131,18 @@ fun BrowserScreen(title: String, rootPath: String) {
     // Доступ проверяется системой при каждом чтении, поэтому после выдачи разрешения список появится сам.
     RefreshWhileVisible(null) { vm.load(path) }
 
+    // После операций (копирование, удаление…) содержимое папки перечитывается.
+    val operations = appContainer().operations
+    val opsVersion by operations.version.collectAsStateWithLifecycle()
+    val clipboard by operations.clipboard.collectAsStateWithLifecycle()
+    val running by operations.running.collectAsStateWithLifecycle()
+    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.load(path) }
+    val fileOps = LocalFileOps.current
+    DisposableEffect(path, hasAccess) {
+        if (hasAccess) fileOps.setCurrentFolder(path)
+        onDispose { fileOps.setCurrentFolder(null) }
+    }
+
     fun go(newPath: String) {
         path = newPath
         vm.load(newPath)
@@ -176,52 +192,54 @@ fun BrowserScreen(title: String, rootPath: String) {
                 }
             }
         }
-        // Нижняя панель действий — в зоне большого пальца.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .card(RoundedCornerShape(18.dp))
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Row {
-                TextButton(onClick = { sortMenu = true }) {
-                    @Suppress("DEPRECATION")
-                    Icon(Icons.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(prefs.sort.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Icon(
-                        if (prefs.descending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,
-                        contentDescription = if (prefs.descending) "по убыванию" else "по возрастанию",
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-                DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                    BrowserSort.entries.forEach { s ->
-                        DropdownMenuItem(
-                            text = { Text((if (s == prefs.sort) "✓ " else "") + s.title) },
-                            onClick = { sortMenu = false; vm.updatePrefs(path) { it.copy(sort = s) } },
+        // Нижняя панель действий — в зоне большого пальца (во время вставки её место занимает панель операции).
+        if (clipboard == null && running == null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .card(RoundedCornerShape(18.dp))
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row {
+                    TextButton(onClick = { sortMenu = true }) {
+                        @Suppress("DEPRECATION")
+                        Icon(Icons.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(prefs.sort.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Icon(
+                            if (prefs.descending) Icons.Filled.ArrowDownward else Icons.Filled.ArrowUpward,
+                            contentDescription = if (prefs.descending) "по убыванию" else "по возрастанию",
+                            modifier = Modifier.size(16.dp),
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text(if (prefs.descending) "По возрастанию" else "По убыванию") },
-                        onClick = { sortMenu = false; vm.updatePrefs(path) { it.copy(descending = !it.descending) } },
+                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                        BrowserSort.entries.forEach { s ->
+                            DropdownMenuItem(
+                                text = { Text((if (s == prefs.sort) "✓ " else "") + s.title) },
+                                onClick = { sortMenu = false; vm.updatePrefs(path) { it.copy(sort = s) } },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(if (prefs.descending) "По возрастанию" else "По убыванию") },
+                            onClick = { sortMenu = false; vm.updatePrefs(path) { it.copy(descending = !it.descending) } },
+                        )
+                    }
+                }
+                IconButton(onClick = { vm.updatePrefs(path) { it.copy(showHidden = !it.showHidden) } }) {
+                    Icon(
+                        if (prefs.showHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                        contentDescription = if (prefs.showHidden) "Скрыть скрытые файлы" else "Показать скрытые файлы",
                     )
                 }
-            }
-            IconButton(onClick = { vm.updatePrefs(path) { it.copy(showHidden = !it.showHidden) } }) {
-                Icon(
-                    if (prefs.showHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                    contentDescription = if (prefs.showHidden) "Скрыть скрытые файлы" else "Показать скрытые файлы",
-                )
-            }
-            TextButton(onClick = { createDialog = true }) {
-                Icon(Icons.Filled.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Папка")
+                TextButton(onClick = { createDialog = true }) {
+                    Icon(Icons.Filled.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Папка")
+                }
             }
         }
     }

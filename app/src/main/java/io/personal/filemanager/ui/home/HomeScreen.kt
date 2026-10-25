@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ import io.personal.filemanager.data.settings.TileConfig
 import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.components.DateShown
@@ -75,6 +77,8 @@ fun HomeScreen() {
     val config by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
 
     RefreshWhileVisible(vm.changes) { vm.refresh() }
+    val opsVersion by appContainer().operations.version.collectAsStateWithLifecycle()
+    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.refresh() }
     HomeContent(state, config)
 }
 
@@ -210,6 +214,10 @@ private fun HomeHeader() {
                 DropdownMenuItem(
                     text = { Text("Настроить нижнюю панель") },
                     onClick = { menuOpen = false; navigator.openTabSettings() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Корзина") },
+                    onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
                 )
             }
         }

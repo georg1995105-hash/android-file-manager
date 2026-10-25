@@ -21,6 +21,8 @@ import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.components.DateShown
 import io.personal.filemanager.ui.components.FileListPane
 import io.personal.filemanager.ui.home.HomeContent
+import io.personal.filemanager.ui.ops.LocalFileOps
+import io.personal.filemanager.ui.ops.NoopFileOps
 import io.personal.filemanager.ui.home.HomeState
 import io.personal.filemanager.ui.settings.TabEditActions
 import io.personal.filemanager.ui.settings.TabSettingsContent
@@ -55,6 +57,7 @@ class ScreenshotTest {
         override fun openSearch() = Unit
         override fun openTileSettings() = Unit
         override fun openTabSettings() = Unit
+        override fun open(route: String) = Unit
         override fun back() = Unit
     }
 
@@ -73,7 +76,7 @@ class ScreenshotTest {
     private fun shot(name: String, content: @Composable () -> Unit) {
         compose.setContent {
             FileManagerTheme {
-                CompositionLocalProvider(LocalNavigator provides NoopNavigator) {
+                CompositionLocalProvider(LocalNavigator provides NoopNavigator, LocalFileOps provides NoopFileOps) {
                     // Как в приложении: экраны живут внутри Scaffold, задающего цвет текста.
                     Surface(Modifier.fillMaxSize(), color = AppColors.Background, contentColor = AppColors.TextPrimary) {
                         content()

@@ -16,6 +16,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import io.personal.filemanager.data.MediaRepository
 import io.personal.filemanager.data.MediaSort
 import io.personal.filemanager.data.settings.RecentSort
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.components.AllFilesAccessRequired
 import io.personal.filemanager.ui.components.DateShown
@@ -166,6 +168,8 @@ fun MediaListBody(category: MediaCategory, vm: MediaListViewModel = mediaListVie
     val isRecent = category == MediaCategory.RECENT
 
     RefreshWhileVisible(vm.changes) { vm.refresh() }
+    val opsVersion by appContainer().operations.version.collectAsStateWithLifecycle()
+    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.refresh() }
 
     when {
         !hasAccess -> AllFilesAccessRequired()

@@ -82,6 +82,8 @@ class ViewerSelectionTest {
             compose.onAllNodes(hasContentDescription("Пауза") or hasContentDescription("Воспроизвести"))
                 .fetchSemanticsNodes().isNotEmpty(),
         )
+        // Видео действительно подготовлено: на ползунке известна длительность тестового ролика (6 с).
+        compose.waitText("0:06", 10_000)
         compose.shot("v03_viewer_video")
         compose.onRoot().performTouchInput { doubleClick(centerRight.copy(x = width * 0.8f)) }
         compose.waitText("+10 с", 3_000)

@@ -41,6 +41,8 @@ import io.personal.filemanager.ui.sections.PlannedSectionScreen
 import io.personal.filemanager.ui.sections.SearchScreen
 import io.personal.filemanager.ui.sections.TrashScreen
 import io.personal.filemanager.ui.ops.FileOpsHost
+import io.personal.filemanager.ui.archive.ArchiveScreen
+import io.personal.filemanager.data.archive.ArchiveFormats
 import io.personal.filemanager.ui.settings.TabSettingsScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
@@ -80,6 +82,11 @@ fun AppRoot() {
                     }
                     FileKind.TEXT -> nav.navigate(Routes.text(entry.path))
                     FileKind.VIDEO -> nav.navigate(Routes.video(entry.path))
+                    FileKind.ARCHIVE -> if (ArchiveFormats.detect(entry.name) != null) {
+                        nav.navigate(Routes.archive(entry.path))
+                    } else {
+                        FileActions.openExternally(context, entry)
+                    }
                     // Папка из поиска/недавних — открываем в обзоре файлов.
                     FileKind.FOLDER -> FileActions.toast(context, "Откройте папку через «Файлы»: ${entry.path}")
                     else -> FileActions.openExternally(context, entry)
@@ -151,6 +158,10 @@ fun AppRoot() {
                     composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
                     composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
                     composable(Routes.TRASH) { TrashScreen() }
+                    composable(
+                        Routes.ARCHIVE,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> ArchiveScreen(entry.arguments?.getString("path").orEmpty()) }
                 }
             }
         }

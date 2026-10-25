@@ -30,6 +30,8 @@ data class OpReport(
     val created: List<String> = emptyList(),
     /** Пути, которых больше нет (для обновления индекса Android). */
     val removed: List<String> = emptyList(),
+    /** Пояснение для пользователя (куда распаковано и т. п.). */
+    val note: String? = null,
 ) {
     val ok: Boolean get() = failed.isEmpty() && !cancelled
 }

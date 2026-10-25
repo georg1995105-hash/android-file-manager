@@ -7,8 +7,8 @@ plugins {
 }
 
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
-val appVersionCode = 3
-val appVersionName = "0.3.0"
+val appVersionCode = 4
+val appVersionName = "0.4.0"
 
 // Подпись release: keystore.properties (локально, вне Git) или переменные окружения CI.
 // Ключ и пароли никогда не коммитятся.
@@ -114,6 +114,12 @@ dependencies {
     implementation(libs.coil.video)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+    implementation(libs.zip4j)
+    implementation(libs.commons.compress)
+    implementation(libs.xz)
+    implementation(libs.junrar)
+    // zstd-jni — AAR с нативными .so (проверено: PT_LOAD align 16 КБ для всех ABI).
+    implementation(libs.zstd.jni) { artifact { type = "aar" } }
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

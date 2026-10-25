@@ -15,11 +15,13 @@ object Routes {
     const val SETTINGS_TILES = "settings/tiles"
     const val SETTINGS_TABS = "settings/tabs"
     const val TRASH = "trash"
+    const val ARCHIVE = "archive?path={path}"
 
     fun section(id: SectionId) = "section/${id.name}"
     fun image(path: String) = "image?path=${Uri.encode(path)}"
     fun text(path: String) = "text?path=${Uri.encode(path)}"
     fun video(path: String) = "video?path=${Uri.encode(path)}"
+    fun archive(path: String) = "archive?path=${Uri.encode(path)}"
 }
 
 interface AppNavigator {

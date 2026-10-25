@@ -3,6 +3,10 @@ package io.personal.filemanager.data.ops
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.os.storage.StorageManager
+import io.personal.filemanager.data.archive.ArchiveCreator
+import io.personal.filemanager.data.archive.ArchiveEngine
+import io.personal.filemanager.data.archive.ArchiveFormat
+import io.personal.filemanager.data.archive.CreateResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -112,6 +116,55 @@ class OperationsManager(private val context: Context, private val scope: Corouti
         result
     }
 
+    val archives = ArchiveEngine()
+    private val creator = ArchiveCreator()
+
+    fun compress(paths: List<String>, baseName: String, format: ArchiveFormat, password: CharArray?) {
+        val sources = paths.map(::File)
+        val dest = sources.firstOrNull()?.parentFile ?: return
+        launch("Создание архива") { onProgress, isCancelled ->
+            when (val r = creator.create(sources, dest, baseName, format, password, onProgress, isCancelled)) {
+                is CreateResult.Ok -> OpReport(done = listOf(r.file.name), created = listOf(r.file.absolutePath))
+                is CreateResult.Failed -> OpReport(failed = listOf(baseName to r.reason))
+                CreateResult.Cancelled -> OpReport(cancelled = true)
+            }.also { password?.fill('\u0000') }
+        }
+    }
+
+    /**
+     * Распаковка в новую папку внутри [destParent]. [onPasswordProblem] вызывается (в фоне),
+     * если нужен пароль или он неверен — тогда UI спрашивает пароль снова.
+     */
+    fun extract(
+        archive: File,
+        destParent: File,
+        password: CharArray?,
+        selected: Set<String>?,
+        onPasswordProblem: (wrong: Boolean) -> Unit,
+    ) {
+        launch("Распаковка ${archive.name}") { onProgress, isCancelled ->
+            val r = archives.extract(
+                archive, destParent, password, selected,
+                onProgress = { bytes, name -> onProgress(OpProgress(0, bytes, 0, 0, name)) },
+                isCancelled = isCancelled,
+            )
+            when {
+                r.passwordRequired || r.wrongPassword -> {
+                    onPasswordProblem(r.wrongPassword)
+                    null
+                }
+                r.cancelled -> OpReport(cancelled = true)
+                r.error != null -> OpReport(failed = listOf(archive.name to r.error))
+                else -> OpReport(
+                    done = listOf(archive.name),
+                    note = "файлов: ${r.files} → папка «${r.outputDir?.name}»",
+                    skipped = r.skipped.map { "${it.first}: ${it.second}" },
+                    created = listOfNotNull(r.outputDir?.absolutePath),
+                )
+            }
+        }
+    }
+
     /** Все папки корзины на подключённых носителях. */
     fun trashRoots(): List<File> {
         val sm = context.getSystemService(StorageManager::class.java)
@@ -160,6 +213,7 @@ class OperationsManager(private val context: Context, private val scope: Corouti
             if (r.skipped.isNotEmpty()) add("пропущено: ${r.skipped.size}")
             if (r.failed.isNotEmpty()) add("ошибки: ${r.failed.size} (${r.failed.first().second})")
             if (r.cancelled) add("отменено (незавершённый объект не изменён)")
+            r.note?.let { add(it) }
         }
         return "$title — " + parts.joinToString("; ").ifEmpty { "нечего делать" }
     }

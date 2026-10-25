@@ -1,6 +1,14 @@
 package io.personal.filemanager.ui.ops
 
 import android.widget.Toast
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import io.personal.filemanager.data.FileSystemRepository
+import io.personal.filemanager.data.archive.ArchiveCreator
+import io.personal.filemanager.data.archive.ArchiveFormat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,18 +52,15 @@ import io.personal.filemanager.data.ops.FileOperations
 import io.personal.filemanager.data.ops.RenameResult
 import io.personal.filemanager.data.ops.TransferMode
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.card
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** Расширения хоста (архивы, избранное) подключаются следующими этапами через этот интерфейс. */
+/** Расширения хоста (избранное) подключаются через этот интерфейс. */
 interface FileOpsExtensions {
-    val supportsArchives: Boolean get() = false
     val supportsFavorites: Boolean get() = false
-    fun compress(entries: List<FileEntry>) = Unit
-    fun extract(entry: FileEntry) = Unit
-    fun openArchive(entry: FileEntry) = Unit
     fun toggleFavorite(entry: FileEntry) = Unit
     fun isFavorite(path: String): Boolean = false
 }
@@ -82,6 +87,7 @@ fun FileOpsHost(
     var deleteTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
     var permanentTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
     var conflict by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
+    var compressTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
 
     LaunchedEffect(operations) {
         operations.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
@@ -89,7 +95,7 @@ fun FileOpsHost(
 
     val controller = remember(extensions) {
         object : FileOpsController {
-            override val supportsArchives get() = extensions.supportsArchives
+            override val supportsArchives = true
             override val supportsFavorites get() = extensions.supportsFavorites
 
             private fun toClipboard(entries: List<FileEntry>, mode: TransferMode) {
@@ -104,9 +110,9 @@ fun FileOpsHost(
             override fun move(entries: List<FileEntry>) = toClipboard(entries, TransferMode.MOVE)
             override fun rename(entry: FileEntry) { renameTarget = entry }
             override fun delete(entries: List<FileEntry>) { if (entries.isNotEmpty()) deleteTargets = entries }
-            override fun compress(entries: List<FileEntry>) = extensions.compress(entries)
-            override fun extract(entry: FileEntry) = extensions.extract(entry)
-            override fun openArchive(entry: FileEntry) = extensions.openArchive(entry)
+            override fun compress(entries: List<FileEntry>) { if (entries.isNotEmpty()) compressTargets = entries }
+            override fun extract(entry: FileEntry) = navigator.open(Routes.archive(entry.path))
+            override fun openArchive(entry: FileEntry) = navigator.open(Routes.archive(entry.path))
             override fun toggleFavorite(entry: FileEntry) = extensions.toggleFavorite(entry)
             override fun isFavorite(path: String) = extensions.isFavorite(path)
             override fun setCurrentFolder(path: String?) { currentFolder = path }
@@ -187,6 +193,17 @@ fun FileOpsHost(
                 }
             }
         }
+    }
+
+    compressTargets?.let { targets ->
+        CompressDialog(
+            targets = targets,
+            onDismiss = { compressTargets = null },
+            onCreate = { name, format, password ->
+                compressTargets = null
+                operations.compress(targets.map { it.path }, name, format, password)
+            },
+        )
     }
 
     renameTarget?.let { entry ->
@@ -313,6 +330,82 @@ private fun RenameDialog(entry: FileEntry, onDismiss: () -> Unit, onRename: susp
                     if (err == null) onDismiss() else error = err
                 }
             }) { Text("Готово") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    )
+}
+
+@Composable
+private fun CompressDialog(
+    targets: List<FileEntry>,
+    onDismiss: () -> Unit,
+    onCreate: (name: String, format: ArchiveFormat, password: CharArray?) -> Unit,
+) {
+    var name by remember { mutableStateOf(ArchiveCreator.suggestedName(targets.map { File(it.path) })) }
+    var format by remember { mutableStateOf(ArchiveFormat.ZIP) }
+    var usePassword by remember { mutableStateOf(false) }
+    var pass1 by remember { mutableStateOf("") }
+    var pass2 by remember { mutableStateOf("") }
+    val nameError = FileSystemRepository.validateName(name.trim())
+    val passError = when {
+        !usePassword -> null
+        pass1.length < 4 -> "Не короче 4 символов"
+        pass1 != pass2 -> "Пароли не совпадают"
+        else -> null
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Сжать в архив") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(describe(targets), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text("Имя архива") },
+                    suffix = { Text(if (format == ArchiveFormat.ZIP) ".zip" else ".7z") },
+                    isError = nameError != null,
+                    supportingText = { nameError?.let { Text(it) } },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = format == ArchiveFormat.ZIP, onClick = { format = ArchiveFormat.ZIP })
+                    Text("ZIP (открывается везде)")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = format == ArchiveFormat.SEVEN_Z, onClick = { format = ArchiveFormat.SEVEN_Z })
+                    Text("7z (сжимает сильнее)")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = usePassword, onCheckedChange = { usePassword = it })
+                    Text("Защитить паролем (AES-256)")
+                }
+                if (usePassword) {
+                    OutlinedTextField(
+                        value = pass1, onValueChange = { pass1 = it }, singleLine = true,
+                        label = { Text("Пароль") }, visualTransformation = PasswordVisualTransformation(),
+                    )
+                    OutlinedTextField(
+                        value = pass2, onValueChange = { pass2 = it }, singleLine = true,
+                        label = { Text("Повторите пароль") }, visualTransformation = PasswordVisualTransformation(),
+                        isError = passError != null, supportingText = { passError?.let { Text(it) } },
+                    )
+                    Text(
+                        "Пароль нигде не сохраняется. Без него архив открыть нельзя." +
+                            if (format == ArchiveFormat.ZIP) " В ZIP имена файлов остаются видимыми." else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = nameError == null && passError == null,
+                onClick = { onCreate(name.trim(), format, if (usePassword) pass1.toCharArray() else null) },
+            ) { Text("Создать") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
         containerColor = MaterialTheme.colorScheme.surfaceContainer,

@@ -443,7 +443,8 @@ fun SelectionBar(
             IconButton(onClick = { fileOps.move(chosen); selection.clear() }) {
                 Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Переместить")
             }
-            IconButton(onClick = { fileOps.delete(chosen); selection.clear() }) {
+            // Выбор не сбрасывается: при «Отмене» в диалоге он остаётся; удалённые файлы уходят из выбора сами.
+            IconButton(onClick = { fileOps.delete(chosen) }) {
                 Icon(Icons.Filled.Delete, contentDescription = "Удалить")
             }
             Box {

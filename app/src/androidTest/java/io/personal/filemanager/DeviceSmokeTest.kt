@@ -1,0 +1,149 @@
+package io.personal.filemanager
+
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.FixMethodOrder
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.MethodSorters
+import java.io.File
+
+/**
+ * Проверка на эмуляторе в CI: запуск, переходы по основным экранам с реальными тестовыми файлами
+ * (создаются скриптом CI в Download/pfm-fixtures, личных данных нет), скриншоты экранов.
+ * Не заменяет проверку на телефоне владельца.
+ */
+@RunWith(AndroidJUnit4::class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+class DeviceSmokeTest {
+    @get:Rule
+    val compose = createAndroidComposeRule<MainActivity>()
+
+    private val shots = File("/sdcard/Download/pfm-test-shots").apply { mkdirs() }
+
+    private fun shot(name: String) {
+        compose.waitForIdle()
+        Thread.sleep(400)
+        val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(shots, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
+    }
+
+    private fun waitText(text: String, timeoutMs: Long = 10_000) {
+        compose.waitUntil(timeoutMs) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun back() {
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
+
+    private fun openTile(title: String) {
+        compose.onAllNodesWithText(title).onFirst().performClick()
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun a_home() {
+        waitText("Мои файлы")
+        waitText("Внутренняя память")
+        shot("d01_home")
+    }
+
+    @Test
+    fun b_recentAndText() {
+        openTile("Новые")
+        waitText("заметка-тест.md", 20_000)
+        shot("d02_recent")
+        compose.onNodeWithText("заметка-тест.md").performClick()
+        waitText("Проверка кириллицы")
+        shot("d03_text_utf8")
+        back()
+        compose.onNodeWithText("cp1251.txt").performClick()
+        waitText("Привет из Windows-1251")
+        shot("d04_text_cp1251")
+    }
+
+    @Test
+    fun c_video() {
+        openTile("Видео")
+        compose.waitUntil(20_000) { compose.onAllNodes(hasContentDescription("test-1080p.mp4")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("test-1080p.mp4").performClick()
+        Thread.sleep(3_000)
+        shot("d05_video")
+    }
+
+    @Test
+    fun d_photo() {
+        openTile("Фото")
+        compose.waitUntil(20_000) { compose.onAllNodes(hasContentDescription("photo.jpg")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("photo.jpg").performClick()
+        Thread.sleep(1_500)
+        shot("d06_photo")
+    }
+
+    @Test
+    fun e_archive() {
+        openTile("Архивы")
+        waitText("fixture.zip", 20_000)
+        compose.onNodeWithText("fixture.zip").performClick()
+        waitText("readme.txt")
+        shot("d07_archive")
+    }
+
+    @Test
+    fun f_notesCreate() {
+        openTile("Заметки")
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(hasText("Новая заметка") or hasContentDescription("Новая заметка")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodes(hasText("Новая заметка") or hasContentDescription("Новая заметка")).onFirst().performClick()
+        compose.onNodeWithText("Заголовок").performTextInput("Проверка CI")
+        compose.onNodeWithText("Текст заметки").performTextInput("Текст заметки из теста")
+        Thread.sleep(1_500) // автосохранение
+        shot("d08_note_editor")
+        back()
+        waitText("Проверка CI")
+        shot("d09_notes_list")
+    }
+
+    @Test
+    fun g_menuScreens() {
+        compose.onNodeWithContentDescription("Меню").performClick()
+        compose.onNodeWithText("Резервные копии").performClick()
+        waitText("Ручная копия")
+        shot("d10_backup")
+        back()
+        compose.onNodeWithContentDescription("Меню").performClick()
+        compose.onNodeWithText("Корзина").performClick()
+        waitText("Корзина")
+        shot("d11_trash")
+        back()
+        compose.onNodeWithText("Настроить").performClick()
+        waitText("Иконки разделов")
+        shot("d12_tiles")
+    }
+
+    @Test
+    fun h_browserAndApps() {
+        compose.onNodeWithText("Внутренняя память").performClick()
+        waitText("Download")
+        shot("d13_browser")
+        back()
+        openTile("Приложения")
+        waitText("Установленные")
+        shot("d14_apps")
+    }
+}

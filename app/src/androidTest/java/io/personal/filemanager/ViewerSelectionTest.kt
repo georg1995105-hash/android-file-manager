@@ -1,6 +1,8 @@
 package io.personal.filemanager
 
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick

@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Проверка на эмуляторе: установка, доступ к файлам, тестовые образцы, инструментальный тест, скриншоты.
+# Проверка на эмуляторе: установка, доступ к файлам, тестовые образцы, инструментальные тесты, скриншоты.
+# DEVICE=phone|tablet. На телефоне дополнительно — «обновление поверх» и проверка горизонтальной ориентации.
 set -uo pipefail
 PKG=io.personal.filemanager
+DEVICE=${DEVICE:-phone}
 APK=app/build/outputs/apk/debug/app-universal-debug.apk
 TEST_APK=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 RUNNER=$PKG.test/androidx.test.runner.AndroidJUnitRunner
+SHOTS=/sdcard/Download/.pfm-test-shots
 adb wait-for-device
 
 # «Доступ ко всем файлам» — режим appop по uid (как переключатель в настройках).
@@ -13,27 +16,42 @@ grant_files() {
   adb shell appops get --uid $PKG MANAGE_EXTERNAL_STORAGE
 }
 
+# Поворот без датчика: 0 — естественная ориентация (телефон — вертикально, планшет — горизонтально), 1 — на 90°.
+rotate() {
+  adb shell settings put system accelerometer_rotation 0
+  adb shell settings put system user_rotation "$1"
+  sleep 3
+}
+
+RESULTS=()
+run_tests() { # $1 — метка, $2 — классы через запятую
+  adb shell am instrument -w -r -e class "$2" $RUNNER | tee "instr-$1.log"
+  if grep -q "OK (" "instr-$1.log"; then RESULTS+=("$1: OK"); else RESULTS+=("$1: FAIL"); fi
+}
+
 # «Обновление поверх» (приёмочный сценарий ТЗ): предыдущий опубликованный APK -> заметка ->
 # новая сборка поверх без удаления -> заметка на месте. Оба подписаны одним debug-ключом CI.
 UPGRADE="SKIPPED"
-CUR=$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
-PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName -q '.[].tagName' 2>/dev/null | grep -v "^v${CUR}-" | head -1 || true)
-if [ -n "$PREV_TAG" ] && gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*universal*.apk' --dir prev-apk --clobber; then
-  echo "===== UPGRADE: $PREV_TAG -> $CUR"
-  UPGRADE="FAIL"
-  if adb install "$(ls prev-apk/*.apk | head -1)" && adb install -r "$TEST_APK"; then
-    grant_files
-    adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#seed $RUNNER | tee upgrade-seed.log
-    if grep -q "OK (" upgrade-seed.log && adb install -r "$APK"; then
-      adb shell dumpsys package $PKG | grep -E "versionCode|versionName" | head -2
-      adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#verify $RUNNER | tee upgrade-verify.log
-      grep -q "OK (" upgrade-verify.log && UPGRADE="OK"
+if [ "$DEVICE" = "phone" ]; then
+  CUR=$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName -q '.[].tagName' 2>/dev/null | grep -v "^v${CUR}-" | head -1 || true)
+  if [ -n "$PREV_TAG" ] && gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*universal*.apk' --dir prev-apk --clobber; then
+    echo "===== UPGRADE: $PREV_TAG -> $CUR"
+    UPGRADE="FAIL"
+    if adb install "$(ls prev-apk/*.apk | head -1)" && adb install -r "$TEST_APK"; then
+      grant_files
+      adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#seed $RUNNER | tee upgrade-seed.log
+      if grep -q "OK (" upgrade-seed.log && adb install -r "$APK"; then
+        adb shell dumpsys package $PKG | grep -E "versionCode|versionName" | head -2
+        adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#verify $RUNNER | tee upgrade-verify.log
+        grep -q "OK (" upgrade-verify.log && UPGRADE="OK"
+      fi
     fi
+  else
+    echo "Предыдущий пререлиз не найден — проверка обновления пропущена"
   fi
-else
-  echo "Предыдущий пререлиз не найден — проверка обновления пропущена"
+  echo "===== UPGRADE RESULT: $UPGRADE"
 fi
-echo "===== UPGRADE RESULT: $UPGRADE"
 
 adb install -r "$APK" || exit 1
 adb install -r "$TEST_APK" || exit 1
@@ -43,12 +61,20 @@ adb push fixtures/. /sdcard/Download/pfm-fixtures/ >/dev/null
 adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null 2>&1 || true
 sleep 8
 adb logcat -c
-adb shell am instrument -w -r -e class $PKG.DeviceSmokeTest $RUNNER | tee instr.log
+
+rotate 0
+run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest"
+# Горизонтальная ориентация: телефон поворачивается на 90°, планшет уже горизонтален.
+if [ "$DEVICE" = "phone" ]; then rotate 1; else rotate 0; fi
+run_tests landscape "$PKG.OrientationTest"
+rotate 0
+
 mkdir -p device-shots
-adb pull /sdcard/Download/pfm-test-shots/. device-shots/ >/dev/null 2>&1 || true
+adb pull "$SHOTS/." device-shots/ >/dev/null 2>&1 || true
 echo "===== CRASHES ====="
 adb logcat -d | grep -E "FATAL EXCEPTION|AndroidRuntime: (Process|java|Caused)" -A 12 | head -120 || true
-echo "===== RESULT ====="
-grep -E "OK \(|FAILURES|Tests run" instr.log || true
+echo "===== RESULT ($DEVICE) ====="
+grep -hE "OK \(|FAILURES|Tests run" instr-*.log || true
+printf '%s\n' "${RESULTS[@]}"
 echo "upgrade: $UPGRADE"
-grep -q "OK (" instr.log && [ "$UPGRADE" != "FAIL" ]
+! printf '%s\n' "${RESULTS[@]}" | grep -q FAIL && [ "$UPGRADE" != "FAIL" ]

@@ -179,7 +179,17 @@ jobs:
   # Проверка на эмуляторе Android (ART): запуск, экраны, тестовые файлы, скриншоты. Не блокирует выпуск APK.
   device-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: phone
+            profile: pixel_7
+            shots-branch: ci-device-shots
+          - device: tablet
+            profile: pixel_tablet
+            shots-branch: ci-device-shots-tablet
     steps:
       # Эмулятору нужно ~7.4 ГБ под userdata; на стандартном раннере свободно меньше.
       # Удаляем предустановленные SDK, не нужные проекту (Java и Android SDK не трогаем).
@@ -217,11 +227,12 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           GH_TOKEN: ${{ github.token }}
+          DEVICE: ${{ matrix.device }}
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
-          profile: pixel_7
+          profile: ${{ matrix.profile }}
           disk-size: 4096M
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
@@ -232,9 +243,9 @@ jobs:
         run: |
           set -euo pipefail
           cd device-shots
-          git init -q -b ci-device-shots
+          git init -q -b "${{ matrix.shots-branch }}"
           git config user.name "ci"
           git config user.email "ci@users.noreply.github.com"
           git add .
-          git commit -qm "Скриншоты эмулятора для ${GITHUB_SHA::7}"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-device-shots
+          git commit -qm "Скриншоты эмулятора (${{ matrix.device }}) для ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" "${{ matrix.shots-branch }}"

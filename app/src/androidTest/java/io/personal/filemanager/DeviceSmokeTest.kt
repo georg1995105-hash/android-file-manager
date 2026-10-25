@@ -34,7 +34,7 @@ class DeviceSmokeTest {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
 
-    private val shots = File("/sdcard/Download/pfm-test-shots").apply { mkdirs() }
+    private val shots = File(SHOTS_DIR).apply { mkdirs() }
 
     private fun shot(name: String) {
         compose.waitForIdle()

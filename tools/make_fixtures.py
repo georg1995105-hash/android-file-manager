@@ -46,6 +46,10 @@ def write_pdf(path):
 write_pdf(os.path.join(out, "doc.pdf"))
 subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=1920x1080",
                 "-frames:v", "1", os.path.join(out, "photo.jpg")], check=True)
+# Второе фото — для проверки перелистывания; trash-me.jpg — специально для проверки удаления в корзину.
+for name, src in (("photo2.jpg", "smptebars=size=1600x1200"), ("trash-me.jpg", "rgbtestsrc=size=640x480")):
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", src,
+                    "-frames:v", "1", os.path.join(out, name)], check=True)
 subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30",
                 "-f", "lavfi", "-i", "sine=frequency=440", "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-shortest", os.path.join(out, "test-1080p.mp4")], check=True)

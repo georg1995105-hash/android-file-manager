@@ -40,8 +40,11 @@ def main(path: str) -> int:
             abi = info.filename.split("/")[1]
             aligns = load_aligns(z.read(info))
             ok_elf = all(a >= PAGE for a in aligns) or abi in ("armeabi-v7a", "x86")
-            header_off = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
-            ok_zip = info.compress_type != zipfile.ZIP_STORED or header_off % PAGE == 0
+            # Смещение данных — по локальному заголовку (zipalign дополняет его поле extra).
+            z.fp.seek(info.header_offset + 26)
+            name_len, extra_len = struct.unpack("<HH", z.fp.read(4))
+            data_off = info.header_offset + 30 + name_len + extra_len
+            ok_zip = info.compress_type != zipfile.ZIP_STORED or data_off % PAGE == 0
             status = "OK" if ok_elf and ok_zip else "FAIL"
             if status == "FAIL" and abi in ("arm64-v8a", "x86_64"):
                 bad += 1

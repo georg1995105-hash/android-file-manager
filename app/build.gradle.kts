@@ -126,6 +126,12 @@ dependencies {
 // Скриншот-тесты (Robolectric) запускаются отдельно: ./gradlew testDebugUnitTest -Pscreenshots --tests "*ScreenshotTest"
 tasks.withType<Test>().configureEach {
     if (!project.hasProperty("screenshots")) exclude("**/ScreenshotTest*")
+    // Robolectric (SDK 36) на JDK 21 обращается к внутренним классам JDK.
+    jvmArgs(
+        "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+    )
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

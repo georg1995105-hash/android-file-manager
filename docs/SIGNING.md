@@ -6,7 +6,7 @@
 - `versionCode` / `versionName` — только в `app/build.gradle.kts` (`appVersionCode`, `appVersionName`).
   `versionCode` строго растёт для каждого устанавливаемого обновления.
 
-## Сейчас: DEBUG/TEST APK
+## DEBUG/TEST-подпись (неизменная)
 
 - CI допускает только **исходный** debug-ключ (alias `androiddebugkey`, стандартный пароль debug `android`).
   SHA-256 сертификата: `07b0ea83a028f013c3a3d08e2e5138d3d8d2cd8fe22cb7b8378f5f00ae5bb588`.
@@ -62,6 +62,25 @@ Workflow `signed release acceptance` запускается из main (GitHub Ac
 сохранение UID, заголовка и текста заметки. APK следующей тестовой версии не публикуется.
 После успешной проверки публикуются только APK настоящего main, сертификат, SHA-256 и отчёт проверки
 в приватном GitHub Release. Публикации в магазинах нет.
+
+Перед каждым следующим устанавливаемым выпуском увеличивайте единственный `appVersionCode` в
+`app/build.gradle.kts`; ключ и закреплённый сертификат сохраняются.
+
+## Готовый проверенный RELEASE
+
+[APK и отчёты 0.9.0 / versionCode 10](https://github.com/georg1995105-hash/android-file-manager/releases/tag/v0.9.0-release-vc10-0515b4c).
+Источник: main `0515b4c5b159775a2d423fd3cabd448c3527de79`.
+
+| ABI | SHA-256 APK |
+|---|---|
+| arm64 | `277fc51e0d463874a4c88633d82b5874867a89a2029725f6ee885cf01c9ac33b` |
+| universal | `ebf492e86f8a89c9e39cdb09573d6a5fc89ea2afeb23f72eae11216b166cde87` |
+
+[CI #40396058869](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40396058869) подтвердил
+подпись, один сертификат у двух независимо собранных RELEASE APK, отсутствие debuggable, правильный package ID,
+выравнивание 16 КБ и обновление versionCode 10 → 11 через install -r с сохранением UID, заголовка и текста заметки.
+Тест выполнялся на пустом эмуляторе API 35; проверочный vc11 APK не опубликован. Контрольные суммы опубликованных
+файлов дополнительно сверены с GitHub Assets. Обычный CI main #40393299085 прошёл build и оба DEBUG-эмулятора.
 
 RELEASE APK с новым сертификатом не может обновить установленный DEBUG APK с другой подписью.
 Текущее DEBUG-приложение владельца не удаляется и не меняется. Проверка выше относится к RELEASE → RELEASE;

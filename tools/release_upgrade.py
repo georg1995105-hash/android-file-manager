@@ -47,7 +47,7 @@ def wait_node(text, timeout=60):
             position = find_node(tree, text)
             if position:
                 return position
-        except (subprocess.CalledProcessError, ET.ParseError):
+        except (RuntimeError, ET.ParseError):
             pass
         time.sleep(1)
     raise RuntimeError("Release UI did not show expected fixture element: " + text)
@@ -80,6 +80,15 @@ def launch():
 def failure_evidence():
     # android-emulator-runner stops the emulator after script failure. Capture here,
     # while it is still alive, and bound every command so diagnostics cannot hang.
+    try:
+        serial = subprocess.run(["adb", "get-serialno"], capture_output=True, timeout=5)
+        if serial.returncode or not serial.stdout.strip().startswith(b"emulator-"):
+            return
+        qemu = subprocess.run(["adb", "shell", "getprop", "ro.kernel.qemu"], capture_output=True, timeout=5)
+        if qemu.returncode or qemu.stdout.strip() != b"1":
+            return
+    except subprocess.TimeoutExpired:
+        return
     for name, args in (
         ("release-emulator.log", ["logcat", "-d", "-t", "400"]),
         ("release-emulator.png", ["exec-out", "screencap", "-p"]),

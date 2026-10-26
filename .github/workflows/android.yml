@@ -3,7 +3,6 @@ name: android
 on:
   push:
     branches: ['**']
-    paths-ignore: ['.github/workflows/signing-diagnostics.yml']
   workflow_dispatch:
 
 permissions:
@@ -94,7 +93,7 @@ jobs:
             echo "===== $OUT"
             echo "package: $PKG  versionName: $VN  versionCode: $VC  size: $(stat -c %s "$OUT")"
             grep "uses-permission" badging.txt || true
-            "$BT/apksigner" verify --print-certs "$OUT" | grep -E "SHA-256" || true
+            bash tools/check_debug_signatures.sh "$OUT"
             "$BT/zipalign" -c -P 16 4 "$OUT" && echo "zipalign -P 16: OK" || echo "zipalign -P 16: FAIL"
             python3 tools/check_16k.py "$OUT" || true
           done

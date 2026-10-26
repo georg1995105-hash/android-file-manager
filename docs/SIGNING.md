@@ -27,56 +27,44 @@
   пропадут данные приложения (настройки, заметки, ссылки, избранное) — **перед этим сделайте резервную копию**
   в «Резервные копии» и восстановите её после установки release. Обычные файлы телефона не затрагиваются.
 
-## Постоянная release-подпись: однократная настройка владельцем
+## Постоянная RELEASE-подпись
 
-CI соберёт подписанный release-APK автоматически, как только в репозитории появятся 4 секрета:
-`PFM_KEYSTORE_B64`, `PFM_STORE_PASSWORD`, `PFM_KEY_ALIAS`, `PFM_KEY_PASSWORD`.
-Ключ и пароли не попадают в Git, логи и артефакты; в CI ключ существует только во временном файле раннера.
+Создан один отдельный release-keystore: RSA 4096, срок сертификата 36500 дней.
+SHA-256 сертификата: `d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7`.
+Это не DEBUG-ключ; прежняя DEBUG-подпись не менялась.
 
-### Шаг 1. Создать ключ (один раз)
+В GitHub Secrets настроены `PFM_KEYSTORE_B64`, `PFM_STORE_PASSWORD`, `PFM_KEY_ALIAS`, `PFM_KEY_PASSWORD`.
+Значения не выводятся и не хранятся в Git. `tools/release-signing.sha256` содержит только публичный отпечаток.
+`tools/build_signed_release.sh` восстанавливает ключ в собственном временном каталоге с правами 0600,
+проверяет сертификат, собирает APK и удаляет временный ключ при любом завершении.
+Конфигурационный кэш Gradle отключён для подписанной сборки. Готовые APK проверяются через `apksigner`,
+на package ID, отсутствие debuggable и выравнивание 16 КБ; SHA-256 сохраняются в `SHA256SUMS.txt`.
+Несовпадение сертификата или неполная конфигурация останавливают выпуск. Создавать замену нельзя.
 
-Где выполнять: любой ваш Linux-сервер с Docker — `ВАШ_СЕРВЕР`. Лучше не продовый; команда ничего не меняет
-в системе, кроме создания папки `/root/pfm-signing`. Если папка уже существует, блок остановится.
+## Независимая резервная копия владельца
 
-```
-( set -e; command -v docker >/dev/null; test ! -e /root/pfm-signing; mkdir -p /root/pfm-signing; chmod 700 /root/pfm-signing; PASS=$(head -c 32 /dev/urandom | base64 | tr -d '/+=\n' | head -c 28); printf '%s\n' "$PASS" > /root/pfm-signing/store-password.txt; chmod 600 /root/pfm-signing/store-password.txt; docker run --rm -v /root/pfm-signing:/k eclipse-temurin:21-jdk keytool -genkeypair -keystore /k/release.jks -storetype PKCS12 -alias pfm -keyalg RSA -keysize 4096 -validity 36500 -storepass "$PASS" -keypass "$PASS" -dname "CN=Personal File Manager"; chmod 600 /root/pfm-signing/release.jks; base64 -w0 /root/pfm-signing/release.jks > /root/pfm-signing/release.jks.b64; sha256sum /root/pfm-signing/release.jks; ls -la /root/pfm-signing )
-```
+[Зашифрованная резервная копия в закрытом Google Drive](https://drive.google.com/file/d/1PrbzqsF_PPa7JeJWd5XsO5-ivS3f4of2/view)
+содержит keystore, пароли, alias, сертификат и контрольные суммы внутри age-архива.
+Архив зашифрован на публичный SSH ed25519-ключ, предоставленный владельцем.
+Открытый keystore и пароли не передавались через чат и не включались в логи или обычные артефакты CI.
 
-Ожидаемый результат: в `/root/pfm-signing` лежат `release.jks`, `release.jks.b64`, `store-password.txt`
-и выведена SHA-256 ключа.
+SHA-256 зашифрованного файла:
+`a87d46387dd57997212c71272b671b0ada4b3b645a089ac0ac9b622e5ea1590f`.
+Копия скачана обратно из Drive и побайтово сверена по этому SHA-256. Доступ в Drive закрытый, без общего доступа.
+Закрытая часть SSH-ключа остаётся у владельца; GitHub Secrets не являются единственной резервной копией.
+Инструкция расшифрования: [RELEASE_BACKUP.md](RELEASE_BACKUP.md).
 
-### Шаг 2. Резервная копия ключа (обязательно)
+## Выпуск и проверка обновления
 
-Скачайте `release.jks` и `store-password.txt` (например, через SFTP в Termius) и сохраните **в двух местах**
-вне сервера (ПК/USB и менеджер паролей/личное облако). Без ключа обновлять установленное приложение будет
-невозможно — только удалять и ставить заново.
+Workflow `signed release acceptance` запускается из main (GitHub Actions → Run workflow).
+Он собирает настоящий main и отдельную одноразовую следующую версию в временном worktree,
+заново восстанавливая ту же подпись для второй сборки. На чистом эмуляторе проверяются install -r,
+сохранение UID, заголовка и текста заметки. APK следующей тестовой версии не публикуется.
+После успешной проверки публикуются только APK настоящего main, сертификат, SHA-256 и отчёт проверки
+в приватном GitHub Release. Публикации в магазинах нет.
 
-### Шаг 3. Секреты GitHub
-
-GitHub → репозиторий → Settings → Secrets and variables → Actions → New repository secret:
-
-| Имя | Значение |
-|---|---|
-| `PFM_KEYSTORE_B64` | содержимое `release.jks.b64` (одна длинная строка) |
-| `PFM_STORE_PASSWORD` | содержимое `store-password.txt` |
-| `PFM_KEY_ALIAS` | `pfm` |
-| `PFM_KEY_PASSWORD` | то же, что `PFM_STORE_PASSWORD` |
-
-После этого любой коммит с `[apk]` создаёт пререлиз, где рядом с DEBUG лежит `…-release-…-arm64-….apk`.
-
-### Шаг 4. Убрать ключ с сервера (по желанию, после проверки копий)
-
-```
-( set -e; test -d /root/pfm-signing; shred -u /root/pfm-signing/release.jks /root/pfm-signing/release.jks.b64 /root/pfm-signing/store-password.txt; rmdir /root/pfm-signing; echo removed )
-```
-
-Откат: ключ восстанавливается только из ваших резервных копий шага 2.
-
-## Переход с DEBUG на постоянную установку
-
-1. В текущей debug-версии: «⋮ → Резервные копии → Создать копию» (лучше с паролем), сохранить файл вне приложения.
-2. Удалить debug-приложение, установить release-APK (arm64).
-3. «Резервные копии → Восстановить» из файла шага 1.
-4. Дальше обновления release ставятся поверх без удаления (тот же ключ, растущий versionCode).
+RELEASE APK с новым сертификатом не может обновить установленный DEBUG APK с другой подписью.
+Текущее DEBUG-приложение владельца не удаляется и не меняется. Проверка выше относится к RELEASE → RELEASE;
+перенос данных владельца с DEBUG на RELEASE является отдельным действием и здесь не выполняется.
 
 Документация Android: https://developer.android.com/studio/publish/app-signing

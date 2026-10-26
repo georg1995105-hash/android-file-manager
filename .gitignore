@@ -44,3 +44,7 @@ signing.properties
 
 # Local SDK
 .android-sdk/
+
+# Python tooling and local encrypted backup delivery (never commit backup material)
+__pycache__/
+.release-setup/

@@ -19,7 +19,7 @@ SHOTS=/sdcard/Download/.pfm-test-shots
 SIGNING_APKS=("$APK" "$TEST_APK")
 if [ "$DEVICE" = "phone" ]; then
   CUR=$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
-  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName -q '.[].tagName' | grep -v "^v${CUR}-" | head -1) || exit 1
+  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 30 --json tagName -q '.[].tagName' | grep -- '-debug-' | grep -v "^v${CUR}-" | head -1) || exit 1
   if [ -z "$PREV_TAG" ]; then
     echo "Предыдущий пререлиз не найден — проверка обновления невозможна" >&2
     exit 1

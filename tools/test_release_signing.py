@@ -75,6 +75,13 @@ class ReleaseSigningTest(unittest.TestCase):
                         create_release_identity.main()
                     encryption.assert_not_called()
 
+    @unittest.skipUnless(Path("tools/release-signing.sha256").exists(), "identity not bootstrapped yet")
+    def test_pinned_release_identity_blocks_regeneration_even_without_secrets(self):
+        with patch.dict(os.environ, {}, clear=True), patch.object(create_release_identity, "encrypted_backup") as encryption:
+            with self.assertRaisesRegex(RuntimeError, "already pinned"):
+                create_release_identity.main()
+            encryption.assert_not_called()
+
     def test_apk_inspection_rejects_debuggable_or_wrong_certificate(self):
         self.destination.write_bytes(b"APK fixture")
         def fake_command(args, **kwargs):

@@ -3,7 +3,6 @@ name: android
 on:
   push:
     branches: ['**']
-    paths-ignore: ['.github/workflows/migrate-debug-keystore.yml']
   workflow_dispatch:
 
 permissions:

@@ -31,13 +31,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Постоянный DEBUG-ключ тестовых сборок между запусками CI, чтобы тестовые APK
-      # обновлялись друг поверх друга. Это НЕ release-ключ.
+      # Тот же DEBUG-ключ, что у опубликованных APK. Кэш ветки не является хранилищем ключей.
       - name: Restore debug keystore
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: pfm-debug-keystore-v1
+        env:
+          PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
+        run: bash tools/restore_debug_keystore.sh
 
       # Robolectric скачивает android-all один раз; кэшируем между запусками.
       - name: Cache Robolectric
@@ -208,10 +206,9 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - name: Restore debug keystore
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: pfm-debug-keystore-v1
+        env:
+          PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
+        run: bash tools/restore_debug_keystore.sh
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

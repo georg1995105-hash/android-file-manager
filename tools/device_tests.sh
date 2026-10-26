@@ -4,6 +4,12 @@
 set -uo pipefail
 PKG=io.personal.filemanager
 DEVICE=${DEVICE:-phone}
+DEVICE_TEST_SCOPE=${DEVICE_TEST_SCOPE:-full}
+case "$DEVICE_TEST_SCOPE" in
+  full) ;;
+  upgrade) [ "$DEVICE" = phone ] || { echo "Upgrade scope requires phone" >&2; exit 1; } ;;
+  *) echo "Unknown DEVICE_TEST_SCOPE: $DEVICE_TEST_SCOPE" >&2; exit 1 ;;
+esac
 APK=app/build/outputs/apk/debug/app-universal-debug.apk
 TEST_APK=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 RUNNER=$PKG.test/androidx.test.runner.AndroidJUnitRunner
@@ -63,6 +69,10 @@ if [ "$DEVICE" = "phone" ]; then
     fi
   fi
   echo "===== UPGRADE RESULT: $UPGRADE"
+fi
+if [ "$DEVICE_TEST_SCOPE" = upgrade ]; then
+  [ "$UPGRADE" = OK ]
+  exit $?
 fi
 
 adb install -r "$APK" || exit 1

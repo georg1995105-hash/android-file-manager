@@ -3,6 +3,7 @@ name: android
 on:
   push:
     branches: ['**']
+    paths-ignore: ['.github/workflows/signing-diagnostics.yml']
   workflow_dispatch:
 
 permissions:
@@ -31,7 +32,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Тот же DEBUG-ключ, что у опубликованных APK. Кэш ветки не является хранилищем ключей.
+      # Существующий ключ не пересоздаётся: cache miss/чужой сертификат останавливают сборку.
+      - name: Restore existing debug keystore cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: pfm-debug-keystore-v1
       - name: Restore debug keystore
         env:
           PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
@@ -205,6 +211,11 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Restore existing debug keystore cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: pfm-debug-keystore-v1
       - name: Restore debug keystore
         env:
           PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}

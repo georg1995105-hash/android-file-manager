@@ -65,6 +65,11 @@ class SigningTest(unittest.TestCase):
         self.assertEqual(self.run_script("restore_debug_keystore").returncode, 0)
         self.assertEqual(key.read_bytes(), fixture.read_bytes())
         self.assertEqual(key.stat().st_mode & 0o777, 0o600)
+        # A preserved cache key works without a Secret and is never rewritten.
+        self.env["PFM_DEBUG_KEYSTORE_B64"] = ""
+        before = key.stat().st_mtime_ns
+        self.assertEqual(self.run_script("restore_debug_keystore").returncode, 0)
+        self.assertEqual(key.stat().st_mtime_ns, before)
 
     def test_bad_apk_signatures_stop_before_adb(self):
         self.executable("gh", 'if [ "$2" = list ]; then echo v0.8.0-debug-build22; '
@@ -79,7 +84,14 @@ class SigningTest(unittest.TestCase):
                 result = self.run_script("device_tests")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Signing certificate mismatch", result.stderr)
+                self.assertEqual(result.stdout.count("Signing certificate SHA-256:"), 3)
                 self.assertFalse((self.root / "adb-called").exists())
+
+    def test_upgrade_scope_rejects_tablet_before_adb(self):
+        self.env.update(DEVICE="tablet", DEVICE_TEST_SCOPE="upgrade")
+        self.executable("adb", "touch adb-called\n")
+        self.assertNotEqual(self.run_script("device_tests").returncode, 0)
+        self.assertFalse((self.root / "adb-called").exists())
 
     def test_missing_previous_release_is_failure_before_adb(self):
         self.executable("gh", "exit 1\n")

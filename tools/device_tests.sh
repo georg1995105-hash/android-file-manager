@@ -4,10 +4,32 @@
 set -uo pipefail
 PKG=io.personal.filemanager
 DEVICE=${DEVICE:-phone}
+DEVICE_TEST_SCOPE=${DEVICE_TEST_SCOPE:-full}
+case "$DEVICE_TEST_SCOPE" in
+  full) ;;
+  upgrade) [ "$DEVICE" = phone ] || { echo "Upgrade scope requires phone" >&2; exit 1; } ;;
+  *) echo "Unknown DEVICE_TEST_SCOPE: $DEVICE_TEST_SCOPE" >&2; exit 1 ;;
+esac
 APK=app/build/outputs/apk/debug/app-universal-debug.apk
 TEST_APK=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 RUNNER=$PKG.test/androidx.test.runner.AndroidJUnitRunner
 SHOTS=/sdcard/Download/.pfm-test-shots
+
+# Ошибка подписи — ошибка сборки, а не повод удалять приложение или чистить данные.
+SIGNING_APKS=("$APK" "$TEST_APK")
+if [ "$DEVICE" = "phone" ]; then
+  CUR=$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName -q '.[].tagName' | grep -v "^v${CUR}-" | head -1) || exit 1
+  if [ -z "$PREV_TAG" ]; then
+    echo "Предыдущий пререлиз не найден — проверка обновления невозможна" >&2
+    exit 1
+  fi
+  gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*universal*.apk' --dir prev-apk --clobber || exit 1
+  PREV_APKS=(prev-apk/*.apk)
+  [ "${#PREV_APKS[@]}" -eq 1 ] && [ -f "${PREV_APKS[0]}" ] || exit 1
+  SIGNING_APKS+=("${PREV_APKS[0]}")
+fi
+bash tools/check_debug_signatures.sh "${SIGNING_APKS[@]}" || exit 1
 adb wait-for-device
 
 # «Доступ ко всем файлам» — режим appop по uid (как переключатель в настройках).
@@ -35,24 +57,22 @@ run_tests() { # $1 — метка, $2 — классы через запятую
 # новая сборка поверх без удаления -> заметка на месте. Оба подписаны одним debug-ключом CI.
 UPGRADE="SKIPPED"
 if [ "$DEVICE" = "phone" ]; then
-  CUR=$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
-  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName -q '.[].tagName' 2>/dev/null | grep -v "^v${CUR}-" | head -1 || true)
-  if [ -n "$PREV_TAG" ] && gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*universal*.apk' --dir prev-apk --clobber; then
-    echo "===== UPGRADE: $PREV_TAG -> $CUR"
-    UPGRADE="FAIL"
-    if adb install "$(ls prev-apk/*.apk | head -1)" && adb install -r "$TEST_APK"; then
-      grant_files
-      adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#seed $RUNNER | tee upgrade-seed.log
-      if grep -q "OK (" upgrade-seed.log && adb install -r "$APK"; then
-        adb shell dumpsys package $PKG | grep -E "versionCode|versionName" | head -2
-        adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#verify $RUNNER | tee upgrade-verify.log
-        grep -q "OK (" upgrade-verify.log && UPGRADE="OK"
-      fi
+  echo "===== UPGRADE: $PREV_TAG -> $CUR"
+  UPGRADE="FAIL"
+  if adb install "${PREV_APKS[0]}" && adb install -r "$TEST_APK"; then
+    grant_files
+    adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#seed $RUNNER | tee upgrade-seed.log
+    if grep -q "OK (" upgrade-seed.log && adb install -r "$APK"; then
+      adb shell dumpsys package $PKG | grep -E "versionCode|versionName" | head -2
+      adb shell am instrument -w -r -e class $PKG.UpgradeCheckTest#verify $RUNNER | tee upgrade-verify.log
+      grep -q "OK (" upgrade-verify.log && UPGRADE="OK"
     fi
-  else
-    echo "Предыдущий пререлиз не найден — проверка обновления пропущена"
   fi
   echo "===== UPGRADE RESULT: $UPGRADE"
+fi
+if [ "$DEVICE_TEST_SCOPE" = upgrade ]; then
+  [ "$UPGRADE" = OK ]
+  exit $?
 fi
 
 adb install -r "$APK" || exit 1

@@ -31,13 +31,16 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Постоянный DEBUG-ключ тестовых сборок между запусками CI, чтобы тестовые APK
-      # обновлялись друг поверх друга. Это НЕ release-ключ.
-      - name: Restore debug keystore
-        uses: actions/cache@v4
+      # Существующий ключ не пересоздаётся: cache miss/чужой сертификат останавливают сборку.
+      - name: Restore existing debug keystore cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.android/debug.keystore
           key: pfm-debug-keystore-v1
+      - name: Restore debug keystore
+        env:
+          PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
+        run: bash tools/restore_debug_keystore.sh
 
       # Robolectric скачивает android-all один раз; кэшируем между запусками.
       - name: Cache Robolectric
@@ -90,7 +93,7 @@ jobs:
             echo "===== $OUT"
             echo "package: $PKG  versionName: $VN  versionCode: $VC  size: $(stat -c %s "$OUT")"
             grep "uses-permission" badging.txt || true
-            "$BT/apksigner" verify --print-certs "$OUT" | grep -E "SHA-256" || true
+            bash tools/check_debug_signatures.sh "$OUT"
             "$BT/zipalign" -c -P 16 4 "$OUT" && echo "zipalign -P 16: OK" || echo "zipalign -P 16: FAIL"
             python3 tools/check_16k.py "$OUT" || true
           done
@@ -207,11 +210,15 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Restore debug keystore
-        uses: actions/cache@v4
+      - name: Restore existing debug keystore cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.android/debug.keystore
           key: pfm-debug-keystore-v1
+      - name: Restore debug keystore
+        env:
+          PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
+        run: bash tools/restore_debug_keystore.sh
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

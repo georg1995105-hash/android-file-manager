@@ -3,6 +3,10 @@ name: android
 on:
   push:
     branches: ['**']
+    paths-ignore:
+      - '.github/workflows/release-preflight.yml'
+      - '.github/workflows/release-key-setup.yml'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:

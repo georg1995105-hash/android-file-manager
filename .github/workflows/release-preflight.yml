@@ -23,6 +23,7 @@ jobs:
       - name: Signing guards and independent backup recovery on disposable fixtures
         run: |
           python3 tools/test_release_signing.py -v
+          python3 tools/test_release_upgrade.py -v
           python3 tools/test_ci_signing.py -v
           python3 -m py_compile tools/release_signing.py tools/create_release_identity.py tools/release_upgrade.py
-          bash -n tools/build_signed_release.sh
+          bash -n tools/build_signed_release.sh tools/build_release_update_pair.sh

@@ -86,6 +86,10 @@ def main():
         raise RuntimeError("Cannot check emulator package state")
     if b"package:" in installed.stdout:
         raise RuntimeError("Emulator already has this app; refusing to replace or uninstall it")
+    adb("shell", "mkdir", "-p", "/sdcard/Download")
+    adb("shell", "svc", "power", "stayon", "true")
+    adb("shell", "input", "keyevent", "224")
+    adb("shell", "wm", "dismiss-keyguard")
     adb("install", args.previous)
     adb("shell", "appops", "set", "--uid", PACKAGE, "MANAGE_EXTERNAL_STORAGE", "allow")
     launch()

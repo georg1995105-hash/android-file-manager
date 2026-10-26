@@ -99,6 +99,15 @@ class SigningTest(unittest.TestCase):
         self.assertNotEqual(self.run_script("device_tests").returncode, 0)
         self.assertFalse((self.root / "adb-called").exists())
 
+    def test_debug_upgrade_never_selects_a_release_signed_apk(self):
+        self.executable("gh", 'if [ "$2" = list ]; then printf "%s\\n" v0.8.0-release-vc9 v0.9.0-debug-build25 v0.8.0-debug-build22; '
+                        'else echo "$3" > selected-tag; mkdir -p prev-apk; touch prev-apk/old.apk; fi\n')
+        self.env["APK_SIGNER"] = self.executable("apksigner", 'echo "certificate SHA-256 digest: wrong"\n')
+        self.executable("adb", "touch adb-called\n")
+        self.assertNotEqual(self.run_script("device_tests").returncode, 0)
+        self.assertEqual((self.root / "selected-tag").read_text().strip(), "v0.8.0-debug-build22")
+        self.assertFalse((self.root / "adb-called").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

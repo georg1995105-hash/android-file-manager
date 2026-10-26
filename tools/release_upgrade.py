@@ -15,6 +15,20 @@ BODY = "preserved-note-content-123456"
 WINDOW = "/sdcard/Download/pfm-release-window.xml"
 
 
+def find_node(tree, text):
+    # Compose can merge title/body into one accessibility node. Prefer exact labels.
+    for partial in (False, True):
+        for node in tree.iter("node"):
+            values = (node.get("text", ""), node.get("content-desc", ""))
+            if any(value == text or (partial and text in value) for value in values):
+                bounds = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+                if bounds:
+                    left, top, right, bottom = map(int, bounds.groups())
+                    if right > left and bottom > top:
+                        return (left + right) // 2, (top + bottom) // 2
+    return None
+
+
 def adb(*args):
     return subprocess.check_output(["adb", *args], timeout=90).decode().strip()
 
@@ -25,13 +39,9 @@ def wait_node(text, timeout=60):
         try:
             adb("shell", "uiautomator", "dump", "--compressed", WINDOW)
             tree = ET.fromstring(adb("shell", "cat", WINDOW))
-            for node in tree.iter("node"):
-                if text in (node.get("text"), node.get("content-desc")):
-                    bounds = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
-                    if bounds:
-                        left, top, right, bottom = map(int, bounds.groups())
-                        if right > left and bottom > top:
-                            return (left + right) // 2, (top + bottom) // 2
+            position = find_node(tree, text)
+            if position:
+                return position
         except (subprocess.CalledProcessError, ET.ParseError):
             pass
         time.sleep(1)
@@ -71,7 +81,10 @@ def main():
         raise ValueError("Upgrade requires a strictly increasing versionCode")
     if not adb("get-serialno").startswith("emulator-") or adb("shell", "getprop", "ro.kernel.qemu") != "1":
         raise RuntimeError("This disposable-fixture test only runs on an emulator")
-    if "package:" in adb("shell", "pm", "path", PACKAGE):
+    installed = subprocess.run(["adb", "shell", "pm", "path", PACKAGE], capture_output=True, timeout=30)
+    if installed.returncode not in (0, 1):
+        raise RuntimeError("Cannot check emulator package state")
+    if b"package:" in installed.stdout:
         raise RuntimeError("Emulator already has this app; refusing to replace or uninstall it")
     adb("install", args.previous)
     adb("shell", "appops", "set", "--uid", PACKAGE, "MANAGE_EXTERNAL_STORAGE", "allow")

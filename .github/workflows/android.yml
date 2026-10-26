@@ -120,24 +120,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$HAS_RELEASE_KEY" = "true" ]; then
-            export PFM_STORE_FILE="$RUNNER_TEMP/release.jks"
-            printf '%s' "$PFM_KEYSTORE_B64" | base64 -d > "$PFM_STORE_FILE"
-          fi
-          ./gradlew --no-daemon assembleRelease 2>&1 | tee release.log | grep -E "^e: |FAILED|BUILD|error:" || true
-          rm -f "$RUNNER_TEMP/release.jks"
-          grep -q "BUILD SUCCESSFUL" release.log
-          if [ "$HAS_RELEASE_KEY" = "true" ]; then
-            BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-            SHORT=$(echo "$GITHUB_SHA" | cut -c1-7)
-            for SRC in app/build/outputs/apk/release/*.apk; do
-              case "$SRC" in *arm64-v8a*) ABI=arm64 ;; *universal*) ABI=universal ;; *) continue ;; esac
-              OUT="dist/personal-file-manager-${{ steps.apk.outputs.version_name }}-release-vc${{ steps.apk.outputs.version_code }}-${ABI}-${SHORT}.apk"
-              OUT="${OUT/-debug-release/-release}"
-              cp "$SRC" "$OUT"
-              "$BT/apksigner" verify --print-certs "$OUT" | grep -E "SHA-256"
-              python3 tools/check_16k.py "$OUT" || true
-            done
-            (cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
+            bash tools/build_signed_release.sh 2>&1 | tee release.log
+          else
+            ./gradlew --no-daemon --no-configuration-cache assembleRelease 2>&1 | tee release.log
           fi
 
       # Скриншоты экранов (тестовые образцы, без личных данных) — в отдельную ветку для сверки с макетом.

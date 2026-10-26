@@ -30,7 +30,12 @@ def find_node(tree, text):
 
 
 def adb(*args):
-    return subprocess.check_output(["adb", *args], timeout=90).decode().strip()
+    result = subprocess.run(["adb", *args], capture_output=True, timeout=90)
+    output = result.stdout.decode(errors="replace").strip()
+    if result.returncode:
+        error = result.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"adb {' '.join(args)} failed ({result.returncode}): {output}\n{error}")
+    return output
 
 
 def wait_node(text, timeout=60):
@@ -62,8 +67,36 @@ def uid():
 
 
 def launch():
-    adb("shell", "am", "start", "-W", "-a", "android.intent.action.MAIN",
-        "-c", "android.intent.category.LAUNCHER", "-p", PACKAGE)
+    resolved = adb("shell", "cmd", "package", "resolve-activity", "--brief",
+                   "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", PACKAGE)
+    component = resolved.splitlines()[-1].strip()
+    if not re.fullmatch(re.escape(PACKAGE) + r"/[A-Za-z0-9_.$]+", component):
+        raise RuntimeError("Cannot resolve the installed release launcher: " + resolved)
+    output = adb("shell", "am", "start", "-W", "-n", component)
+    if "Error:" in output or "Exception" in output:
+        raise RuntimeError("Release launcher failed: " + output)
+
+
+def failure_evidence():
+    # android-emulator-runner stops the emulator after script failure. Capture here,
+    # while it is still alive, and bound every command so diagnostics cannot hang.
+    for name, args in (
+        ("release-emulator.log", ["logcat", "-d", "-t", "400"]),
+        ("release-emulator.png", ["exec-out", "screencap", "-p"]),
+    ):
+        try:
+            result = subprocess.run(["adb", *args], capture_output=True, timeout=15)
+            if result.returncode == 0:
+                Path(name).write_bytes(result.stdout)
+        except subprocess.TimeoutExpired:
+            pass
+    try:
+        subprocess.run(["adb", "shell", "uiautomator", "dump", WINDOW], capture_output=True, timeout=15)
+        result = subprocess.run(["adb", "shell", "cat", WINDOW], capture_output=True, timeout=10)
+        if result.returncode == 0:
+            Path("release-emulator.xml").write_bytes(result.stdout)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def main():
@@ -120,4 +153,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        failure_evidence()
+        raise

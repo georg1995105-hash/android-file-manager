@@ -56,13 +56,6 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: python3 tools/release_upgrade.py --previous dist/current/*universal*.apk --next dist/validation-next/*universal*.apk --certificate-file tools/release-signing.sha256 --report dist/current/RELEASE_UPGRADE.json
-      - name: Failure evidence from disposable emulator only
-        if: failure()
-        run: |
-          adb logcat -d -t 400 > release-emulator.log 2>/dev/null || true
-          adb exec-out screencap -p > release-emulator.png 2>/dev/null || true
-          adb shell uiautomator dump /sdcard/Download/pfm-release-failure.xml >/dev/null 2>&1 || true
-          adb pull /sdcard/Download/pfm-release-failure.xml release-emulator.xml >/dev/null 2>&1 || true
       - name: Preserve APKs and public verification evidence only
         if: always()
         uses: actions/upload-artifact@v4

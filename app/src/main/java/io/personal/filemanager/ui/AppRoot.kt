@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui
 
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.EnterTransition
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -142,6 +144,11 @@ fun AppRoot() {
                 NavHost(
                     navController = nav,
                     startDestination = Routes.HOME,
+                    // Стандартное проявление навигации длится 0,7 с и ощущается как загрузка — экраны меняются сразу.
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
                     modifier = Modifier
                         .padding(inner)
                         .consumeWindowInsets(inner),

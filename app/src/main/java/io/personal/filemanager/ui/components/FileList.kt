@@ -399,6 +399,21 @@ private fun GridCell(
     }
 }
 
+/** Действие панели выбора: значок с подписью, чтобы было видно, что делает кнопка. */
+@Composable
+private fun LabeledAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = label, tint = AppColors.TextPrimary)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = AppColors.TextPrimary, maxLines = 1)
+    }
+}
+
 fun LazyGridScope.fullWidthItem(content: @Composable () -> Unit) {
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
 }
@@ -439,23 +454,13 @@ fun SelectionBar(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            IconButton(onClick = { FileActions.share(context, chosen) }) {
-                Icon(Icons.Filled.Share, contentDescription = "Поделиться")
-            }
-            IconButton(onClick = { fileOps.copy(chosen); selection.clear() }) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = "Копировать")
-            }
-            IconButton(onClick = { fileOps.move(chosen); selection.clear() }) {
-                Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Переместить")
-            }
+            LabeledAction(Icons.Filled.Share, "Поделиться") { FileActions.share(context, chosen) }
+            LabeledAction(Icons.Filled.ContentCopy, "Копировать") { fileOps.copy(chosen); selection.clear() }
+            LabeledAction(Icons.AutoMirrored.Filled.DriveFileMove, "Переместить") { fileOps.move(chosen); selection.clear() }
             // Выбор не сбрасывается: при «Отмене» в диалоге он остаётся; удалённые файлы уходят из выбора сами.
-            IconButton(onClick = { fileOps.delete(chosen) }) {
-                Icon(Icons.Filled.Delete, contentDescription = "Удалить")
-            }
+            LabeledAction(Icons.Filled.Delete, "Удалить") { fileOps.delete(chosen) }
             Box {
-                IconButton(onClick = { more = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Ещё")
-                }
+                LabeledAction(Icons.Filled.MoreVert, "Ещё") { more = true }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                     DropdownMenuItem(text = { Text("Передать") }, onClick = {
                         more = false; transferManager.share(chosen.map { java.io.File(it.path) }); transferNavigator.openSection(io.personal.filemanager.core.SectionId.TRANSFER)

@@ -9,8 +9,15 @@
   [артефакт CI main](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40720301539/artifacts/12830446727)
   (хранится 30 дней, нужен вход в GitHub). Подписанный RELEASE vc11 — в артефакте `transfer-apks`
   [#40717168837](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40717168837) (14 дней).
-- GitHub Release не опубликован: репозиторий стал публичным, публикация APK для всех требует решения владельца
-  (workflow `signed release acceptance` вручную).
+- По решению владельца выпуск — один файл: [RELEASE 0.10.0 vc11](https://github.com/georg1995105-hash/android-file-manager/releases/tag/v0.10.0-release-vc11-003fd99)
+  `personal-file-manager-0.10.0-release-vc11-universal.apk` (телефон и ТВ), постоянный release-ключ `d282ae0b…a7`.
+  [Signed release acceptance #40726046378](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40726046378) — SUCCESS
+  (подпись, пакет, обновление RELEASE→RELEASE с сохранением данных). Из workflow убрана проверка «только приватный репозиторий»
+  (PR #9); после выпуска репозиторий снова сделан приватным.
+- Переход телефона с DEBUG на RELEASE (однократно, ключ другой): ⋮ на главной → «Резервные копии» → «Создать копию»
+  (сохранить в «Загрузки») → удалить DEBUG → установить RELEASE → «Резервные копии» → «Восстановить». В копию входят
+  заметки, ссылки, избранное, настройки; корзина приложения и полученные через «Передачу» файлы не входят.
+- В приватном репозитории CI не стартует, пока не решён вопрос биллинга GitHub Actions.
 
 - Работа Astra (`2a440fa`, `feature/local-transfer-tv`) сохранена; доводка — в `claude/local-transfer-android-tv-pc-6w5gl4`.
   applicationId, versionCode 11, ключи подписи APK и пользовательские данные не менялись.

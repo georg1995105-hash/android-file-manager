@@ -3,6 +3,8 @@ package io.personal.filemanager.data.settings
 enum class RecentSort(val title: String) {
     ADDED("По дате добавления"),
     MODIFIED("По дате изменения"),
+    SIZE("По размеру"),
+    NAME("По имени"),
 }
 
 enum class BrowserSort(val title: String) {

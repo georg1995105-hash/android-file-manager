@@ -1,5 +1,10 @@
 package io.personal.filemanager.ui.sections
 
+import kotlinx.coroutines.flow.first
+import io.personal.filemanager.ui.components.rememberListSearch
+import io.personal.filemanager.ui.components.ListSearchState
+import io.personal.filemanager.ui.components.ListSearchField
+import io.personal.filemanager.ui.components.ListSearchButton
 import io.personal.filemanager.ui.components.rememberFileView
 import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.FilesPane
@@ -68,9 +73,12 @@ class MediaListViewModel(private val container: AppContainer, private val catego
     val state: StateFlow<MediaListState> = _state.asStateFlow()
     val changes = container.media.changes()
 
-    /** Сортировка «Новых» хранится в настройках (дата добавления / изменения). */
-    val recentSort: StateFlow<RecentSort> =
-        container.settings.recentSort.stateIn(viewModelScope, SharingStarted.Eagerly, RecentSort.ADDED)
+    /** Сортировка раздела хранится в настройках: дата добавления / изменения, размер, имя. */
+    val sort: StateFlow<RecentSort> = container.settings.mediaSort(category.name).stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        if (category == MediaCategory.RECENT) RecentSort.ADDED else RecentSort.MODIFIED,
+    )
 
     private var job: Job? = null
 
@@ -81,13 +89,7 @@ class MediaListViewModel(private val container: AppContainer, private val catego
                 _state.update { it.copy(loading = false, entries = emptyList()) }
                 return@launch
             }
-            val sort = if (category == MediaCategory.RECENT && container.settings.recentSortNow() == RecentSort.MODIFIED) {
-                MediaSort.MODIFIED
-            } else if (category == MediaCategory.RECENT) {
-                MediaSort.ADDED
-            } else {
-                MediaSort.MODIFIED
-            }
+            val sort = MediaSort.valueOf(container.settings.mediaSort(category.name).first().name)
             val result = runCatching { container.media.list(category, sort) }
             _state.update {
                 MediaListState(
@@ -99,9 +101,9 @@ class MediaListViewModel(private val container: AppContainer, private val catego
         }
     }
 
-    fun setRecentSort(sort: RecentSort) {
+    fun setSort(sort: RecentSort) {
         viewModelScope.launch {
-            container.settings.setRecentSort(sort)
+            container.settings.setMediaSort(category.name, sort)
             refresh()
         }
     }
@@ -114,16 +116,15 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
     val hasAccess = rememberAllFilesAccess()
     val vm = mediaListViewModel(category)
     val state by vm.state.collectAsStateWithLifecycle()
-    val recentSort by vm.recentSort.collectAsStateWithLifecycle()
+    val sort by vm.sort.collectAsStateWithLifecycle()
     var sortMenu by remember { mutableStateOf(false) }
     val view = rememberFileView(category.name)
+    val search = rememberListSearch()
 
-    val isRecent = category == MediaCategory.RECENT
     val subtitle = when {
         !hasAccess || state.loading -> null
-        isRecent -> "${recentSort.title} • ${pluralRu(state.entries.size, "файл", "файла", "файлов")}"
-        else -> pluralRu(state.entries.size, "файл", "файла", "файлов") +
-            if (state.entries.size >= MediaRepository.DEFAULT_LIMIT) " (последние)" else ""
+        else -> "${sort.title} • ${pluralRu(state.entries.size, "файл", "файла", "файлов")}" +
+            if (state.entries.size >= MediaRepository.DEFAULT_LIMIT) " (первые)" else ""
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -132,29 +133,26 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
             subtitle = subtitle,
             onBack = { navigator.back() },
             actions = {
-                IconButton(onClick = { navigator.openSearch() }) {
-                    Icon(Icons.Filled.Search, contentDescription = "Поиск")
-                }
+                ListSearchButton(search)
                 ViewModeButton(view)
-                if (isRecent) {
-                    Row {
-                        IconButton(onClick = { sortMenu = true }) {
-                            @Suppress("DEPRECATION")
-                            Icon(Icons.Filled.Sort, contentDescription = "Сортировка")
-                        }
-                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                            RecentSort.entries.forEach { s ->
-                                DropdownMenuItem(
-                                    text = { Text((if (s == recentSort) "✓ " else "") + s.title) },
-                                    onClick = { sortMenu = false; vm.setRecentSort(s) },
-                                )
-                            }
+                Row {
+                    IconButton(onClick = { sortMenu = true }) {
+                        @Suppress("DEPRECATION")
+                        Icon(Icons.Filled.Sort, contentDescription = "Сортировка")
+                    }
+                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                        RecentSort.entries.forEach { s ->
+                            DropdownMenuItem(
+                                text = { Text((if (s == sort) "✓ " else "") + s.title) },
+                                onClick = { sortMenu = false; vm.setSort(s) },
+                            )
                         }
                     }
                 }
             },
         )
-        MediaListBody(category, vm)
+        ListSearchField(search)
+        MediaListBody(category, vm, search)
     }
 }
 
@@ -164,12 +162,17 @@ private fun mediaListViewModel(category: MediaCategory): MediaListViewModel =
 
 /** Содержимое списка без заголовка (используется и во вкладке «APK-файлы»). */
 @Composable
-fun MediaListBody(category: MediaCategory, vm: MediaListViewModel = mediaListViewModel(category)) {
+fun MediaListBody(
+    category: MediaCategory,
+    vm: MediaListViewModel = mediaListViewModel(category),
+    search: ListSearchState? = null,
+) {
     val view = rememberFileView(category.name)
     val hasAccess = rememberAllFilesAccess()
     val state by vm.state.collectAsStateWithLifecycle()
-    val recentSort by vm.recentSort.collectAsStateWithLifecycle()
+    val sort by vm.sort.collectAsStateWithLifecycle()
     val isRecent = category == MediaCategory.RECENT
+    val shown = if (search == null) state.entries else state.entries.filter { search.matches(it.name) }
 
     RefreshWhileVisible(vm.changes) { vm.refresh() }
     val opsVersion by appContainer().operations.version.collectAsStateWithLifecycle()
@@ -180,14 +183,15 @@ fun MediaListBody(category: MediaCategory, vm: MediaListViewModel = mediaListVie
         state.loading -> LoadingBox()
         state.error != null -> EmptyState(Icons.Filled.FolderOpen, "Ошибка", state.error.orEmpty())
         state.entries.isEmpty() -> EmptyState(Icons.Filled.FolderOpen, "Пока пусто", emptyText(category))
+        shown.isEmpty() -> EmptyState(Icons.Filled.FolderOpen, "Ничего не найдено", "Измените запрос.")
         else -> FilesPane(
-            entries = state.entries,
+            entries = shown,
             view = view,
-            // «Новые» по дате появления — под файлом дата добавления в память; иначе — дата изменения.
-            dateShown = if (isRecent && recentSort == RecentSort.ADDED) DateShown.ADDED else DateShown.MODIFIED,
-            headerText = if (!isRecent) {
+            // При сортировке по появлению под файлом дата добавления в память; иначе — дата изменения.
+            dateShown = if (sort == RecentSort.ADDED) DateShown.ADDED else DateShown.MODIFIED,
+            headerText = if (!isRecent || sort == RecentSort.SIZE || sort == RecentSort.NAME) {
                 null
-            } else if (recentSort == RecentSort.ADDED) {
+            } else if (sort == RecentSort.ADDED) {
                 "Свежие сверху по дате появления файла в памяти телефона. " +
                     "Android не хранит точную дату скачивания для каждого файла."
             } else {

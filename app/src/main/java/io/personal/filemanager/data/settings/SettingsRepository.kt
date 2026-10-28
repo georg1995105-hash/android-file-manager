@@ -71,6 +71,19 @@ class SettingsRepository(context: Context) {
 
     suspend fun recentSortNow(): RecentSort = recentSort.first()
 
+    /** Сортировка раздела из индекса Android; «Новые» — прежний ключ recent_sort, остальные — свой ключ раздела. */
+    private fun mediaSortKey(category: String) =
+        if (category == "RECENT") keyRecentSort else stringPreferencesKey("media_sort_$category")
+
+    fun mediaSort(category: String): Flow<RecentSort> = data.map { prefs ->
+        RecentSort.entries.firstOrNull { it.name == prefs[mediaSortKey(category)] }
+            ?: if (category == "RECENT") RecentSort.ADDED else RecentSort.MODIFIED
+    }
+
+    suspend fun setMediaSort(category: String, sort: RecentSort) {
+        store.edit { it[mediaSortKey(category)] = sort.name }
+    }
+
     suspend fun setRecentSort(sort: RecentSort) {
         store.edit { it[keyRecentSort] = sort.name }
     }

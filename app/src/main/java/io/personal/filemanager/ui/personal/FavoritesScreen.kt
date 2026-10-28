@@ -1,5 +1,8 @@
 package io.personal.filemanager.ui.personal
 
+import io.personal.filemanager.ui.components.rememberListSearch
+import io.personal.filemanager.ui.components.ListSearchField
+import io.personal.filemanager.ui.components.ListSearchButton
 import io.personal.filemanager.ui.components.tapClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -59,10 +62,19 @@ fun FavoritesScreen() {
     }
 
     Column(Modifier.fillMaxSize()) {
-        val list = favorites
-        ScreenTopBar(title = "Избранное", subtitle = list?.let { "Всего: ${it.size}" }, onBack = { navigator.back() })
+        val search = rememberListSearch()
+        val all = favorites
+        val list = all?.filter { search.matches(it.name, it.path) }
+        ScreenTopBar(
+            title = "Избранное",
+            subtitle = all?.let { "Всего: ${it.size}" },
+            onBack = { navigator.back() },
+            actions = { if (!all.isNullOrEmpty()) ListSearchButton(search) },
+        )
+        ListSearchField(search)
         when {
             list == null -> Unit
+            !all.isNullOrEmpty() && list.isEmpty() -> EmptyState(Icons.Filled.StarBorder, "Ничего не найдено", "Измените запрос.")
             list.isEmpty() -> EmptyState(
                 Icons.Filled.StarBorder,
                 "В избранном пусто",

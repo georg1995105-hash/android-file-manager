@@ -146,22 +146,44 @@ fun FileOpsHost(
                             .padding(14.dp),
                     ) {
                         val p = op.progress
-                        Text(
-                            op.title + (p?.current?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: ""),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        if (p != null && p.totalBytes > 0) {
-                            LinearProgressIndicator(progress = { p.fraction }, modifier = Modifier.fillMaxWidth())
+                        val known = p != null && p.totalBytes > 0
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "${formatSize(p.doneBytes)} из ${formatSize(p.totalBytes)} • ${p.doneItems}/${p.totalItems}",
+                                op.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (known) Text("${(p!!.fraction * 100).toInt()}%", style = MaterialTheme.typography.titleSmall)
+                        }
+                        p?.current?.takeIf { it.isNotEmpty() }?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        if (known) {
+                            LinearProgressIndicator(progress = { p!!.fraction }, modifier = Modifier.fillMaxWidth())
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        if (p != null && p.doneBytes > 0) {
+                            val seconds = (android.os.SystemClock.elapsedRealtime() - op.startedAt).coerceAtLeast(1L) / 1000.0
+                            val speed = (p.doneBytes / seconds).toLong()
+                            val left = if (known && speed > 0) ((p.totalBytes - p.doneBytes) / speed).coerceAtLeast(0L) else null
+                            val items = if (p.totalItems > 1) " • ${p.doneItems}/${p.totalItems}" else ""
+                            Text(
+                                (if (known) "${formatSize(p.doneBytes)} из ${formatSize(p.totalBytes)}" else formatSize(p.doneBytes)) +
+                                    " • ${formatSize(speed)}/с" + items +
+                                    (left?.let { " • осталось " + if (it >= 60) "${it / 60} мин ${it % 60} с" else "$it с" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                        } else {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         }
                         if (op.cancellable) {
                             TextButton(onClick = { operations.cancel() }, modifier = Modifier.align(Alignment.End)) {

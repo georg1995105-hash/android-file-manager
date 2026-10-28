@@ -15,12 +15,16 @@ import javax.security.auth.x500.X500Principal
 internal object TransferTls {
     fun context(): Pair<SSLContext, String> {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        val alias = "local-transfer-tls-v1"
+        // v2: TLS signs raw digests (NONEwithRSA / RSA NoPadding for PSS), which v1 did not authorize.
+        val alias = "local-transfer-tls-v2"
+        if (store.containsAlias("local-transfer-tls-v1")) store.deleteEntry("local-transfer-tls-v1")
         if (!store.containsAlias(alias)) {
             KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, "AndroidKeyStore").apply {
-                initialize(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
-                    .setKeySize(2048).setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA512)
-                    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                initialize(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY or KeyProperties.PURPOSE_DECRYPT)
+                    .setKeySize(2048)
+                    .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA384, KeyProperties.DIGEST_SHA512)
+                    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1, KeyProperties.SIGNATURE_PADDING_RSA_PSS)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE, KeyProperties.ENCRYPTION_PADDING_RSA_PKCS1)
                     .setCertificateSubject(X500Principal("CN=Local File Transfer"))
                     .setCertificateSerialNumber(BigInteger.ONE)
                     .setCertificateNotBefore(Date(0))

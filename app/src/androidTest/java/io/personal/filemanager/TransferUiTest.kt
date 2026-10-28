@@ -15,6 +15,8 @@ import org.junit.runner.RunWith
 class TransferUiTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
     @Test fun transferButtonsRespondToRemoteCenter() {
+        // A remote or keyboard leaves touch mode; only then Compose buttons take D-pad focus (phones start in touch mode).
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         val launch = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER).setPackage(rule.activity.packageName)
         assertNotNull(rule.activity.packageManager.resolveActivity(launch, 0))
         rule.waitText("Мои файлы")

@@ -21,6 +21,7 @@ public final class IncomingTransfer implements AutoCloseable {
     private long offset;
     private boolean closed;
     private final boolean grouped;
+    private boolean renameOnConflict;
 
     public IncomingTransfer(Path privateStaging, Path privateDestination, String name,
                             long size, String sha256, long acceptedLimit) throws IOException {
@@ -39,6 +40,20 @@ public final class IncomingTransfer implements AutoCloseable {
         Files.createDirectories(privateDestination);
         this.destination = privateDestination.toRealPath();
         this.staging = Files.createTempFile(privateStaging.toRealPath(), "incoming-", ".part");
+    }
+
+    /** Shared «Загрузки/Передача»: an existing name gets « (1)», « (2)»… instead of failing; nothing is overwritten. */
+    public IncomingTransfer renameOnConflict() { renameOnConflict = true; return this; }
+
+    private static Path freeName(Path file) {
+        String full = file.getFileName().toString();
+        int dot = full.lastIndexOf('.');
+        String base = dot > 0 ? full.substring(0, dot) : full, ext = dot > 0 ? full.substring(dot) : "";
+        for (int n = 1; n < 10_000; n++) {
+            Path candidate = file.resolveSibling(base + " (" + n + ")" + ext);
+            if (!Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) return candidate;
+        }
+        return file;
     }
 
     public synchronized long offset() { return offset; }
@@ -110,6 +125,7 @@ public final class IncomingTransfer implements AutoCloseable {
             // Both directories must be on the same filesystem. Fail closed if atomic move unsupported.
             synchronized (IncomingTransfer.class) {
                 // Destination is app-private; serialize all publishers to avoid replacing duplicate paths.
+                if (renameOnConflict && Files.exists(file, LinkOption.NOFOLLOW_LINKS)) file = freeName(file);
                 if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) throw new FileAlreadyExistsException(name);
                 Files.move(staging, file, StandardCopyOption.ATOMIC_MOVE);
             }

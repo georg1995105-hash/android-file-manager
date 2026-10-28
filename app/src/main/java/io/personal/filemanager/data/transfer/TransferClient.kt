@@ -128,8 +128,9 @@ class TransferClient(address: String, private val pin: String? = null) {
     suspend fun receive(file: JSONObject, manager: TransferManager, progress: (String) -> Unit) {
         val name = file.getString("name"); val size = file.getLong("size")
         val target = manager.receivedDirectory
-        val staging = File(target.parentFile, "client-staging")
-        IncomingTransfer(staging.toPath(), target.toPath(), name, size, file.getString("sha256"), target.parentFile!!.usableSpace - 64L * 1024 * 1024).use { receiver ->
+        val staging = manager.stagingDirectory
+        target.mkdirs()
+        IncomingTransfer(staging.toPath(), target.toPath(), name, size, file.getString("sha256"), target.usableSpace - 64L * 1024 * 1024, true).renameOnConflict().use { receiver ->
             val path = api("/ticket/${file.getString("id")}", "POST").getString("url")
             require(path.matches(Regex("/download/[a-f0-9]{64}")))
             val c = connection(path, "GET")
@@ -146,7 +147,9 @@ class TransferClient(address: String, private val pin: String? = null) {
                         receiver.append(receiver.offset(), n, hash, ByteArrayInputStream(chunk))
                         progress("$name: ${receiver.offset()} / $size")
                     }
-                    receiver.finish(); progress("Получен и проверен: $name")
+                    val saved = receiver.finish()
+                    manager.rescan(saved.toString())
+                    progress("Сохранено: ${saved.fileName} → Загрузки/Передача")
                 }
             } finally { c.disconnect(); active = null }
         }

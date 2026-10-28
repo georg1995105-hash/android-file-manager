@@ -43,17 +43,25 @@ class TransferManager(private val context: Context) {
     private var window = 0L
     private var codeExpires = 0L
     private var generation = 0L
-    val receivedDirectory: File get() = File(context.filesDir, "received")
+    /** Полученное — сразу в «Загрузки/Передача» с исходными именами (при доступе ко всем файлам), иначе в память приложения. */
+    val receivedDirectory: File get() =
+        if (android.os.Environment.isExternalStorageManager()) {
+            File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Передача")
+        } else File(context.filesDir, "received")
+    /** Недокачанное лежит рядом с итоговой папкой (та же файловая система — атомарный перенос), скрыто точкой. */
+    val stagingDirectory: File get() = File(receivedDirectory, ".staging")
     private fun id() = ByteArray(32).also(random::nextBytes).joinToString("") { "%02x".format(it) }
     private fun now() = android.os.SystemClock.elapsedRealtime()
     private fun update(block: (State) -> State) = synchronized(lock) { mutable.value = block(mutable.value) }
     fun message(text: String) = update { it.copy(message = text) }
+    fun rescan(path: String) = android.media.MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
     fun start() {
         scope.launch {
             runCatching {
                 synchronized(lock) {
                     if (server != null) return@launch
                     File(context.filesDir, "transfer-staging").deleteRecursively()
+                    stagingDirectory.deleteRecursively()
                     val (tls, fingerprint) = TransferTls.context()
                     val listener = LocalHttpsServer(tls.serverSocketFactory, ::handle)
                     server = listener
@@ -91,8 +99,8 @@ class TransferManager(private val context: Context) {
     }
     private fun startReceiving(upload: Upload) {
         if (upload.size > context.filesDir.usableSpace - 64L * 1024 * 1024) error("Недостаточно места")
-        upload.receiver = IncomingTransfer(File(context.filesDir, "transfer-staging").toPath(),
-            File(receivedDirectory, upload.batch).toPath(), upload.name, upload.size, upload.hash, upload.size, true)
+        upload.receiver = IncomingTransfer(stagingDirectory.toPath(),
+            receivedDirectory.toPath(), upload.name, upload.size, upload.hash, upload.size, true).renameOnConflict()
     }
 
     fun approve(id: String, accept: Boolean) {
@@ -255,8 +263,9 @@ class TransferManager(private val context: Context) {
                             update { it.copy(progress = "${u.name}: ${receiver.offset()} / ${u.size}") }
                             json(out, obj = JSONObject().put("offset", receiver.offset()))
                         }
-                        "POST" -> { require(receiver != null && !u.done); receiver.finish(); u.done = true
-                            update { it.copy(progress = "Получен: ${u.name}") }; json(out) }
+                        "POST" -> { require(receiver != null && !u.done); val saved = receiver.finish(); u.done = true
+                            android.media.MediaScannerConnection.scanFile(context, arrayOf(saved.toString()), null, null)
+                            update { it.copy(progress = "Получен: ${saved.fileName} → Загрузки/Передача") }; json(out) }
                         else -> error("Метод не поддерживается")
                     }
                 }

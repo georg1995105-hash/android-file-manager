@@ -27,19 +27,18 @@ if(typeof document!=='undefined'){
  $('pick').onchange=showChosen;$('folder').onchange=showChosen;
  async function list(){const data=await api('/files');$('files').replaceChildren();if(!data.files.length){const p=document.createElement('p');p.textContent='На устройстве ничего не выбрано для отправки.';$('files').append(p);}for(const f of data.files){const button=document.createElement('button');button.textContent='Скачать '+f.name+' · '+size(f.size);button.onclick=async()=>{try{const ticket=await api('/ticket/'+f.id,'POST');const a=document.createElement('a');a.href=ticket.url;a.download=f.name.replaceAll('/','_');document.body.append(a);a.click();a.remove();status('Скачивание: '+f.name);}catch(e){status(e.message);}};$('files').append(button);}}
  $('refresh').onclick=()=>list().catch(e=>status(e.message));
- // Блоки по 1 МиБ; после обрыва связи отправка сама продолжается с подтверждённого места.
+ // Блоки по 4 МиБ прямо из файла, без пересчёта сумм в JS (это и тормозило); после обрыва отправка сама продолжается.
+ const CHUNK=4194304;
  async function upload(c,shown){let s=await api('/upload/'+c.id);if(s.done)return;let offset=s.offset,failures=0;
   while(offset<c.file.size){if(cancelled)throw Error('cancel');
-   try{const chunk=new Uint8Array(await c.file.slice(offset,offset+1048576).arrayBuffer());const hash=new Sha256().update(chunk).hex();
-    const r=await api('/upload/'+c.id,'PUT',chunk,{'X-Offset':String(offset),'X-SHA256':hash});offset=r.offset;failures=0;shown(offset);}
+   try{const r=await api('/upload/'+c.id,'PUT',c.file.slice(offset,offset+CHUNK),{'X-Offset':String(offset)});offset=r.offset;failures=0;shown(offset);}
    catch(e){if(cancelled)throw Error('cancel');if(++failures>30)throw Error('Связь потеряна. Проверьте Wi-Fi и отправьте снова.');status('Связь прервалась — продолжаю…');await pause(2000);try{offset=(await api('/upload/'+c.id)).offset;}catch(_){}}}
   await api('/upload/'+c.id,'POST');}
  $('send').onclick=async()=>{const files=chosen();if(busy||!files.length)return;busy=true;cancelled=false;abort=new AbortController();showChosen();$('job').hidden=false;$('cancel').hidden=false;$('progress').value=0;
   const total=files.reduce((a,f)=>a+f.size,0);let before=0;const started=Date.now();
   try{const batch=(await api('/batch','POST')).id;
    for(let i=0;i<files.length;i++){const file=files[i],name=file.webkitRelativePath||file.name,label=(files.length>1?'Файл '+(i+1)+' из '+files.length+': ':'')+name;
-    $('jobname').textContent='Подготовка — '+label;const hash=new Sha256();for(let o=0;o<file.size;o+=1048576){if(cancelled)throw Error('cancel');hash.update(new Uint8Array(await file.slice(o,o+1048576).arrayBuffer()));}
-    const offer=await api('/offer','POST',JSON.stringify({name,size:file.size,sha256:hash.hex(),batch}));current={id:offer.id};$('jobname').textContent=label;status('Отправка…');
+    const offer=await api('/offer','POST',JSON.stringify({name,size:file.size,sha256:'',batch}));current={id:offer.id};$('jobname').textContent=label;status('Отправка…');
     await upload({id:offer.id,file},sent=>{const all=before+sent,sec=Math.max((Date.now()-started)/1000,0.5),speed=all/sec;$('progress').value=all/Math.max(total,1);
      $('jobinfo').textContent=Math.floor(all*100/Math.max(total,1))+'% · '+size(all)+' из '+size(total)+' · '+size(speed)+'/с · осталось '+time((total-all)/Math.max(speed,1));});
     before+=file.size;current=null;}

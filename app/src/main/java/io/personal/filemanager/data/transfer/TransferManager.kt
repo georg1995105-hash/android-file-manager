@@ -235,7 +235,7 @@ class TransferManager(private val context: Context) {
                 r.path == "/offer" && r.method == "POST" -> {
                     val v = body(r); val name = v.getString("name"); IncomingTransfer.validatePath(name)
                     val size = v.getLong("size"); require(size >= 0 && size <= context.filesDir.usableSpace - 64L * 1024 * 1024)
-                    val hash = v.getString("sha256"); require(hash.matches(Regex("[0-9a-f]{64}")))
+                    val hash = v.optString("sha256"); require(hash.isEmpty() || hash.matches(Regex("[0-9a-f]{64}")))
                     synchronized(lock) {
                         require(uploads.size < 100 && uploads.values.count { it.owner == token && !it.done } < 8)
                         val batch = v.optString("batch").ifBlank { id().also { batches[it] = token } }
@@ -258,7 +258,7 @@ class TransferManager(private val context: Context) {
                         "PUT" -> {
                             require(receiver != null && !u.done)
                             val offset = r.headers["x-offset"]?.toLong() ?: error("Нет смещения")
-                            val hash = r.headers["x-sha256"] ?: error("Нет контрольной суммы")
+                            val hash = r.headers["x-sha256"].orEmpty() // страница браузера отправляет без суммы — быстрее
                             receiver.append(offset, r.length.toInt(), hash, r.body)
                             update { it.copy(progress = "${u.name}: ${receiver.offset()} / ${u.size}") }
                             json(out, obj = JSONObject().put("offset", receiver.offset()))

@@ -37,6 +37,8 @@ class TransferClient(address: String, private val pin: String? = null) {
         }
         return SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
     }
+    // Один SSLContext на клиента: TLS-сессия переиспользуется, и каждый блок не делает полное рукопожатие заново.
+    private val pinnedFactory by lazy { ssl().socketFactory }
     fun inspect(): String {
         var actual = ""
         val socket = ssl { actual = it }.socketFactory.createSocket() as SSLSocket
@@ -47,7 +49,7 @@ class TransferClient(address: String, private val pin: String? = null) {
     private fun connection(path: String, method: String): HttpsURLConnection {
         require(pin != null)
         return (URL(base + path).openConnection() as HttpsURLConnection).apply {
-            sslSocketFactory = ssl().socketFactory
+            sslSocketFactory = pinnedFactory
             // The exact certificate pin, approved by the user, replaces hostname PKI for numeric LAN addresses.
             hostnameVerifier = HostnameVerifier { name, _ -> name == host }
             instanceFollowRedirects = false; connectTimeout = 10_000; readTimeout = 30_000
@@ -97,7 +99,8 @@ class TransferClient(address: String, private val pin: String? = null) {
             check(accepted) { "Время подтверждения истекло" }
             item.file.inputStream().use { input ->
                 var offset = 0L
-                val buffer = ByteArray(1024 * 1024)
+                // 4 МиБ — предел сервера: вчетверо меньше запросов, чем блоками по 1 МиБ.
+                val buffer = ByteArray(IncomingTransfer.MAX_CHUNK)
                 while (offset < item.size) {
                     currentCoroutineContext().ensureActive()
                     val count = input.readChunk(buffer, minOf(buffer.size.toLong(), item.size - offset).toInt())
@@ -105,15 +108,19 @@ class TransferClient(address: String, private val pin: String? = null) {
                     val chunk = buffer.copyOf(count)
                     val hash = MessageDigest.getInstance("SHA-256").digest(chunk).joinToString("") { "%02x".format(it) }
                     var acknowledged = false
-                    for (attempt in 0..2) {
+                    for (attempt in 0..4) {
                         currentCoroutineContext().ensureActive()
                         try {
-                            val position = api("/upload/$key").getLong("offset")
-                            if (position == offset + count) { acknowledged = true; break }
-                            check(position == offset) { "Неожиданное смещение" }
                             api("/upload/$key", "PUT", bytes = chunk, headers = mapOf("X-Offset" to "$offset", "X-SHA256" to hash))
                             acknowledged = true; break
-                        } catch (e: IOException) { if (attempt == 2) throw e; delay(1000) }
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            // Обрыв: блок мог дойти — сверяемся с подтверждённым смещением и при необходимости повторяем.
+                            val position = runCatching { api("/upload/$key").getLong("offset") }.getOrNull()
+                            if (position == offset + count) { acknowledged = true; break }
+                            if (attempt == 4) throw e
+                            delay(1000)
+                        }
                     }
                     check(acknowledged); offset += count; progress("${item.name}: $offset / ${item.size}")
                 }

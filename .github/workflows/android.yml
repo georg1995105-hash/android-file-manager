@@ -2,7 +2,7 @@ name: android
 
 on:
   push:
-    branches: ['**', '!feature/local-transfer-tv']
+    branches: ['**', '!feature/local-transfer-tv', '!claude/local-transfer-android-tv-pc-6w5gl4']
     paths-ignore:
       - '.github/workflows/release-preflight.yml'
       - '.github/workflows/release-key-setup.yml'

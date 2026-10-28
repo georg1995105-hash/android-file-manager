@@ -9,4 +9,4 @@ adb shell appops set --uid io.personal.filemanager MANAGE_EXTERNAL_STORAGE allow
 adb shell am instrument -w -r -e class io.personal.filemanager.TransferIntegrationTest,io.personal.filemanager.TransferUiTest io.personal.filemanager.test/androidx.test.runner.AndroidJUnitRunner | tee transfer-instrumentation.log
 adb logcat -d > transfer-logcat.txt
 adb exec-out screencap -p > transfer-screen.png
-rg 'OK \(' transfer-instrumentation.log
+grep -q 'OK (' transfer-instrumentation.log && ! grep -q 'FAILURES!!!' transfer-instrumentation.log

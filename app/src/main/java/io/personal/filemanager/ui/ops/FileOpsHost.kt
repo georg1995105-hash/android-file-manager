@@ -1,5 +1,6 @@
 package io.personal.filemanager.ui.ops
 
+import io.personal.filemanager.ui.theme.AppColors
 import io.personal.filemanager.core.pluralRu
 import androidx.compose.foundation.layout.heightIn
 import android.widget.Toast
@@ -151,11 +152,12 @@ fun FileOpsHost(
                             Text(
                                 op.title,
                                 style = MaterialTheme.typography.titleSmall,
+                                color = AppColors.TextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
-                            if (known) Text("${(p!!.fraction * 100).toInt()}%", style = MaterialTheme.typography.titleSmall)
+                            if (known) Text("${(p!!.fraction * 100).toInt()}%", style = MaterialTheme.typography.titleSmall, color = AppColors.TextPrimary)
                         }
                         p?.current?.takeIf { it.isNotEmpty() }?.let {
                             Text(

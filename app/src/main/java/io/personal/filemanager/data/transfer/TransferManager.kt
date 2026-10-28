@@ -32,6 +32,8 @@ class TransferManager(private val context: Context) {
     private val pairs = ConcurrentHashMap<String, Pairing>()
     private val sessions = ConcurrentHashMap<String, Long>()
     private val batches = ConcurrentHashMap<String, String>()
+    /** Отправки, которые получатель уже принял: остальные файлы той же отправки принимаются без новых вопросов. */
+    private val approvedBatches = ConcurrentHashMap.newKeySet<String>()
     private val uploads = ConcurrentHashMap<String, Upload>()
     private val shared = ConcurrentHashMap<String, Shared>()
     private val tickets = ConcurrentHashMap<String, Pair<String, String>>()
@@ -75,12 +77,18 @@ class TransferManager(private val context: Context) {
             generation++
             server?.close(); server = null
             discovery.stop()
-            pairs.clear(); sessions.clear(); tickets.clear(); batches.clear()
+            pairs.clear(); sessions.clear(); tickets.clear(); batches.clear(); approvedBatches.clear()
             val abandoned = uploads.values.toList(); uploads.clear()
             scope.launch { abandoned.forEach { runCatching { it.receiver?.close() } } }
             mutable.value = State(shared = shared.size, message = "Передача выключена")
         }
     }
+    private fun startReceiving(upload: Upload) {
+        if (upload.size > context.filesDir.usableSpace - 64L * 1024 * 1024) error("Недостаточно места")
+        upload.receiver = IncomingTransfer(File(context.filesDir, "transfer-staging").toPath(),
+            File(receivedDirectory, upload.batch).toPath(), upload.name, upload.size, upload.hash, upload.size, true)
+    }
+
     fun approve(id: String, accept: Boolean) {
         if (!accept) {
             pairs.remove(id)
@@ -101,9 +109,8 @@ class TransferManager(private val context: Context) {
                     val upload = uploads[id]
                     if (upload != null) {
                         if (accept && sessions[upload.owner]?.let { it > now() } == true) {
-                            if (upload.size > context.filesDir.usableSpace - 64L * 1024 * 1024) error("Недостаточно места")
-                            upload.receiver = IncomingTransfer(File(context.filesDir, "transfer-staging").toPath(),
-                                File(receivedDirectory, upload.batch).toPath(), upload.name, upload.size, upload.hash, upload.size, true)
+                            startReceiving(upload)
+                            approvedBatches += upload.batch
                         } else uploads.remove(id)?.receiver?.close()
                     }
                     mutable.value = mutable.value.copy(approvals = mutable.value.approvals.filterNot { it.id == id })
@@ -171,10 +178,10 @@ class TransferManager(private val context: Context) {
                 synchronized(lock) {
                     if (now() - window > 60_000) { window = now(); attempts = 0 }
                     require(++attempts <= 5 && pairs.size < 10 && sessions.size < 10) { "Лимит попыток. Подождите минуту" }
-                    require(now() < codeExpires && MessageDigest.isEqual(value.optString("code").toByteArray(), mutable.value.code.toByteArray())) { "Неверный или просроченный код" }
+                    // Кода нет: подключение разрешает человек кнопкой «Разрешить» на этом устройстве (как в «Обмене с окружением»).
                     val name = value.optString("name").take(60).ifBlank { "Браузер" }
                     val key = id(); pairs[key] = Pairing(name, now() + 120_000)
-                    mutable.value = mutable.value.copy(approvals = mutable.value.approvals + Approval(key, "Подключить $name?"))
+                    mutable.value = mutable.value.copy(approvals = mutable.value.approvals + Approval(key, "«$name» хочет подключиться"))
                     json(out, obj = JSONObject().put("id", key)); return
                 }
             }
@@ -218,8 +225,13 @@ class TransferManager(private val context: Context) {
                         require(uploads.size < 100 && uploads.values.count { it.owner == token && !it.done } < 8)
                         val batch = v.optString("batch").ifBlank { id().also { batches[it] = token } }
                         require(batches[batch] == token)
-                        val key = id(); uploads[key] = Upload(token, name, size, hash, batch)
-                        mutable.value = mutable.value.copy(approvals = mutable.value.approvals + Approval(key, "Принять $name ($size байт)?"))
+                        val key = id(); val upload = Upload(token, name, size, hash, batch); uploads[key] = upload
+                        if (batch in approvedBatches) {
+                            startReceiving(upload)
+                        } else {
+                            mutable.value = mutable.value.copy(approvals = mutable.value.approvals +
+                                Approval(key, "Принять файлы? Первый: «$name» (${io.personal.filemanager.core.formatSize(size)}). Остальные файлы этой отправки примутся сами."))
+                        }
                         json(out, obj = JSONObject().put("id", key))
                     }
                 }

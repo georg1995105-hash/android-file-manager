@@ -5,7 +5,7 @@ const {chromium}=require('playwright');const fs=require('fs');const assert=requi
  try{
  const context=await browser.newContext({ignoreHTTPSErrors:true,acceptDownloads:true});
  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('https://127.0.0.1:'+port);await page.locator('#code').fill('12345678');await page.locator('#connect').click();await page.locator('#session').waitFor({state:'visible'});
+ await page.goto('https://127.0.0.1:'+port);await page.locator('#connect').click();await page.locator('#session').waitFor({state:'visible'});
  const expected=Buffer.alloc(2*1024*1024+23);for(let i=0;i<expected.length;i++)expected[i]=i%251;
  await page.locator('#pick').setInputFiles({name:'fixture.bin',mimeType:'application/octet-stream',buffer:expected});
  let interrupted=false;await page.route('**/upload/fixture-upload',async route=>{if(route.request().method()==='PUT'&&!interrupted){interrupted=true;await route.abort();}else await route.continue();});

@@ -64,12 +64,12 @@ fun TransferScreen() {
         }
         HorizontalDivider()
         if (state.running) {
-            Text("С компьютера", style = MaterialTheme.typography.titleLarge)
-            val address = state.addresses.firstOrNull()
+            Text("QR для телефона или компьютера", style = MaterialTheme.typography.titleLarge)
+            val address = state.browserAddresses.firstOrNull()
             if (address == null) {
                 Text("Нет локального адреса. Подключитесь к Wi-Fi и перезапустите передачу.")
             } else {
-                Text("Отсканируйте QR камерой или откройте адрес в браузере компьютера, затем разрешите подключение здесь.")
+                Text("Отсканируйте камерой (или откройте адрес в браузере) — откроется страница: отправить сюда или скачать отсюда.")
                 val bitmap = remember(address) {
                     val matrix = com.google.zxing.MultiFormatWriter().encode(address, com.google.zxing.BarcodeFormat.QR_CODE, 256, 256)
                     android.graphics.Bitmap.createBitmap(256, 256, android.graphics.Bitmap.Config.ARGB_8888).apply {
@@ -86,9 +86,9 @@ fun TransferScreen() {
         TextButton(onClick = { details = !details }) { Text(if (details) "Скрыть сведения о безопасности" else "Сведения о безопасности") }
         if (details) {
             Text(
-                "Трафик шифруется (HTTPS), интернет не используется. Подключение и приём файлов разрешаются кнопкой на этом " +
-                    "устройстве. Браузер при первом подключении предупредит о локальном сертификате — это ожидаемо. " +
-                    "Отпечаток сертификата этого устройства (SHA-256):",
+                "Интернет не используется, всё идёт внутри вашей Wi-Fi сети. Подключения и файлы принимаются без вопросов, " +
+                    "пока открыта «Передача» — в чужих сетях выключайте её. Между приложениями трафик шифруется; страница по QR — " +
+                    "обычный http, чтобы браузер не показывал предупреждений. Отпечаток сертификата (SHA-256):",
                 style = MaterialTheme.typography.bodySmall,
             )
             SelectionContainer { Text(state.fingerprint, style = MaterialTheme.typography.bodySmall) }

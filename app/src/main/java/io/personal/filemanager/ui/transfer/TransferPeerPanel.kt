@@ -63,7 +63,7 @@ fun TransferPeerPanel(manager: TransferManager) {
         }
         val peer = TransferClient(probe.base, fingerprint)
         client = peer; connectedName = name; files = emptyList()
-        message = "Нажмите «Разрешить» на «$name»"
+        message = "Подключение к «$name»…"
         peer.pair("", Build.MODEL)
         prefs.edit().putString(name, fingerprint).apply()
         message = "Подключено к «$name»"

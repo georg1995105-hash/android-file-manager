@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** Small, deliberately restricted HTTP/1.1 transport: one request per TLS connection,
+/** Small, deliberately restricted HTTP/1.1 transport (TLS for app clients, plain HTTP for browsers): one request per connection,
  * fixed length bodies only, bounded headers/workers, no proxying, no filesystem routing. */
 public final class LocalHttpsServer implements AutoCloseable {
     public interface Handler { void handle(Request request, OutputStream response) throws Exception; }
@@ -20,21 +20,21 @@ public final class LocalHttpsServer implements AutoCloseable {
             this.method=method; this.path=path; this.headers=headers; this.length=length; this.body=body;
         }
     }
-    private final SSLServerSocket listener;
+    private final ServerSocket listener;
     private final Handler handler;
     private final Set<Socket> clients=ConcurrentHashMap.newKeySet();
     private final ThreadPoolExecutor workers=new ThreadPoolExecutor(4,4,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(8));
     private volatile boolean closed;
-    public LocalHttpsServer(SSLServerSocketFactory factory, Handler handler) throws IOException {
+    public LocalHttpsServer(javax.net.ServerSocketFactory factory, Handler handler) throws IOException {
         this.handler=handler;
-        listener=(SSLServerSocket)factory.createServerSocket(0,16);
-        listener.setEnabledProtocols(new String[]{"TLSv1.2"});
+        listener=factory.createServerSocket(0,16);
+        if(listener instanceof SSLServerSocket) ((SSLServerSocket)listener).setEnabledProtocols(new String[]{"TLSv1.2"});
     }
     public int port() { return listener.getLocalPort(); }
     public void run() {
         while(!closed) {
             try {
-                SSLSocket socket=(SSLSocket)listener.accept();
+                Socket socket=listener.accept();
                 if (!socket.getInetAddress().isSiteLocalAddress() && !socket.getInetAddress().isLoopbackAddress()
                         && !socket.getInetAddress().isLinkLocalAddress()) { socket.close(); continue; }
                 socket.setSoTimeout(30_000);
@@ -44,9 +44,9 @@ public final class LocalHttpsServer implements AutoCloseable {
             } catch(IOException e) { if(!closed) close(); }
         }
     }
-    private void serve(SSLSocket socket) {
+    private void serve(Socket socket) {
         try (socket) {
-            socket.startHandshake();
+            if(socket instanceof SSLSocket) ((SSLSocket)socket).startHandshake();
             InputStream in=new BufferedInputStream(socket.getInputStream(),65536);
             OutputStream out=socket.getOutputStream();
             Request request=parse(in);
@@ -76,7 +76,7 @@ public final class LocalHttpsServer implements AutoCloseable {
         String host=headers.get("host");
         if(host==null || !host.matches("[0-9.]+:[0-9]+|\\[[0-9a-fA-F:%]+\\]:[0-9]+")) throw new IOException("Numeric local host required");
         String origin=headers.get("origin");
-        if(origin!=null && !origin.equals("https://"+host)) throw new IOException("Cross origin denied");
+        if(origin!=null && !origin.equals("https://"+host) && !origin.equals("http://"+host)) throw new IOException("Cross origin denied");
         String raw=headers.getOrDefault("content-length","0");
         if(!raw.matches("[0-9]{1,10}")) throw new IOException("Invalid length");
         long length=Long.parseLong(raw);

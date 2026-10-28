@@ -1,5 +1,15 @@
 # Статус разработки
 
+## Порядок в GitHub (2026-10-28)
+
+- Пользователю выдаётся один файл: подписанный RELEASE `*-release-vcN-universal.apk` (телефон и ТВ) — в артефакте CI
+  и в GitHub Release. arm64 и DEBUG APK не публикуются; DEBUG собирается только внутри CI для тестов на эмуляторе.
+- Удалены отладочные пререлизы 0.1.0–0.9.0 build24 и arm64-файлы. Оставлен служебный пререлиз `v0.9.0-debug-build25`:
+  это база проверки DEBUG-обновления с сохранением данных в `tools/device_tests.sh`; без него CI падает.
+- Удалены слитые ветки: ccr-01aed2a6-se8umi, feature/local-transfer-tv, feat/permanent-release-signing,
+  fix/ci-signing-continuity, fix/release-acceptance-launch, docs/release-verification-result. Ветки ci-screenshots,
+  ci-device-shots, ci-device-shots-tablet перезаписываются CI и нужны. `transfer acceptance` — только ручной запуск.
+
 ## 0.11.0 (vc12) — удобство по замечаниям владельца (2026-10-28)
 
 - Размер файла в режиме «Сетка»; сортировка по дате добавления/изменения, размеру и имени во всех разделах из индекса

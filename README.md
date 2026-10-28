@@ -23,7 +23,7 @@
 
 Сборка и тесты выполняются в GitHub Actions (`.github/workflows/android.yml`):
 
-- `./gradlew testDebugUnitTest assembleDebug` — модульные тесты и debug APK (arm64 и universal);
+- `./gradlew testDebugUnitTest assembleDebug` — модульные тесты и debug APK (для тестов; пользователю выдаётся только подписанный RELEASE universal);
 - коммит с `[apk]` в сообщении публикует приватный пререлиз с APK и SHA-256;
 - задание `device-tests` проверяет приложение на эмуляторе Android и публикует скриншоты в ветку `ci-device-shots`;
 - release-APK подписывается, если в секретах репозитория есть ключ владельца (см. `docs/SIGNING.md`).

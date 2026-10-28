@@ -33,6 +33,7 @@ class AppContainer(val app: Application) {
     val personal = PersonalRepository(app)
     val operations = OperationsManager(app, appScope, personal)
     val backups = BackupManager(app, personal, settings)
+    val transfer = io.personal.filemanager.data.transfer.TransferManager(app)
     val siteIcons = SiteIconLoader(app, appScope)
 }
 

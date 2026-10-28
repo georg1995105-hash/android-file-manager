@@ -8,11 +8,11 @@ import org.junit.Test
 
 class UiConfigTest {
     @Test
-    fun defaultsFollowMockupWithoutTv() {
+    fun defaultsKeepExistingOrderAndAppendTransfer() {
         val d = UiConfig.defaults()
         assertEquals(SectionId.entries.size, d.tiles.size)
         assertEquals(
-            listOf("DOWNLOADS", "RECENT", "PHOTOS", "VIDEOS", "DOCUMENTS", "ARCHIVES", "APPS", "FAVORITES", "NOTES"),
+            listOf("DOWNLOADS", "RECENT", "PHOTOS", "VIDEOS", "DOCUMENTS", "ARCHIVES", "APPS", "FAVORITES", "NOTES", "TRANSFER"),
             d.tiles.filter { it.visible }.map { it.id },
         )
         assertEquals(listOf("RECENT", "FILES", "APPS", "NOTES", "FAVORITES"), d.tabs.map { it.id })
@@ -54,7 +54,7 @@ class UiConfigTest {
         assertEquals("image", c.tiles.first().icon) // неизвестный значок → по умолчанию
         assertEquals("purple", c.tiles.first().color)
         assertEquals(SectionId.entries.size, c.tiles.size)
-        assertTrue(c.tiles.drop(1).none { it.visible }) // добавленные разделы скрыты
+        assertEquals(listOf("TRANSFER"), c.tiles.drop(1).filter { it.visible }.map { it.id }) // новый раздел доступен после обновления
         assertEquals(listOf("RECENT"), c.tabs.map { it.id })
         assertEquals("star", c.tabs.first().icon)
     }

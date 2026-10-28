@@ -11,6 +11,7 @@ enum class SectionId(
     /** Пять предлагаемых значков (как в макете «Иконки разделов»). Первый — по умолчанию. */
     val suggestedIcons: List<String>,
 ) {
+    TRANSFER("Передача", "public", "blue", listOf("public", "link", "language", "cloud", "inbox")),
     DOWNLOADS("Загрузки", "download", "blue", listOf("download", "cloud_download", "file_download", "save_alt", "arrow_downward")),
     RECENT("Новые", "schedule", "green", listOf("schedule", "event", "access_time", "history", "star")),
     PHOTOS("Фото", "image", "purple", listOf("image", "photo", "landscape", "photo_camera", "camera")),

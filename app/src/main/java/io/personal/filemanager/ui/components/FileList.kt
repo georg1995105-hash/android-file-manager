@@ -410,6 +410,8 @@ fun SelectionBar(
 ) {
     if (!selection.active) return
     val context = LocalContext.current
+    val transferManager = io.personal.filemanager.ui.appContainer().transfer
+    val transferNavigator = LocalNavigator.current
     val fileOps = LocalFileOps.current
     val chosen = remember(entries, selection.paths) { entries.filter { it.path in selection.paths } }
     var more by remember { mutableStateOf(false) }
@@ -452,6 +454,9 @@ fun SelectionBar(
                     Icon(Icons.Filled.MoreVert, contentDescription = "Ещё")
                 }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                    DropdownMenuItem(text = { Text("Передать") }, onClick = {
+                        more = false; transferManager.share(chosen.map { java.io.File(it.path) }); transferNavigator.openSection(io.personal.filemanager.core.SectionId.TRANSFER)
+                    })
                     if (chosen.size == 1 && onAllActions != null) {
                         DropdownMenuItem(
                             text = { Text("Все действия…") },
@@ -486,6 +491,8 @@ fun FileActionsSheet(
     onDetails: () -> Unit,
 ) {
     val context = LocalContext.current
+    val transferManager = io.personal.filemanager.ui.appContainer().transfer
+    val transferNavigator = LocalNavigator.current
     val fileOps = LocalFileOps.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppColors.Surface) {
         Row(
@@ -499,6 +506,9 @@ fun FileActionsSheet(
         HorizontalDivider(color = AppColors.Divider)
         Column(Modifier.verticalScroll(rememberScrollState())) {
             SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть") { onDismiss(); onOpen() }
+            SheetAction(Icons.Filled.Share, "Передать") {
+                onDismiss(); transferManager.share(listOf(java.io.File(entry.path))); transferNavigator.openSection(io.personal.filemanager.core.SectionId.TRANSFER)
+            }
             if (!entry.isDirectory) {
                 SheetAction(Icons.Filled.Share, "Поделиться") { onDismiss(); FileActions.share(context, listOf(entry)) }
                 if (entry.kind != FileKind.OTHER) {

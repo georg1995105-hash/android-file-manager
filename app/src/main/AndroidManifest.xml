@@ -10,10 +10,19 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Восстановление расписания автокопий после перезагрузки (JobScheduler, setPersisted). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Сеть — только для значков сайтов в «Ссылках» (HTTPS, к самому сайту ссылки; можно выключить в меню).
-         Других обращений к сети нет; незашифрованный HTTP запрещён (по умолчанию для targetSdk 28+). -->
+    <!-- HTTPS для значков сайтов и явно включённой локальной передачи.
+         Незашифрованный HTTP не включается. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Телевизоры могут не иметь сенсорного экрана или камеры. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <queries>
         <!-- Только приложения с иконкой в лаунчере: список и запуск в разделе «Приложения». -->
         <intent>
@@ -28,6 +37,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -42,8 +52,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
         </activity>
 
+        <service android:name=".data.transfer.TransferService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service
             android:name=".data.backup.AutoBackupJob"
             android:exported="false"

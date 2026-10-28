@@ -7,8 +7,8 @@ plugins {
 }
 
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
-val appVersionCode = 10
-val appVersionName = "0.9.0"
+val appVersionCode = 11
+val appVersionName = "0.10.0"
 
 // Подпись release: keystore.properties (локально, вне Git) или переменные окружения CI.
 // Ключ и пароли никогда не коммитятся.
@@ -96,6 +96,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.zxing:core:3.5.3")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

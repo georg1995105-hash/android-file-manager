@@ -104,7 +104,7 @@ data class UiConfig(
         private val defaultVisibleTiles = listOf(
             SectionId.DOWNLOADS, SectionId.RECENT, SectionId.PHOTOS,
             SectionId.VIDEOS, SectionId.DOCUMENTS, SectionId.ARCHIVES,
-            SectionId.APPS, SectionId.FAVORITES, SectionId.NOTES,
+            SectionId.APPS, SectionId.FAVORITES, SectionId.NOTES, SectionId.TRANSFER,
         )
 
         val defaultTabs = listOf(
@@ -163,7 +163,7 @@ object UiConfigCodec {
                 color = tile.color.takeIf { it in ColorKeys.all } ?: id.defaultColor,
             )
         }
-        val missing = SectionId.entries.filter { it !in seenTiles }.map { UiConfig.defaultTile(it, false) }
+        val missing = SectionId.entries.filter { it !in seenTiles }.map { UiConfig.defaultTile(it, it == SectionId.TRANSFER) }
 
         val seenTabs = mutableSetOf<SectionId>()
         val tabs = config.tabs.mapNotNull { tab ->

@@ -1,5 +1,6 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.appSharedViewModel
 import kotlinx.coroutines.flow.first
 import io.personal.filemanager.ui.components.rememberListSearch
 import io.personal.filemanager.ui.components.ListSearchState
@@ -158,7 +159,7 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
 
 @Composable
 private fun mediaListViewModel(category: MediaCategory): MediaListViewModel =
-    appViewModel(key = "media-${category.name}") { MediaListViewModel(it, category) }
+    appSharedViewModel(key = "media-list-${category.name}") { MediaListViewModel(it, category) }
 
 /** Содержимое списка без заголовка (используется и во вкладке «APK-файлы»). */
 @Composable

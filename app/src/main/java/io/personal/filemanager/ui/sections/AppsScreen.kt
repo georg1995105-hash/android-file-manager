@@ -1,5 +1,6 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.appSharedViewModel
 import io.personal.filemanager.ui.components.rememberListSearch
 import io.personal.filemanager.ui.components.ListSearchState
 import io.personal.filemanager.ui.components.ListSearchField
@@ -116,7 +117,7 @@ fun AppsScreen() {
 @Composable
 private fun InstalledAppsList(search: ListSearchState) {
     val context = LocalContext.current
-    val vm = appViewModel { AppsViewModel(it) }
+    val vm = appSharedViewModel(key = "installed-apps") { AppsViewModel(it) }
     val apps by vm.apps.collectAsStateWithLifecycle()
     RefreshWhileVisible(null) { vm.refresh() }
     val all = apps

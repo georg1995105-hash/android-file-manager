@@ -1,6 +1,16 @@
 # Статус разработки
 
-## Передача и Android TV — 0.10.0, приёмка CI пройдена (2026-10-28)
+## Передача и Android TV — 0.10.0, в main (2026-10-28, ~19:30 МСК)
+
+- [PR #7](https://github.com/georg1995105-hash/android-file-manager/pull/7) слит в main (`ca55afa`).
+  [CI main #40720301539](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40720301539) — SUCCESS
+  (build, телефон, планшет). До слияния тот же код: штатный android #40718698639 — SUCCESS.
+- APK 0.10.0 vc11 (DEBUG, исходный debug-ключ, ставится поверх установленного DEBUG):
+  [артефакт CI main](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40720301539/artifacts/12830446727)
+  (хранится 30 дней, нужен вход в GitHub). Подписанный RELEASE vc11 — в артефакте `transfer-apks`
+  [#40717168837](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40717168837) (14 дней).
+- GitHub Release не опубликован: репозиторий стал публичным, публикация APK для всех требует решения владельца
+  (workflow `signed release acceptance` вручную).
 
 - Работа Astra (`2a440fa`, `feature/local-transfer-tv`) сохранена; доводка — в `claude/local-transfer-android-tv-pc-6w5gl4`.
   applicationId, versionCode 11, ключи подписи APK и пользовательские данные не менялись.

@@ -204,6 +204,7 @@ fun AppRoot() {
 private fun SectionScreen(id: SectionId) {
     val storage = appContainer().storage
     when (id) {
+        SectionId.TRANSFER -> io.personal.filemanager.ui.transfer.TransferScreen()
         SectionId.FILES -> BrowserScreen(title = "Внутренняя память", rootPath = storage.rootPath)
         SectionId.DOWNLOADS -> BrowserScreen(title = SectionId.DOWNLOADS.title, rootPath = storage.downloadsPath, viewKey = "DOWNLOADS")
         SectionId.RECENT -> MediaListScreen(id, MediaCategory.RECENT)

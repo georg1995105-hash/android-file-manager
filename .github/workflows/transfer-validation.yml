@@ -1,0 +1,98 @@
+name: transfer acceptance
+on:
+  push:
+    branches: ['feature/local-transfer-tv']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: transfer-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore original test identity
+        env:
+          PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
+        run: bash tools/restore_debug_keystore.sh
+      - name: Compile tests, unit checks, installable debug artifacts
+        run: |
+          bash tools/transfer-tests/run.sh
+          node tools/transfer-tests/hash-check.js
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest
+          bash tools/check_debug_signatures.sh app/build/outputs/apk/debug/app-universal-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+      - name: Build with original release identity
+        env:
+          PFM_KEYSTORE_B64: ${{ secrets.PFM_KEYSTORE_B64 }}
+          PFM_STORE_PASSWORD: ${{ secrets.PFM_STORE_PASSWORD }}
+          PFM_KEY_ALIAS: ${{ secrets.PFM_KEY_ALIAS }}
+          PFM_KEY_PASSWORD: ${{ secrets.PFM_KEY_PASSWORD }}
+        run: bash tools/build_signed_release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transfer-apks
+          path: |
+            app/build/outputs/apk/debug/app-universal-debug.apk
+            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            dist/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transfer-unit-reports
+          path: app/build/reports/tests/
+  devices:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: phone
+            api: 35
+            target: google_apis
+            arch: x86_64
+            profile: pixel_7
+          - name: tv
+            api: 30
+            target: android-tv
+            arch: x86
+            profile: tv_1080p
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: transfer-apks
+          path: artifacts
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: ${{ matrix.arch }}
+          profile: ${{ matrix.profile }}
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash tools/transfer-tests/device.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transfer-${{ matrix.name }}-evidence
+          path: |
+            transfer-instrumentation.log
+            transfer-logcat.txt
+            transfer-screen.png

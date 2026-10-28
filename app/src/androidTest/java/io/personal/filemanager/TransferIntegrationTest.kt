@@ -28,18 +28,13 @@ class TransferIntegrationTest {
             try { TransferClient(address, "wrong").api("/files"); fail("Wrong pin accepted") } catch (_: Exception) { }
             val client = TransferClient(address, pin)
             try { client.api("/files"); fail("Unauthenticated list accepted") } catch (_: Exception) { }
-            val pairing = async { client.pair(state.code, "Integration fixture") }
-            withTimeout(15000) { while (manager.state.value.approvals.isEmpty()) delay(100) }
-            manager.approve(manager.state.value.approvals.first().id, true)
-            pairing.await()
+            // Подключение без подтверждения (решение владельца): токен выдаётся сразу.
+            withTimeout(15000) { client.pair("", "Integration fixture") }
             val data = ByteArray(2 * 1024 * 1024 + 23) { (it % 251).toByte() }
             val file = File(fixtures, "fixture.apk").apply { writeBytes(data) }
             manager.share(listOf(file))
             withTimeout(15000) { while (manager.selectedFiles().isEmpty()) delay(100) }
-            val sending = async { client.send(manager.selectedFiles().single()) {} }
-            withTimeout(15000) { while (manager.state.value.approvals.isEmpty()) delay(100) }
-            manager.approve(manager.state.value.approvals.first().id, true)
-            sending.await()
+            withTimeout(60000) { client.send(manager.selectedFiles().single()) {} }
             val remote = client.api("/files").getJSONArray("files").getJSONObject(0)
             client.receive(remote, manager) {}
             val results = manager.receivedDirectory.listFiles()!!.filter { it !in original }.flatMap { it.walkTopDown().filter(File::isFile).toList() }

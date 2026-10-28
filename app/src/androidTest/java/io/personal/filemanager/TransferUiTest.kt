@@ -21,13 +21,19 @@ class TransferUiTest {
         assertNotNull(rule.activity.packageManager.resolveActivity(launch, 0))
         rule.waitText("Мои файлы")
         rule.openTile("Передача")
-        rule.onNodeWithText("Включить передачу").performSemanticsAction(SemanticsActions.RequestFocus)
-        rule.onNodeWithText("Включить передачу").performKeyInput { pressKey(Key.DirectionCenter) }
+        // Открытие раздела само включает передачу; дальше выключение и включение — кнопкой OK пульта.
         rule.waitText("Остановить передачу", 15000)
-        rule.onNodeWithText("Новый код (2 минуты)").performSemanticsAction(SemanticsActions.RequestFocus)
-        rule.onNodeWithText("Новый код (2 минуты)").performKeyInput { pressKey(Key.DirectionCenter) }
-        rule.onNodeWithText("Остановить передачу").performSemanticsAction(SemanticsActions.RequestFocus)
-        rule.onNodeWithText("Остановить передачу").performKeyInput { pressKey(Key.DirectionCenter) }
+        rule.remoteCenter("Остановить передачу")
         rule.waitText("Включить передачу")
+        rule.remoteCenter("Включить передачу")
+        rule.waitText("Остановить передачу", 15000)
+        rule.remoteCenter("Остановить передачу")
+        rule.waitText("Включить передачу")
+    }
+
+    private fun MainRule.remoteCenter(text: String) {
+        onNodeWithText(text).performScrollTo()
+        onNodeWithText(text).performSemanticsAction(SemanticsActions.RequestFocus)
+        onNodeWithText(text).performKeyInput { pressKey(Key.DirectionCenter) }
     }
 }

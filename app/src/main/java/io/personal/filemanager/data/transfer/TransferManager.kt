@@ -15,7 +15,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class TransferManager(private val context: Context) {
     data class Approval(val id: String, val description: String)
-    data class State(val running: Boolean = false, val addresses: List<String> = emptyList(), val code: String = "",
+    /** [addresses] — HTTPS для приложения; [browserAddresses] — обычный HTTP для браузера по QR (без предупреждения о сертификате). */
+    data class State(val running: Boolean = false, val addresses: List<String> = emptyList(), val browserAddresses: List<String> = emptyList(), val code: String = "",
         val fingerprint: String = "", val approvals: List<Approval> = emptyList(), val message: String = "",
         val shared: Int = 0, val progress: String = "")
     val discovery = TransferDiscovery(context)
@@ -24,6 +25,7 @@ class TransferManager(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val random = SecureRandom()
     private var server: LocalHttpsServer? = null
+    private var browserServer: LocalHttpsServer? = null
     private val lock = Any()
     private data class Pairing(val name: String, val expires: Long, var token: String? = null)
     private data class Upload(val owner: String, val name: String, val size: Long, val hash: String, val batch: String,
@@ -32,6 +34,8 @@ class TransferManager(private val context: Context) {
     private val pairs = ConcurrentHashMap<String, Pairing>()
     private val sessions = ConcurrentHashMap<String, Long>()
     private val batches = ConcurrentHashMap<String, String>()
+    /** Отправки, которые получатель уже принял: остальные файлы той же отправки принимаются без новых вопросов. */
+    private val approvedBatches = ConcurrentHashMap.newKeySet<String>()
     private val uploads = ConcurrentHashMap<String, Upload>()
     private val shared = ConcurrentHashMap<String, Shared>()
     private val tickets = ConcurrentHashMap<String, Pair<String, String>>()
@@ -53,15 +57,18 @@ class TransferManager(private val context: Context) {
                     val (tls, fingerprint) = TransferTls.context()
                     val listener = LocalHttpsServer(tls.serverSocketFactory, ::handle)
                     server = listener
+                    val browser = LocalHttpsServer(javax.net.ServerSocketFactory.getDefault(), ::handle)
+                    browserServer = browser
                     discovery.advertise(listener.port())
                     codeExpires = now() + 120_000
-                    val addresses = NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
+                    val hosts = NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
                         .flatMap { it.inetAddresses.toList() }.filter { it is java.net.Inet4Address && it.isSiteLocalAddress }
-                        .map { "https://${it.hostAddress}:${listener.port()}" }
-                    mutable.value = mutable.value.copy(running = true, addresses = addresses,
-                        code = "%08d".format(random.nextInt(100_000_000)), fingerprint = fingerprint,
-                        message = "Код действует 2 минуты. Подключение и каждый приём требуют подтверждения.")
+                        .map { it.hostAddress }
+                    mutable.value = mutable.value.copy(running = true, addresses = hosts.map { "https://$it:${listener.port()}" },
+                        browserAddresses = hosts.map { "http://$it:${browser.port()}" },
+                        code = "%08d".format(random.nextInt(100_000_000)), fingerprint = fingerprint, message = "")
                     scope.launch { listener.run() }
+                    scope.launch { browser.run() }
                 }
             }.onFailure { message("Не удалось запустить: ${it.message}") }
         }
@@ -74,13 +81,20 @@ class TransferManager(private val context: Context) {
         synchronized(lock) {
             generation++
             server?.close(); server = null
+            browserServer?.close(); browserServer = null
             discovery.stop()
-            pairs.clear(); sessions.clear(); tickets.clear(); batches.clear()
+            pairs.clear(); sessions.clear(); tickets.clear(); batches.clear(); approvedBatches.clear()
             val abandoned = uploads.values.toList(); uploads.clear()
             scope.launch { abandoned.forEach { runCatching { it.receiver?.close() } } }
             mutable.value = State(shared = shared.size, message = "Передача выключена")
         }
     }
+    private fun startReceiving(upload: Upload) {
+        if (upload.size > context.filesDir.usableSpace - 64L * 1024 * 1024) error("Недостаточно места")
+        upload.receiver = IncomingTransfer(File(context.filesDir, "transfer-staging").toPath(),
+            File(receivedDirectory, upload.batch).toPath(), upload.name, upload.size, upload.hash, upload.size, true)
+    }
+
     fun approve(id: String, accept: Boolean) {
         if (!accept) {
             pairs.remove(id)
@@ -101,9 +115,8 @@ class TransferManager(private val context: Context) {
                     val upload = uploads[id]
                     if (upload != null) {
                         if (accept && sessions[upload.owner]?.let { it > now() } == true) {
-                            if (upload.size > context.filesDir.usableSpace - 64L * 1024 * 1024) error("Недостаточно места")
-                            upload.receiver = IncomingTransfer(File(context.filesDir, "transfer-staging").toPath(),
-                                File(receivedDirectory, upload.batch).toPath(), upload.name, upload.size, upload.hash, upload.size, true)
+                            startReceiving(upload)
+                            approvedBatches += upload.batch
                         } else uploads.remove(id)?.receiver?.close()
                     }
                     mutable.value = mutable.value.copy(approvals = mutable.value.approvals.filterNot { it.id == id })
@@ -171,10 +184,11 @@ class TransferManager(private val context: Context) {
                 synchronized(lock) {
                     if (now() - window > 60_000) { window = now(); attempts = 0 }
                     require(++attempts <= 5 && pairs.size < 10 && sessions.size < 10) { "Лимит попыток. Подождите минуту" }
-                    require(now() < codeExpires && MessageDigest.isEqual(value.optString("code").toByteArray(), mutable.value.code.toByteArray())) { "Неверный или просроченный код" }
+                    // По решению владельца — без кодов и подтверждений: устройство в той же сети подключается сразу.
                     val name = value.optString("name").take(60).ifBlank { "Браузер" }
-                    val key = id(); pairs[key] = Pairing(name, now() + 120_000)
-                    mutable.value = mutable.value.copy(approvals = mutable.value.approvals + Approval(key, "Подключить $name?"))
+                    val token = id(); sessions[token] = now() + 3600_000
+                    val key = id(); pairs[key] = Pairing(name, now() + 120_000, token)
+                    mutable.value = mutable.value.copy(message = "Подключено: $name")
                     json(out, obj = JSONObject().put("id", key)); return
                 }
             }
@@ -218,8 +232,11 @@ class TransferManager(private val context: Context) {
                         require(uploads.size < 100 && uploads.values.count { it.owner == token && !it.done } < 8)
                         val batch = v.optString("batch").ifBlank { id().also { batches[it] = token } }
                         require(batches[batch] == token)
-                        val key = id(); uploads[key] = Upload(token, name, size, hash, batch)
-                        mutable.value = mutable.value.copy(approvals = mutable.value.approvals + Approval(key, "Принять $name ($size байт)?"))
+                        val key = id(); val upload = Upload(token, name, size, hash, batch); uploads[key] = upload
+                        // Файлы принимаются сразу, без вопроса (решение владельца).
+                        startReceiving(upload)
+                        approvedBatches += batch
+                        mutable.value = mutable.value.copy(message = "Приём: $name")
                         json(out, obj = JSONObject().put("id", key))
                     }
                 }

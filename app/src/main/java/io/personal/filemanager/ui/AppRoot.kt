@@ -130,6 +130,7 @@ fun AppRoot() {
     }
 
     CompositionLocalProvider(LocalNavigator provides navigator) {
+        io.personal.filemanager.ui.transfer.TransferApprovalDialog()
         FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {
             Scaffold(
                 containerColor = AppColors.Background,

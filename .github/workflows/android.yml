@@ -2,7 +2,7 @@ name: android
 
 on:
   push:
-    branches: ['**', '!feature/local-transfer-tv', '!claude/local-transfer-android-tv-pc-6w5gl4']
+    branches: ['**']
     paths-ignore:
       - '.github/workflows/release-preflight.yml'
       - '.github/workflows/release-key-setup.yml'
@@ -85,14 +85,16 @@ jobs:
           set -euo pipefail
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           SHORT=$(echo "$GITHUB_SHA" | cut -c1-7)
-          mkdir -p dist
-          for SRC in app/build/outputs/apk/debug/*.apk; do
-            case "$SRC" in *arm64-v8a*) ABI=arm64 ;; *universal*) ABI=universal ;; *) ABI=other ;; esac
+          # dist/ — только то, что ставит пользователь (подписанный RELEASE universal, шаг ниже).
+          # DEBUG-сборка проверяется здесь и кладётся в debug-dist/ только для служебного пререлиза [apk].
+          mkdir -p dist debug-dist
+          for SRC in app/build/outputs/apk/debug/*universal*.apk; do
+            ABI=universal
             "$BT/aapt2" dump badging "$SRC" > badging.txt
             VN=$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" badging.txt | head -1)
             VC=$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" badging.txt | head -1)
             PKG=$(sed -n "s/package: name='\([^']*\)'.*/\1/p" badging.txt | head -1)
-            OUT="dist/personal-file-manager-${VN}-vc${VC}-${ABI}-${SHORT}.apk"
+            OUT="debug-dist/personal-file-manager-${VN}-vc${VC}-${ABI}-${SHORT}.apk"
             cp "$SRC" "$OUT"
             echo "===== $OUT"
             echo "package: $PKG  versionName: $VN  versionCode: $VC  size: $(stat -c %s "$OUT")"
@@ -101,9 +103,9 @@ jobs:
             "$BT/zipalign" -c -P 16 4 "$OUT" && echo "zipalign -P 16: OK" || echo "zipalign -P 16: FAIL"
             python3 tools/check_16k.py "$OUT" || true
           done
-          (cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          (cd debug-dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
           {
-            echo "name=personal-file-manager-${VN}-vc${VC}-${SHORT}"
+            echo "name=personal-file-manager-${VN%-debug}-vc${VC}-${SHORT}"
             echo "version_name=$VN"
             echo "version_code=$VC"
           } >> "$GITHUB_OUTPUT"
@@ -161,7 +163,7 @@ jobs:
           set -euo pipefail
           TAG="v${{ steps.apk.outputs.version_name }}-build${{ github.run_number }}"
           gh release create "$TAG" \
-            dist/*.apk dist/SHA256SUMS.txt \
+            debug-dist/*.apk debug-dist/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --prerelease \

@@ -96,8 +96,11 @@ def publish_outputs(apk_dir, output_dir, expected):
     output_dir.mkdir(parents=True, exist_ok=True)
     reports = []
     for source in sorted(Path(apk_dir).glob("*.apk")):
+        # Публикуется один универсальный APK (телефон и ТВ); arm64-сплит не выкладывается.
+        if "arm64-v8a" in source.name:
+            continue
         report = inspect(source, expected, tools)
-        abi = "arm64" if "arm64-v8a" in source.name else "universal" if "universal" in source.name else None
+        abi = "universal" if "universal" in source.name else None
         if not abi:
             raise ValueError("Unexpected release APK ABI")
         target = output_dir / f"personal-file-manager-{report['version_name']}-release-vc{report['version_code']}-{abi}.apk"
@@ -105,8 +108,8 @@ def publish_outputs(apk_dir, output_dir, expected):
         report.update(file=target.name, abi=abi)
         reports.append(report)
         print(json.dumps(report, ensure_ascii=False))
-    if {r["abi"] for r in reports} != {"arm64", "universal"}:
-        raise ValueError("Expected arm64 and universal RELEASE APKs")
+    if [r["abi"] for r in reports] != ["universal"]:
+        raise ValueError("Expected exactly one universal RELEASE APK")
     (output_dir / "RELEASE_IDENTITY.json").write_text(json.dumps(reports, indent=2) + "\n")
     sums = [f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in sorted(output_dir.glob("*.apk"))]
     (output_dir / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n")

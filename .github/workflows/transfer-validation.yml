@@ -1,7 +1,5 @@
 name: transfer acceptance
 on:
-  push:
-    branches: ['feature/local-transfer-tv', 'claude/local-transfer-android-tv-pc-6w5gl4']
   workflow_dispatch:
 permissions:
   contents: read

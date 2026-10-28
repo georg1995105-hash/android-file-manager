@@ -1,6 +1,19 @@
 # Статус разработки
 
-## Передача и Android TV — 0.10.0, приёмка в работе (2026-10-28)
+## Передача и Android TV — 0.10.0, приёмка ЗАБЛОКИРОВАНА биллингом GitHub Actions (2026-10-28, 18:20 МСК)
+
+- Рабочая ветка `claude/local-transfer-android-tv-pc-6w5gl4` = `feature/local-transfer-tv` (`2a440fa`, работа Astra без изменений)
+  + исправление CI: итог инструментальных тестов проверяется `grep` вместо `rg` (на раннере может не быть ripgrep),
+  workflow `transfer acceptance` запускается и на рабочей ветке. Код приложения, подписи, ключи, applicationId не менялись.
+- CI [#40701160807](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40701160807) и
+  [#40714783522](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40714783522): задания не стартовали
+  (0 шагов, раннер не назначен). Аннотация GitHub: «recent account payments have failed or your spending limit needs
+  to be increased». Нужна оплата/лимит в Billing & plans аккаунта владельца; после этого — Re-run последнего запуска.
+- Локальная Android-сборка в среде Claude невозможна: `dl.google.com` (Android SDK) закрыт сетевой политикой.
+  Локально повторно PASS: JVM ядро 26 проверок, HTTP framing/Origin/Host, JS SHA-256 на 9 длинах.
+- Слияние в `main` и выпуск APK 0.10.0 не выполнены: приёмка (сборка, phone API35, TV API30) не прошла. Готового APK 0.10.0 нет.
+
+## Передача и Android TV — 0.10.0, исходное состояние Astra (2026-10-28)
 
 - Ветка `feature/local-transfer-tv`, versionCode 11, applicationId и обе исходные подписи сохранены.
 - Реализованы раздел/контекстное действие, общий HTTPS API, нативный Android/TV клиент,

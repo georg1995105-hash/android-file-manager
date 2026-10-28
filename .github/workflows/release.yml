@@ -67,12 +67,11 @@ jobs:
             release-emulator.png
             release-emulator.xml
           retention-days: 30
-      - name: Publish verified APKs in the private repository
+      - name: Publish the verified universal APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test "$(gh repo view "$GITHUB_REPOSITORY" --json isPrivate -q .isPrivate)" = true
           read -r VN VC < <(python3 -c 'import json; r=json.load(open("dist/current/RELEASE_IDENTITY.json"))[0]; print(r["version_name"],r["version_code"])')
           TAG="v${VN}-release-vc${VC}-${GITHUB_SHA::7}"
           python3 - <<'PY' > release-notes.md
@@ -92,6 +91,6 @@ jobs:
             echo "Release already exists; refusing to overwrite its APKs"
             exit 1
           fi
-          gh release create "$TAG" dist/current/*.apk dist/current/*.json dist/current/SHA256SUMS.txt \
+          gh release create "$TAG" dist/current/*universal*.apk dist/current/*.json dist/current/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Personal File Manager $VN — signed RELEASE vc$VC" --notes-file release-notes.md

@@ -393,6 +393,9 @@ private fun GridCell(
             }
             else -> Text(prefix + stamp.oneLine, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
         }
+        if (!entry.isDirectory) {
+            Text(formatSize(entry.size), style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
+        }
     }
 }
 

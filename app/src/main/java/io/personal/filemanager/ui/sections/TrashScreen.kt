@@ -1,5 +1,8 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.components.rememberListSearch
+import io.personal.filemanager.ui.components.ListSearchField
+import io.personal.filemanager.ui.components.ListSearchButton
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -55,19 +58,24 @@ fun TrashScreen() {
     LaunchedEffect(version) { items = operations.trashItems() }
 
     Column(Modifier.fillMaxSize()) {
-        val list = items
+        val search = rememberListSearch()
+        val all = items
+        val list = all?.filter { search.matches(it.meta.name, it.meta.originalPath) }
         ScreenTopBar(
             title = "Корзина",
-            subtitle = list?.let { "Объектов: ${it.size} • ${formatSize(it.sumOf { i -> i.meta.size })}" },
+            subtitle = all?.let { "Объектов: ${it.size} • ${formatSize(it.sumOf { i -> i.meta.size })}" },
             onBack = { navigator.back() },
             actions = {
-                if (!list.isNullOrEmpty()) {
-                    TextButton(onClick = { purgeTargets = list }) { Text("Очистить") }
+                if (!all.isNullOrEmpty()) {
+                    ListSearchButton(search)
+                    TextButton(onClick = { purgeTargets = all }) { Text("Очистить") }
                 }
             },
         )
+        ListSearchField(search)
         when {
             list == null -> LoadingBox()
+            !all.isNullOrEmpty() && list.isEmpty() -> EmptyState(Icons.Filled.DeleteOutline, "Ничего не найдено", "Измените запрос.")
             list.isEmpty() -> EmptyState(
                 Icons.Filled.DeleteOutline,
                 "Корзина пуста",

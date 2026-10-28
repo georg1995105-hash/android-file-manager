@@ -1,5 +1,9 @@
 package io.personal.filemanager.ui.sections
 
+import io.personal.filemanager.ui.components.rememberListSearch
+import io.personal.filemanager.ui.components.ListSearchState
+import io.personal.filemanager.ui.components.ListSearchField
+import io.personal.filemanager.ui.components.ListSearchButton
 import io.personal.filemanager.ui.components.rememberFileView
 import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.tapClickable
@@ -91,29 +95,36 @@ fun AppsScreen() {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         val apkView = rememberFileView(MediaCategory.APKS.name)
+        val search = rememberListSearch()
         ScreenTopBar(
             title = SectionId.APPS.title,
             onBack = { navigator.back() },
-            actions = { if (tab == 1) ViewModeButton(apkView) },
+            actions = {
+                ListSearchButton(search)
+                if (tab == 1) ViewModeButton(apkView)
+            },
         )
         PrimaryTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Установленные") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("APK-файлы") })
         }
-        if (tab == 0) InstalledAppsList() else MediaListBody(MediaCategory.APKS)
+        ListSearchField(search)
+        if (tab == 0) InstalledAppsList(search) else MediaListBody(MediaCategory.APKS, search = search)
     }
 }
 
 @Composable
-private fun InstalledAppsList() {
+private fun InstalledAppsList(search: ListSearchState) {
     val context = LocalContext.current
     val vm = appViewModel { AppsViewModel(it) }
     val apps by vm.apps.collectAsStateWithLifecycle()
     RefreshWhileVisible(null) { vm.refresh() }
-    val list = apps
+    val all = apps
+    val list = all?.filter { search.matches(it.label, it.packageName) }
     when {
         list == null -> LoadingBox()
-        list.isEmpty() -> EmptyState(Icons.Filled.Android, "Нет данных", "Не удалось получить список приложений.")
+        all.isNullOrEmpty() -> EmptyState(Icons.Filled.Android, "Нет данных", "Не удалось получить список приложений.")
+        list.isEmpty() -> EmptyState(Icons.Filled.Android, "Ничего не найдено", "Измените запрос.")
         else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
                 Text(

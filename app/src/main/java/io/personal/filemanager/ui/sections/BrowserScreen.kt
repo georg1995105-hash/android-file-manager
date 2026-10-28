@@ -47,6 +47,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -167,6 +169,11 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                 IconButton(onClick = { navigator.openSearch() }) {
                     Icon(Icons.Filled.Search, contentDescription = "Поиск")
                 }
+                if (hasAccess) {
+                    IconButton(onClick = { createDialog = true }) {
+                        Icon(Icons.Filled.CreateNewFolder, contentDescription = "Новая папка")
+                    }
+                }
                 ViewModeButton(view)
             },
         )
@@ -272,6 +279,7 @@ private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: suspend (String)
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Новая папка") },
@@ -283,7 +291,9 @@ private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: suspend (String)
                 label = { Text("Имя папки") },
                 isError = error != null,
                 supportingText = { error?.let { Text(it) } },
+                modifier = Modifier.focusRequester(focus),
             )
+            LaunchedEffect(Unit) { focus.requestFocus() }
         },
         confirmButton = {
             TextButton(

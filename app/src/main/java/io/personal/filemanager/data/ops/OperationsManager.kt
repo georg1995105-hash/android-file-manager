@@ -28,7 +28,13 @@ enum class TransferMode(val verb: String) { COPY("Копирование"), MOVE
 /** Объекты, выбранные для копирования/перемещения; вставляются в папку кнопкой «Вставить сюда». */
 data class FileClipboard(val paths: List<String>, val mode: TransferMode)
 
-data class RunningOperation(val title: String, val progress: OpProgress? = null, val cancellable: Boolean = true)
+data class RunningOperation(
+    val title: String,
+    val progress: OpProgress? = null,
+    val cancellable: Boolean = true,
+    /** SystemClock.elapsedRealtime() начала — для скорости и оставшегося времени. */
+    val startedAt: Long = android.os.SystemClock.elapsedRealtime(),
+)
 
 /**
  * Единая точка изменяющих операций. Одновременно выполняется одна операция; длинные операции
@@ -87,10 +93,11 @@ class OperationsManager(
             return false
         }
         cancelFlag.set(false)
-        _running.value = RunningOperation(title, null, cancellable)
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        _running.value = RunningOperation(title, null, cancellable, startedAt)
         scope.launch(Dispatchers.IO) {
             val report = try {
-                block({ p -> _running.value = RunningOperation(title, p, cancellable) }, { cancelFlag.get() })
+                block({ p -> _running.value = RunningOperation(title, p, cancellable, startedAt) }, { cancelFlag.get() })
             } catch (e: Exception) {
                 OpReport(failed = listOf(title to (e.message ?: e.javaClass.simpleName)))
             }

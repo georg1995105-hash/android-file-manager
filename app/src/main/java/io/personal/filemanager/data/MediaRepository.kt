@@ -21,7 +21,7 @@ enum class MediaCategory {
     RECENT, PHOTOS, VIDEOS, DOCUMENTS, ARCHIVES, APKS, DOWNLOADS
 }
 
-enum class MediaSort { ADDED, MODIFIED }
+enum class MediaSort { ADDED, MODIFIED, SIZE, NAME }
 
 data class CategoryStats(val totalBytes: Long, val count: Int)
 
@@ -69,11 +69,11 @@ class MediaRepository(context: Context) {
         return if (extra == null) Selection(base, emptyArray()) else Selection("$base AND ${extra.sql}", extra.args)
     }
 
-    private fun query(selection: Selection, sortColumn: String?, limit: Int, columns: Array<String> = projection): Cursor? {
+    private fun query(selection: Selection, sortOrder: String?, limit: Int, columns: Array<String> = projection): Cursor? {
         val args = Bundle().apply {
             putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection.sql)
             putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selection.args)
-            if (sortColumn != null) putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "$sortColumn DESC")
+            if (sortOrder != null) putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
             if (limit > 0) putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
         }
         return resolver.query(filesUri, columns, args, null)
@@ -107,11 +107,15 @@ class MediaRepository(context: Context) {
     }
 
     fun list(category: MediaCategory, sort: MediaSort = MediaSort.ADDED, limit: Int = DEFAULT_LIMIT): List<FileEntry> {
-        val sortColumn = when (sort) {
-            MediaSort.ADDED -> FileColumns.DATE_ADDED
-            MediaSort.MODIFIED -> FileColumns.DATE_MODIFIED
+        val sortOrder = when (sort) {
+            MediaSort.ADDED -> "${FileColumns.DATE_ADDED} DESC"
+            MediaSort.MODIFIED -> "${FileColumns.DATE_MODIFIED} DESC"
+            MediaSort.SIZE -> "${FileColumns.SIZE} DESC"
+            MediaSort.NAME -> "${FileColumns.DISPLAY_NAME} ASC"
         }
-        return query(selectionFor(category), sortColumn, limit)?.use { it.readEntries(skipHidden = true) }.orEmpty()
+        val entries = query(selectionFor(category), sortOrder, limit)?.use { it.readEntries(skipHidden = true) }.orEmpty()
+        // SQLite сравнивает имена побайтно (заглавные раньше строчных) — итог упорядочиваем без учёта регистра.
+        return if (sort == MediaSort.NAME) entries.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }) else entries
     }
 
     /** Поиск по имени во всём индексе; спецсимволы LIKE экранируются. */
@@ -123,7 +127,7 @@ class MediaRepository(context: Context) {
             "${FileColumns.MIME_TYPE} IS NOT NULL AND ${FileColumns.DISPLAY_NAME} LIKE ? ESCAPE '\\'",
             arrayOf("%$escaped%"),
         )
-        return query(selection, FileColumns.DATE_MODIFIED, limit)?.use { it.readEntries(skipHidden = false) }.orEmpty()
+        return query(selection, "${FileColumns.DATE_MODIFIED} DESC", limit)?.use { it.readEntries(skipHidden = false) }.orEmpty()
     }
 
     /** Размер и количество файлов категории (для плиток главной). */

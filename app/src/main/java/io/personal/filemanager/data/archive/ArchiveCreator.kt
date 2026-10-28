@@ -63,6 +63,15 @@ class ArchiveCreator {
         var count = 0
         val buffer = ByteArray(256 * 1024)
         fun progress(name: String) = onProgress(OpProgress(total, done, items.size, count, name))
+        // Внутри большого файла прогресс тоже идёт (не чаще ~6 раз в секунду), а не только после каждого файла.
+        var lastTick = 0L
+        fun tick(name: String) {
+            val now = System.nanoTime()
+            if (now - lastTick >= 150_000_000L) {
+                lastTick = now
+                progress(name)
+            }
+        }
         try {
             when (format) {
                 ArchiveFormat.ZIP -> {
@@ -90,6 +99,7 @@ class ArchiveCreator {
                                             if (n < 0) break
                                             zip.write(buffer, 0, n)
                                             done += n
+                                            tick(s.name)
                                         }
                                     }
                                 }
@@ -114,6 +124,7 @@ class ArchiveCreator {
                                         if (n < 0) break
                                         z.write(buffer, 0, n)
                                         done += n
+                                        tick(s.name)
                                     }
                                 }
                             }

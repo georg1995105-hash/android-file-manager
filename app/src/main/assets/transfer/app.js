@@ -12,17 +12,39 @@ class Sha256 {
 }
 if(typeof module!=='undefined')module.exports={Sha256};
 if(typeof document!=='undefined'){
- const $=id=>document.getElementById(id);let token='',current=null,busy=false,abort=null,cancelled=false;
- const fragment=new URLSearchParams(location.hash.slice(1));if(fragment.has('code'))$('code').value=fragment.get('code');history.replaceState(null,'',location.pathname);
+ const $=id=>document.getElementById(id);let token='',busy=false,abort=null,cancelled=false,current=null;
+ history.replaceState(null,'',location.pathname);
  const status=t=>$('status').textContent=t;
+ const size=b=>b<1024?b+' Б':b<1048576?Math.round(b/1024)+' КБ':b<1073741824?(b/1048576).toFixed(1)+' МБ':(b/1073741824).toFixed(2)+' ГБ';
+ const time=s=>s>=60?Math.floor(s/60)+' мин '+Math.round(s%60)+' с':Math.max(1,Math.round(s))+' с';
  async function api(path,method='GET',body=null,headers={}){const response=await fetch(path,{method,body,headers:{...headers,...(token?{Authorization:'Bearer '+token}:{})},signal:abort?.signal,cache:'no-store'});const value=await response.json();if(!response.ok)throw Error(value.error||'Ошибка');return value;}
- const pause=()=>new Promise(r=>setTimeout(r,1000));
- async function guarded(action){if(busy)return;busy=true;cancelled=false;abort=new AbortController();try{await action();}catch(e){status(e.message+'\nПри обрыве можно продолжить текущий файл.');}finally{busy=false;abort=null;}}
- $('connect').onclick=()=>guarded(async()=>{const p=await api('/pair','POST',JSON.stringify({name:$('name').value,code:$('code').value}));status('Подтвердите подключение на принимающем устройстве');for(let i=0;i<120;i++){const s=await api('/pair/'+p.id);if(s.token){token=s.token;$('pair').hidden=true;$('session').hidden=false;status('Подключено на один час');await list();return;}await pause();}throw Error('Время подтверждения истекло');});
- async function list(){const data=await api('/files');$('files').replaceChildren();for(const f of data.files){const row=document.createElement('div'),button=document.createElement('button');button.textContent=f.name+' · '+f.size+' байт';button.onclick=()=>guarded(async()=>{const ticket=await api('/ticket/'+f.id,'POST');const a=document.createElement('a');a.href=ticket.url;a.download=f.name.replaceAll('/','_');a.textContent='Скачать '+f.name;row.append(a);status('SHA-256 файла: '+f.sha256+'\nСкачивание выполняет браузер. Для независимой проверки сравните SHA-256.');});row.append(button);$('files').append(row);}}
- $('refresh').onclick=()=>guarded(list);
- async function run(){if(!current)throw Error('Нет текущего файла');const c=current;let s;for(let n=0;n<300;n++){if(cancelled)return;s=await api('/upload/'+c.id);if(s.done){status('Уже получен: '+c.file.name);current=null;return;}if(s.accepted)break;status('Подтвердите приём '+c.file.name+' на получателе');await pause();}if(!s.accepted)throw Error('Приём не подтверждён');let offset=s.offset;if(offset<0||offset>c.file.size)throw Error('Неверное смещение');while(offset<c.file.size){if(cancelled)return;const chunk=new Uint8Array(await c.file.slice(offset,offset+1048576).arrayBuffer());const hash=new Sha256().update(chunk).hex();const result=await api('/upload/'+c.id,'PUT',chunk,{'X-Offset':String(offset),'X-SHA256':hash});offset=result.offset;$('progress').value=offset/Math.max(c.file.size,1);status(c.file.name+': '+offset+' / '+c.file.size);}await api('/upload/'+c.id,'POST');status('Получен и проверен: '+c.file.name);current=null;}
- $('send').onclick=()=>guarded(async()=>{if(current)throw Error('Продолжите или отмените текущий файл');const batch=(await api('/batch','POST')).id;for(const file of [...$('pick').files,...$('folder').files]){status('Проверка '+file.name);const hash=new Sha256();for(let offset=0;offset<file.size;offset+=1048576){if(cancelled)return;hash.update(new Uint8Array(await file.slice(offset,offset+1048576).arrayBuffer()));}const offer=await api('/offer','POST',JSON.stringify({name:file.webkitRelativePath||file.name,size:file.size,sha256:hash.hex(),batch}));current={id:offer.id,file};await run();if(cancelled)return;}});
- $('resume').onclick=()=>guarded(run);
- $('cancel').onclick=async()=>{cancelled=true;abort?.abort();const c=current;if(c){try{await fetch('/upload/'+c.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});current=null;status('Передача отменена');}catch(e){status('Отмена не подтверждена. Остановите передачу на получателе.');}}};
+ const pause=(ms=1000)=>new Promise(r=>setTimeout(r,ms));
+ function device(){const u=navigator.userAgent;return /Android/.test(u)?'Телефон (браузер)':/iPhone|iPad/.test(u)?'iPhone (браузер)':/Windows/.test(u)?'Компьютер Windows':/Mac/.test(u)?'Mac':'Браузер';}
+ // Подключение сразу при открытии страницы; без связи — тихий повтор.
+ async function connect(){for(;;){try{const p=await api('/pair','POST',JSON.stringify({name:device(),code:''}));for(let i=0;i<60;i++){const s=await api('/pair/'+p.id);if(s.token){token=s.token;$('session').hidden=false;status('Подключено');await list();return;}await pause();}}catch(e){status('Нет связи с устройством, повторяю… Откройте «Передачу» на телефоне или ТВ.');await pause(3000);}}}
+ const chosen=()=>[...$('pick').files,...$('folder').files];
+ function showChosen(){const f=chosen();$('chosen').textContent=f.length?'Выбрано: '+f.length+' · '+size(f.reduce((a,x)=>a+x.size,0)):'Ничего не выбрано';$('send').disabled=busy||!f.length;}
+ $('pick').onchange=showChosen;$('folder').onchange=showChosen;
+ async function list(){const data=await api('/files');$('files').replaceChildren();if(!data.files.length){const p=document.createElement('p');p.textContent='На устройстве ничего не выбрано для отправки.';$('files').append(p);}for(const f of data.files){const button=document.createElement('button');button.textContent='Скачать '+f.name+' · '+size(f.size);button.onclick=async()=>{try{const ticket=await api('/ticket/'+f.id,'POST');const a=document.createElement('a');a.href=ticket.url;a.download=f.name.replaceAll('/','_');document.body.append(a);a.click();a.remove();status('Скачивание: '+f.name);}catch(e){status(e.message);}};$('files').append(button);}}
+ $('refresh').onclick=()=>list().catch(e=>status(e.message));
+ // Блоки по 4 МиБ прямо из файла, без пересчёта сумм в JS (это и тормозило); после обрыва отправка сама продолжается.
+ const CHUNK=4194304;
+ async function upload(c,shown){let s=await api('/upload/'+c.id);if(s.done)return;let offset=s.offset,failures=0;
+  while(offset<c.file.size){if(cancelled)throw Error('cancel');
+   try{const r=await api('/upload/'+c.id,'PUT',c.file.slice(offset,offset+CHUNK),{'X-Offset':String(offset)});offset=r.offset;failures=0;shown(offset);}
+   catch(e){if(cancelled)throw Error('cancel');if(++failures>30)throw Error('Связь потеряна. Проверьте Wi-Fi и отправьте снова.');status('Связь прервалась — продолжаю…');await pause(2000);try{offset=(await api('/upload/'+c.id)).offset;}catch(_){}}}
+  await api('/upload/'+c.id,'POST');}
+ $('send').onclick=async()=>{const files=chosen();if(busy||!files.length)return;busy=true;cancelled=false;abort=new AbortController();showChosen();$('job').hidden=false;$('cancel').hidden=false;$('progress').value=0;
+  const total=files.reduce((a,f)=>a+f.size,0);let before=0;const started=Date.now();
+  try{const batch=(await api('/batch','POST')).id;
+   for(let i=0;i<files.length;i++){const file=files[i],name=file.webkitRelativePath||file.name,label=(files.length>1?'Файл '+(i+1)+' из '+files.length+': ':'')+name;
+    const offer=await api('/offer','POST',JSON.stringify({name,size:file.size,sha256:'',batch}));current={id:offer.id};$('jobname').textContent=label;status('Отправка…');
+    await upload({id:offer.id,file},sent=>{const all=before+sent,sec=Math.max((Date.now()-started)/1000,0.5),speed=all/sec;$('progress').value=all/Math.max(total,1);
+     $('jobinfo').textContent=Math.floor(all*100/Math.max(total,1))+'% · '+size(all)+' из '+size(total)+' · '+size(speed)+'/с · осталось '+time((total-all)/Math.max(speed,1));});
+    before+=file.size;current=null;}
+   $('progress').value=1;$('jobname').textContent='Готово';$('jobinfo').textContent='Отправлено: '+files.length+' · '+size(total);status('Готово. Файлы — в «Загрузки/Передача» на устройстве.');$('pick').value='';$('folder').value='';}
+  catch(e){status(cancelled?'Отправка отменена':e.message);$('jobname').textContent=cancelled?'Отменено':'Ошибка';}
+  finally{busy=false;abort=null;current=null;$('cancel').hidden=true;showChosen();}};
+ $('cancel').onclick=async()=>{cancelled=true;abort?.abort();const c=current;current=null;if(c){try{await fetch('/upload/'+c.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});}catch(_){}}};
+ showChosen();connect();
 }

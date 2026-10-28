@@ -1,17 +1,29 @@
 # Статус разработки
 
-## Передача и Android TV — 0.10.0, приёмка ЗАБЛОКИРОВАНА биллингом GitHub Actions (2026-10-28, 18:20 МСК)
+## Передача и Android TV — 0.10.0, приёмка CI пройдена (2026-10-28)
 
-- Рабочая ветка `claude/local-transfer-android-tv-pc-6w5gl4` = `feature/local-transfer-tv` (`2a440fa`, работа Astra без изменений)
-  + исправление CI: итог инструментальных тестов проверяется `grep` вместо `rg` (на раннере может не быть ripgrep),
-  workflow `transfer acceptance` запускается и на рабочей ветке. Код приложения, подписи, ключи, applicationId не менялись.
-- CI [#40701160807](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40701160807) и
-  [#40714783522](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40714783522): задания не стартовали
-  (0 шагов, раннер не назначен). Аннотация GitHub: «recent account payments have failed or your spending limit needs
-  to be increased». Нужна оплата/лимит в Billing & plans аккаунта владельца; после этого — Re-run последнего запуска.
-- Локальная Android-сборка в среде Claude невозможна: `dl.google.com` (Android SDK) закрыт сетевой политикой.
-  Локально повторно PASS: JVM ядро 26 проверок, HTTP framing/Origin/Host, JS SHA-256 на 9 длинах.
-- Слияние в `main` и выпуск APK 0.10.0 не выполнены: приёмка (сборка, phone API35, TV API30) не прошла. Готового APK 0.10.0 нет.
+- Работа Astra (`2a440fa`, `feature/local-transfer-tv`) сохранена; доводка — в `claude/local-transfer-android-tv-pc-6w5gl4`.
+  applicationId, versionCode 11, ключи подписи APK и пользовательские данные не менялись.
+- Первые запуски CI не стартовали из-за биллинга GitHub Actions (приватный репозиторий). Владелец сделал репозиторий
+  публичным 28.10.2026; после этого раннеры доступны.
+- [CI #40714869284](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40714869284) выявил две проблемы:
+  - TLS-рукопожатие обрывалось на телефоне и ТВ: ключ транспорта в Android Keystore не был разрешён для подписи
+    сырого дайджеста (Conscrypt подписывает `NONEwithRSA`/RSA без паддинга для PSS). Исправлено: ключ `local-transfer-tls-v2`
+    с `DIGEST_NONE`, PKCS1+PSS и правом расшифровки; старый v1 удаляется. Это ключ транспорта, не подписи APK;
+    отпечаток сертификата передачи после обновления меняется (пользователей 0.10.0 ещё не было).
+  - UI-тест пульта на телефоне: Compose-кнопки берут D-pad фокус только вне touch-режима; тест теперь выходит из
+    touch-режима (как при подключённом пульте/клавиатуре). На ТВ этот тест проходил и до исправления.
+  - Итог тестов на эмуляторе проверяется `grep` (вместо `rg`), отфильтрованный logcat печатается в журнал задания.
+- [Transfer acceptance #40717168837](https://github.com/georg1995105-hash/android-file-manager/actions/runs/40717168837) — SUCCESS:
+  build (JVM ядро 26 проверок, HTTP framing/Origin/Host, JS SHA-256, модульные тесты, debug + подписанный release),
+  phone API 35 и TV API 30: `TransferIntegrationTest` (настоящий Android TLS, пиннинг, отказ неверному пину и
+  без токена, код + подтверждение сопряжения, подтверждение файла, отправка 2 МиБ + 23 байта и обратное получение
+  с побайтовой SHA-256) и `TransferUiTest` (LEANBACK_LAUNCHER, раздел «Передача», включение/новый код/остановка
+  через D-pad Center), NSD-объявление `_pfmtransfer._tcp` видно в logcat обоих эмуляторов.
+- Не подтверждено (нужны физические устройства): реальная Wi-Fi передача между разными устройствами телефон ↔ ТВ ↔ ПК,
+  mDNS на реальном роутере, сканирование QR камерой, диалог сертификата в Safari/Firefox/Edge на Windows/macOS,
+  пульт на всех прежних экранах, гигабайтные файлы, обрыв при реальной потере Wi-Fi. Обрыв/продолжение проверены
+  только на стенде (JVM и Chromium), не между устройствами.
 
 ## Передача и Android TV — 0.10.0, исходное состояние Astra (2026-10-28)
 

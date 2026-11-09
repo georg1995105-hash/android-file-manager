@@ -54,7 +54,7 @@ class UiConfigTest {
         assertEquals("image", c.tiles.first().icon) // неизвестный значок → по умолчанию
         assertEquals("purple", c.tiles.first().color)
         assertEquals(SectionId.entries.size, c.tiles.size)
-        assertEquals(listOf("AUDIO", "TRANSFER"), c.tiles.drop(1).filter { it.visible }.map { it.id }) // новый раздел доступен после обновления
+        assertEquals(listOf("TRANSFER", "AUDIO"), c.tiles.drop(1).filter { it.visible }.map { it.id }) // новый раздел доступен после обновления
         assertEquals(listOf("RECENT"), c.tabs.map { it.id })
         assertEquals("star", c.tabs.first().icon)
     }

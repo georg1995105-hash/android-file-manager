@@ -140,11 +140,36 @@ jobs:
           git commit -qm "Скриншоты для ${GITHUB_SHA::7}"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-screenshots
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload signed APK artifact
+        id: upload_signed_apk
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.name }}
           path: dist/
           retention-days: 30
+
+      # GitHub Actions artifact quota is separate from GitHub Releases storage.
+      # Do not lose a validated, owner-signed release just because artifact storage is full.
+      - name: Publish release APK when artifact storage is full
+        if: steps.upload_signed_apk.outcome == 'failure' && env.HAS_RELEASE_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          APK_FILES=(dist/*.apk)
+          if [ "${#APK_FILES[@]}" -eq 0 ]; then
+            echo "::error::No signed APK in dist/"
+            exit 1
+          fi
+          TAG="v${{ steps.apk.outputs.version_name }}-vc${{ steps.apk.outputs.version_code }}-${GITHUB_SHA::7}"
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Мои файлы ${{ steps.apk.outputs.version_name }} — подписанный APK" \
+            --notes "Подписанная release-сборка, versionCode ${{ steps.apk.outputs.version_code }}. Можно обновлять предыдущий APK, подписанный тем же release-ключом. Создано как резервный канал, поскольку GitHub Actions artifact storage переполнен."
 
       - name: Test reports
         if: failure()

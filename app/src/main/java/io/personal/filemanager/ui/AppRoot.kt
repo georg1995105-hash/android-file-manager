@@ -58,6 +58,7 @@ import io.personal.filemanager.ui.settings.TabSettingsScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
 import io.personal.filemanager.ui.theme.AppColors
+import io.personal.filemanager.ui.viewer.AudioPlayerScreen
 import io.personal.filemanager.ui.viewer.MediaViewerScreen
 import io.personal.filemanager.ui.viewer.TextViewerScreen
 import io.personal.filemanager.ui.viewer.PdfViewerScreen
@@ -92,6 +93,11 @@ fun AppRoot() {
                             .map { it.path }
                             .ifEmpty { listOf(entry.path) }
                         nav.navigate(if (entry.kind == FileKind.IMAGE) Routes.image(entry.path) else Routes.video(entry.path))
+                    }
+                    FileKind.AUDIO -> {
+                        AudioViewerSession.paths = siblings.filter { it.kind == FileKind.AUDIO }
+                            .map { it.path }.ifEmpty { listOf(entry.path) }
+                        nav.navigate(Routes.audio(entry.path))
                     }
                     FileKind.TEXT -> nav.navigate(Routes.text(entry.path))
                     FileKind.APK -> nav.navigate(Routes.apk(entry.path))
@@ -175,6 +181,10 @@ fun AppRoot() {
                         Routes.VIDEO,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> MediaViewerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    composable(
+                        Routes.AUDIO,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> AudioPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
                     composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
                     composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
                     composable(Routes.TRASH) { TrashScreen() }
@@ -218,6 +228,7 @@ private fun SectionScreen(id: SectionId) {
         SectionId.RECENT -> MediaListScreen(id, MediaCategory.RECENT)
         SectionId.PHOTOS -> MediaListScreen(id, MediaCategory.PHOTOS)
         SectionId.VIDEOS -> MediaListScreen(id, MediaCategory.VIDEOS)
+        SectionId.AUDIO -> MediaListScreen(id, MediaCategory.AUDIO)
         SectionId.DOCUMENTS -> MediaListScreen(id, MediaCategory.DOCUMENTS)
         SectionId.ARCHIVES -> MediaListScreen(id, MediaCategory.ARCHIVES)
         SectionId.APPS -> AppsScreen()

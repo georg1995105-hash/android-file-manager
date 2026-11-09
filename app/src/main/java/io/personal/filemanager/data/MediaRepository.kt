@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.conflate
 
 /** Наборы файлов, которые берутся из индекса Android (MediaStore), а не сканированием накопителя. */
 enum class MediaCategory {
-    RECENT, PHOTOS, VIDEOS, DOCUMENTS, ARCHIVES, APKS, DOWNLOADS
+    RECENT, PHOTOS, VIDEOS, AUDIO, DOCUMENTS, ARCHIVES, APKS, DOWNLOADS
 }
 
 enum class MediaSort { ADDED, MODIFIED, SIZE, NAME }
@@ -61,6 +61,7 @@ class MediaRepository(context: Context) {
             MediaCategory.RECENT -> null
             MediaCategory.PHOTOS -> Selection("${FileColumns.MEDIA_TYPE} = ?", arrayOf(FileColumns.MEDIA_TYPE_IMAGE.toString()))
             MediaCategory.VIDEOS -> Selection("${FileColumns.MEDIA_TYPE} = ?", arrayOf(FileColumns.MEDIA_TYPE_VIDEO.toString()))
+            MediaCategory.AUDIO -> Selection("${FileColumns.MEDIA_TYPE} = ?", arrayOf(FileColumns.MEDIA_TYPE_AUDIO.toString()))
             MediaCategory.DOCUMENTS -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.documentExtensions.map { "%.$it" })
             MediaCategory.ARCHIVES -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.archiveLikePatterns)
             MediaCategory.APKS -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.apkExtensions.map { "%.$it" })

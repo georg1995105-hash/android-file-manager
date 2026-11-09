@@ -16,6 +16,7 @@ enum class SectionId(
     RECENT("Новые", "schedule", "green", listOf("schedule", "event", "access_time", "history", "star")),
     PHOTOS("Фото", "image", "purple", listOf("image", "photo", "landscape", "photo_camera", "camera")),
     VIDEOS("Видео", "movie", "red", listOf("movie", "play_arrow", "videocam", "movie_creation", "play_circle")),
+    AUDIO("Аудио", "music_note", "teal", listOf("music_note", "play_circle", "play_arrow", "folder", "audio_file")),
     DOCUMENTS("Документы", "description", "blue_light", listOf("description", "notes", "article", "menu_book", "text_snippet")),
     ARCHIVES("Архивы", "folder_zip", "orange", listOf("folder_zip", "folder", "inventory", "storage", "archive")),
     APPS("Приложения", "android", "green", listOf("android", "apps", "install_mobile", "widgets", "smartphone")),
@@ -42,7 +43,7 @@ object IconKeys {
         "android", "apps", "install_mobile", "widgets", "smartphone",
         "sticky_note", "edit_note", "bookmark", "attach_file", "push_pin",
         "link", "public", "language", "code", "terminal", "data_object",
-        "star", "favorite", "grade", "home", "work", "lock", "music_note", "sd_storage", "cloud", "inbox",
+        "star", "favorite", "grade", "home", "work", "lock", "music_note", "audio_file", "sd_storage", "cloud", "inbox",
     )
 }
 

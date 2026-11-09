@@ -206,6 +206,7 @@ private fun emptyText(category: MediaCategory) = when (category) {
     MediaCategory.RECENT -> "Новых файлов не найдено."
     MediaCategory.PHOTOS -> "Фотографии не найдены."
     MediaCategory.VIDEOS -> "Видео не найдены."
+    MediaCategory.AUDIO -> "Аудиофайлы не найдены."
     MediaCategory.DOCUMENTS -> "Документы (PDF, Office, TXT, MD и др.) не найдены."
     MediaCategory.ARCHIVES -> "Архивы (ZIP, 7z, RAR, TAR и др.) не найдены."
     MediaCategory.APKS -> "APK-файлы не найдены."

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MovieCreation
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Photo
@@ -126,6 +127,7 @@ object IconCatalog {
         "work" to Icons.Filled.Work,
         "lock" to Icons.Filled.Lock,
         "music_note" to Icons.Filled.MusicNote,
+        "audio_file" to Icons.Filled.AudioFile,
         "sd_storage" to Icons.Filled.SdStorage,
         "cloud" to Icons.Filled.Cloud,
         "inbox" to Icons.Filled.Inbox,

@@ -12,6 +12,7 @@ object Routes {
     const val IMAGE = "image?path={path}"
     const val TEXT = "text?path={path}"
     const val VIDEO = "video?path={path}"
+    const val AUDIO = "audio?path={path}"
     const val SETTINGS_TILES = "settings/tiles"
     const val SETTINGS_TABS = "settings/tabs"
     const val TRASH = "trash"
@@ -26,6 +27,7 @@ object Routes {
     fun image(path: String) = "image?path=${Uri.encode(path)}"
     fun text(path: String) = "text?path=${Uri.encode(path)}"
     fun video(path: String) = "video?path=${Uri.encode(path)}"
+    fun audio(path: String) = "audio?path=${Uri.encode(path)}"
     fun archive(path: String) = "archive?path=${Uri.encode(path)}"
     fun apk(path: String) = "apk?path=${Uri.encode(path)}"
     fun note(id: Long) = "note?id=$id"
@@ -51,4 +53,9 @@ val LocalNavigator = staticCompositionLocalOf<AppNavigator> { error("AppNavigato
 object MediaViewerSession {
     @Volatile
     var paths: List<String> = emptyList()
+}
+
+/** Соседние аудиофайлы для переключения треков; хранится только в процессе. */
+object AudioViewerSession {
+    @Volatile var paths: List<String> = emptyList()
 }

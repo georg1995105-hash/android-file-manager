@@ -59,6 +59,7 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                     SectionId.DOWNLOADS to MediaCategory.DOWNLOADS,
                     SectionId.PHOTOS to MediaCategory.PHOTOS,
                     SectionId.VIDEOS to MediaCategory.VIDEOS,
+                    SectionId.AUDIO to MediaCategory.AUDIO,
                     SectionId.DOCUMENTS to MediaCategory.DOCUMENTS,
                     SectionId.ARCHIVES to MediaCategory.ARCHIVES,
                 ).map { (id, cat) -> async { id to runCatching { container.media.stats(cat) }.getOrNull() } }

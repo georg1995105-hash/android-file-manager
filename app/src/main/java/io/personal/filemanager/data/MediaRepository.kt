@@ -61,7 +61,11 @@ class MediaRepository(context: Context) {
             MediaCategory.RECENT -> null
             MediaCategory.PHOTOS -> Selection("${FileColumns.MEDIA_TYPE} = ?", arrayOf(FileColumns.MEDIA_TYPE_IMAGE.toString()))
             MediaCategory.VIDEOS -> Selection("${FileColumns.MEDIA_TYPE} = ?", arrayOf(FileColumns.MEDIA_TYPE_VIDEO.toString()))
-            MediaCategory.AUDIO -> Selection("${FileColumns.MEDIA_TYPE} = ?", arrayOf(FileColumns.MEDIA_TYPE_AUDIO.toString()))
+            MediaCategory.AUDIO -> {
+                val extensions = likeAny(FileColumns.DISPLAY_NAME, FileTypes.audioExtensions.map { "%.$it" })
+                Selection("(${FileColumns.MEDIA_TYPE} = ? OR ${extensions.sql})",
+                    arrayOf(FileColumns.MEDIA_TYPE_AUDIO.toString()) + extensions.args)
+            }
             MediaCategory.DOCUMENTS -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.documentExtensions.map { "%.$it" })
             MediaCategory.ARCHIVES -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.archiveLikePatterns)
             MediaCategory.APKS -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.apkExtensions.map { "%.$it" })

@@ -103,7 +103,7 @@ data class UiConfig(
         /** Порядок плиток по макету; «На ТВ» заменён на «Избранное». Ссылки и Файлы скрыты. */
         private val defaultVisibleTiles = listOf(
             SectionId.DOWNLOADS, SectionId.RECENT, SectionId.PHOTOS,
-            SectionId.VIDEOS, SectionId.DOCUMENTS, SectionId.ARCHIVES,
+            SectionId.VIDEOS, SectionId.AUDIO, SectionId.DOCUMENTS, SectionId.ARCHIVES,
             SectionId.APPS, SectionId.FAVORITES, SectionId.NOTES, SectionId.TRANSFER,
         )
 
@@ -163,7 +163,7 @@ object UiConfigCodec {
                 color = tile.color.takeIf { it in ColorKeys.all } ?: id.defaultColor,
             )
         }
-        val missing = SectionId.entries.filter { it !in seenTiles }.map { UiConfig.defaultTile(it, it == SectionId.TRANSFER) }
+        val missing = SectionId.entries.filter { it !in seenTiles }.map { UiConfig.defaultTile(it, it == SectionId.TRANSFER || it == SectionId.AUDIO) }
 
         val seenTabs = mutableSetOf<SectionId>()
         val tabs = config.tabs.mapNotNull { tab ->

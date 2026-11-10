@@ -95,6 +95,17 @@ fun AppRoot() {
         ))
     var showCreateDialog by remember { mutableStateOf(false) }
 
+    // Навигацию выполняем после снятия модального окна из композиции:
+    // иначе NavBackStackEntry может остаться в INITIALIZED во время теста/ухода Activity.
+    var pendingEditPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(showCreateDialog, pendingEditPath) {
+        val next = pendingEditPath ?: return@LaunchedEffect
+        if (!showCreateDialog) {
+            pendingEditPath = null
+            nav.navigate(Routes.edit(next)) { launchSingleTop = true }
+        }
+    }
+
     val navigator = remember(nav) {
         object : AppNavigator {
             override fun openSection(id: SectionId) {
@@ -259,7 +270,7 @@ fun AppRoot() {
                     },
                     onCreated = { created ->
                         container.operations.notify(if (created.isDirectory) "Папка создана" else "Файл создан")
-                        if (!created.isDirectory) navigator.open(Routes.edit(created.path))
+                        if (!created.isDirectory) pendingEditPath = created.path
                     },
                 )
             }

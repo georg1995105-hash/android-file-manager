@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.personal.filemanager.AppContainer
 import io.personal.filemanager.data.CreateFolderResult
+import io.personal.filemanager.core.FileKind
 import io.personal.filemanager.data.FolderResult
 import io.personal.filemanager.data.settings.BrowserPrefs
 import io.personal.filemanager.data.settings.BrowserSort
@@ -73,6 +74,8 @@ import io.personal.filemanager.ui.components.DateShown
 import io.personal.filemanager.ui.components.EmptyState
 import io.personal.filemanager.ui.components.LoadingBox
 import io.personal.filemanager.ui.components.RefreshWhileVisible
+import io.personal.filemanager.ui.components.QuickCreateDialog
+import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.components.card
 import io.personal.filemanager.ui.components.rememberAllFilesAccess
@@ -137,7 +140,6 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     var path by rememberSaveable(rootPath) { mutableStateOf(rootPath) }
     var sortMenu by remember { mutableStateOf(false) }
     var createMenu by remember { mutableStateOf(false) }
-    var createTemplate by remember { mutableStateOf<NewEntryTemplate?>(null) }
     val view = rememberFileView(viewKey)
 
     // Доступ проверяется системой при каждом чтении, поэтому после выдачи разрешения список появится сам.
@@ -264,102 +266,22 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     }
 
     if (createMenu) {
-        NewEntryPicker(
+        val storage = appContainer().storage
+        QuickCreateDialog(
+            initialFolder = path,
+            rootFolder = storage.rootPath,
+            downloadsFolder = storage.downloadsPath,
             onDismiss = { createMenu = false },
-            onChoose = { selected -> createMenu = false; createTemplate = selected },
-        )
-    }
-    createTemplate?.let { selected ->
-        CreateEntryDialog(
-            template = selected,
-            onDismiss = { createTemplate = null },
-            onCreate = { name ->
-                val res = if (selected.isFolder) vm.createFolder(path, name) else vm.createFile(path, name)
-                when (res) {
-                    is CreateFolderResult.Created -> { vm.load(path); null }
-                    is CreateFolderResult.Invalid -> res.reason
-                    CreateFolderResult.AlreadyExists -> "Файл или папка с таким именем уже есть"
-                    CreateFolderResult.Failed -> "Не удалось создать ${if (selected.isFolder) "папку" else "файл"}".also {
-                        FileActions.toast(context, it)
-                    }
+            onCreate = { folder, isFolder, name ->
+                if (isFolder) vm.createFolder(folder, name) else vm.createFile(folder, name)
+            },
+            onCreated = { created ->
+                vm.load(path)
+                if (!created.isDirectory) {
+                    // Новый текстовый файл сразу готов к вводу, без пустого экрана просмотра.
+                    navigator.open(Routes.edit(created.path))
                 }
             },
         )
     }
-}
-
-/** Шаблоны задают только имя/расширение. Произвольное расширение можно ввести вручную. */
-private enum class NewEntryTemplate(val label: String, val suggestedName: String, val isFolder: Boolean = false) {
-    FOLDER("Новая папка", "", true),
-    TEXT("Текстовый файл (.txt)", "Новый файл.txt"),
-    MARKDOWN("Markdown (.md)", "README.md"),
-    JSON("JSON (.json)", "config.json"),
-    XML("XML (.xml)", "config.xml"),
-    YAML("YAML (.yaml)", "config.yaml"),
-    CONFIG("Конфигурация (.conf)", "config.conf"),
-    CUSTOM("Другой тип файла", ""),
-}
-
-@Composable
-private fun NewEntryPicker(onDismiss: () -> Unit, onChoose: (NewEntryTemplate) -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Создать") },
-        text = {
-            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                NewEntryTemplate.entries.forEach { template ->
-                    TextButton(onClick = { onChoose(template) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(template.label, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    )
-}
-
-/** Диалог создания папки либо файла. onCreate возвращает ошибку или null при успехе. */
-@Composable
-private fun CreateEntryDialog(
-    template: NewEntryTemplate,
-    onDismiss: () -> Unit,
-    onCreate: suspend (String) -> String?,
-) {
-    var name by rememberSaveable(template) { mutableStateOf(template.suggestedName) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val focus = remember { FocusRequester() }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (template.isFolder) "Новая папка" else "Новый файл") },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it; error = null },
-                singleLine = true,
-                label = { Text(if (template.isFolder) "Имя папки" else "Имя файла с расширением") },
-                isError = error != null,
-                supportingText = { error?.let { Text(it) } },
-                modifier = Modifier.focusRequester(focus),
-            )
-            LaunchedEffect(Unit) { focus.requestFocus() }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = !busy,
-                onClick = {
-                    busy = true
-                    scope.launch {
-                        val err = onCreate(name)
-                        busy = false
-                        if (err == null) onDismiss() else error = err
-                    }
-                },
-            ) { Text("Создать") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    )
 }

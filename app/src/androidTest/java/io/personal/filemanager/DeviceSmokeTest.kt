@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextClearance
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.FixMethodOrder
 import org.junit.Rule
@@ -64,6 +66,36 @@ class DeviceSmokeTest {
         waitText("Мои файлы")
         waitText("Внутренняя память")
         shot("d01_home")
+    }
+
+    /** Реальная проверка нового сценария: создать JSON, вставить, форматировать, сохранить. */
+    @Test
+    fun aa_createAndEditJson() {
+        val file = File("/sdcard/Download/pfm-editor-ci-test.json")
+        // Только наш одноразовый тестовый файл; пользовательские данные не трогаем.
+        if (file.exists()) file.delete()
+        try {
+            waitText("Мои файлы")
+            compose.onNodeWithContentDescription("Создать файл или папку").performClick()
+            compose.onNodeWithText("JSON").performClick()
+            compose.onNodeWithText("Имя файла с расширением").performTextClearance()
+            compose.onNodeWithText("Имя файла с расширением").performTextInput(file.name)
+            compose.onNodeWithText("Создать").performClick()
+            compose.waitUntil(15_000) {
+                compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("""{"server":{"port":443,"active":true}}""")
+            compose.onNodeWithText("Форматировать JSON").performClick()
+            compose.onNodeWithContentDescription("Сохранить").performClick()
+            compose.waitUntil(15_000) {
+                file.exists() && file.readText().contains("\n") &&
+                    file.readText().contains("\"port\": 443")
+            }
+            shot("d01b_json_editor")
+        } finally {
+            // Не удаляем чужой файл, поскольку имя фиксировано только в тестовом окружении.
+            file.delete()
+        }
     }
 
     @Test

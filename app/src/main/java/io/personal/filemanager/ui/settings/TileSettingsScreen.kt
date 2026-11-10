@@ -219,6 +219,8 @@ fun TileSettingsContent(
                     Switch(checked = showTrashShortcut, onCheckedChange = onTrashShortcut)
                 }
             }
+            TextButton(onClick = { navigator.open(io.personal.filemanager.ui.Routes.TRASH) },
+                modifier = Modifier.padding(horizontal = 16.dp)) { Text("Открыть корзину") }
             Spacer(Modifier.height(8.dp))
             ReorderableColumn(
                 items = list,

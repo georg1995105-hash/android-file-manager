@@ -4,6 +4,8 @@ import io.personal.filemanager.ui.theme.AppColors
 import io.personal.filemanager.core.pluralRu
 import androidx.compose.foundation.layout.heightIn
 import android.widget.Toast
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.text.input.PasswordVisualTransformation

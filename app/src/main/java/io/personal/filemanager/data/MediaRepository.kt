@@ -85,7 +85,7 @@ class MediaRepository(context: Context) {
         return resolver.query(filesUri, columns, args, null)
     }
 
-    private fun Cursor.readEntries(skipHidden: Boolean): List<FileEntry> {
+    private fun Cursor.readEntries(skipHidden: Boolean, maxItems: Int): List<FileEntry> {
         val iData = getColumnIndexOrThrow(dataColumn)
         val iName = getColumnIndexOrThrow(FileColumns.DISPLAY_NAME)
         val iSize = getColumnIndexOrThrow(FileColumns.SIZE)
@@ -93,13 +93,14 @@ class MediaRepository(context: Context) {
         val iModified = getColumnIndexOrThrow(FileColumns.DATE_MODIFIED)
         val iMime = getColumnIndexOrThrow(FileColumns.MIME_TYPE)
         val iId = getColumnIndex(FileColumns._ID)
-        val result = ArrayList<FileEntry>(count)
+        val result = ArrayList<FileEntry>(maxItems.coerceAtMost(512))
         while (moveToNext()) {
             val path = getString(iData) ?: continue
             // MediaScannerConnection is asynchronous: do not show stale index rows.
             if (!File(path).isFile) continue
             if (skipHidden && FileSystemRepository.hasHiddenSegment(path)) continue
             val name = getString(iName) ?: path.substringAfterLast('/')
+            if (result.size >= maxItems) break
             result += FileEntry(
                 path = path,
                 name = name,
@@ -121,7 +122,7 @@ class MediaRepository(context: Context) {
             MediaSort.SIZE -> "${FileColumns.SIZE} DESC"
             MediaSort.NAME -> "${FileColumns.DISPLAY_NAME} ASC"
         }
-        val entries = query(selectionFor(category), sortOrder, limit)?.use { it.readEntries(skipHidden = true) }.orEmpty()
+        val entries = query(selectionFor(category), sortOrder, 0)?.use { it.readEntries(skipHidden = true, maxItems = limit) }.orEmpty()
         // SQLite сравнивает имена побайтно (заглавные раньше строчных) — итог упорядочиваем без учёта регистра.
         return if (sort == MediaSort.NAME) entries.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }) else entries
     }
@@ -135,7 +136,7 @@ class MediaRepository(context: Context) {
             "${FileColumns.MIME_TYPE} IS NOT NULL AND ${FileColumns.DISPLAY_NAME} LIKE ? ESCAPE '\\'",
             arrayOf("%$escaped%"),
         )
-        return query(selection, "${FileColumns.DATE_MODIFIED} DESC", limit)?.use { it.readEntries(skipHidden = false) }.orEmpty()
+        return query(selection, "${FileColumns.DATE_MODIFIED} DESC", 0)?.use { it.readEntries(skipHidden = false, maxItems = limit) }.orEmpty()
     }
 
     /** Размер и количество файлов категории (для плиток главной). */

@@ -184,6 +184,41 @@ class ArchiveViewModel(private val container: AppContainer, val path: String) : 
         }
     }
 
+    /** Предоставить один элемент архива другим приложениям, не распаковывая архив в хранилище пользователя.
+     * Файл живёт в системном кэше, доступ выдаётся только по FileProvider URI. */
+    fun share(item: ArchiveItem, onReady: (File) -> Unit, onError: (String) -> Unit) {
+        if (needsPasswordForData) {
+            requestPassword(false)
+            return
+        }
+        if (item.isDirectory) return onError("Папку можно отправить после распаковки")
+        if (_state.value.previewBusy) return
+        _state.value = _state.value.copy(previewBusy = true)
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val root = File(container.app.cacheDir, "archive-shared").apply { mkdirs() }
+                val free = root.usableSpace - 50_000_000L
+                if (free <= 0) return@withContext Pair<File?, String?>(null, "Недостаточно свободной памяти")
+                val limits = ExtractLimits(maxTotalBytes = minOf(free, 512L * 1024L * 1024L))
+                val extracted = container.operations.archives.extract(
+                    File(path), root, password?.copyOf(), setOf(item.path), limits,
+                    folderName = "share-${System.nanoTime()}",
+                )
+                when {
+                    extracted.passwordRequired || extracted.wrongPassword -> Pair<File?, String?>(null, "Нужен пароль архива")
+                    extracted.ok -> {
+                        val relative = ArchiveFormats.safeRelativePath(item.path)
+                        val file = relative?.let { File(extracted.outputDir, it) }
+                        if (file?.isFile == true) file to null else null to "Файл не найден в архиве"
+                    }
+                    else -> null to (extracted.error ?: "Не удалось подготовить файл")
+                }
+            }
+            _state.value = _state.value.copy(previewBusy = false)
+            if (result.first != null) onReady(result.first!!) else onError(result.second ?: "Ошибка")
+        }
+    }
+
     override fun onCleared() {
         password?.fill('\u0000')
         previewRoot.deleteRecursively()
@@ -327,10 +362,12 @@ fun ArchiveScreen(path: String) {
                             TextButton(
                                 enabled = !state.previewBusy,
                                 onClick = {
-                                    vm.preview(chosen,
-                                        onReady = { file -> FileActions.share(context, listOf(FileEntry.from(file))) },
+                                    vm.share(chosen,
+                                        onReady = { file ->
+                                            FileActions.share(context, listOf(FileEntry.from(file)))
+                                            selected = emptySet()
+                                        },
                                         onError = { FileActions.toast(context, it) })
-                                    selected = emptySet()
                                 },
                             ) { Text("Поделиться") }
                         }

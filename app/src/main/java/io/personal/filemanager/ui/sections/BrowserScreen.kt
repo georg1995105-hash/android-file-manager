@@ -4,11 +4,13 @@ import io.personal.filemanager.ui.components.rememberFileView
 import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.FilesPane
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -114,6 +117,9 @@ class BrowserViewModel(private val container: AppContainer) : ViewModel() {
 
     suspend fun createFolder(parent: String, name: String): CreateFolderResult =
         withContext(Dispatchers.IO) { container.fileSystem.createFolder(parent, name) }
+
+    suspend fun createFile(parent: String, name: String): CreateFolderResult =
+        withContext(Dispatchers.IO) { container.fileSystem.createFile(parent, name) }
 }
 
 /**
@@ -130,7 +136,8 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     var path by rememberSaveable(rootPath) { mutableStateOf(rootPath) }
     var sortMenu by remember { mutableStateOf(false) }
-    var createDialog by remember { mutableStateOf(false) }
+    var createMenu by remember { mutableStateOf(false) }
+    var createTemplate by remember { mutableStateOf<NewEntryTemplate?>(null) }
     val view = rememberFileView(viewKey)
 
     // Доступ проверяется системой при каждом чтении, поэтому после выдачи разрешения список появится сам.
@@ -170,8 +177,8 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                     Icon(Icons.Filled.Search, contentDescription = "Поиск")
                 }
                 if (hasAccess) {
-                    IconButton(onClick = { createDialog = true }) {
-                        Icon(Icons.Filled.CreateNewFolder, contentDescription = "Новая папка")
+                    IconButton(onClick = { createMenu = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = "Создать файл или папку")
                     }
                 }
                 ViewModeButton(view)
@@ -247,48 +254,92 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                         contentDescription = if (prefs.showHidden) "Скрыть скрытые файлы" else "Показать скрытые файлы",
                     )
                 }
-                TextButton(onClick = { createDialog = true }) {
-                    Icon(Icons.Filled.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
+                TextButton(onClick = { createMenu = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Папка")
+                    Text("Создать")
                 }
             }
         }
     }
 
-    if (createDialog) {
-        CreateFolderDialog(
-            onDismiss = { createDialog = false },
+    if (createMenu) {
+        NewEntryPicker(
+            onDismiss = { createMenu = false },
+            onChoose = { selected -> createMenu = false; createTemplate = selected },
+        )
+    }
+    createTemplate?.let { selected ->
+        CreateEntryDialog(
+            template = selected,
+            onDismiss = { createTemplate = null },
             onCreate = { name ->
-                val res = vm.createFolder(path, name)
+                val res = if (selected.isFolder) vm.createFolder(path, name) else vm.createFile(path, name)
                 when (res) {
                     is CreateFolderResult.Created -> { vm.load(path); null }
                     is CreateFolderResult.Invalid -> res.reason
-                    CreateFolderResult.AlreadyExists -> "Папка или файл с таким именем уже есть"
-                    CreateFolderResult.Failed -> "Не удалось создать папку".also { FileActions.toast(context, it) }
+                    CreateFolderResult.AlreadyExists -> "Файл или папка с таким именем уже есть"
+                    CreateFolderResult.Failed -> "Не удалось создать ${if (selected.isFolder) "папку" else "файл"}".also {
+                        FileActions.toast(context, it)
+                    }
                 }
             },
         )
     }
 }
 
-/** Диалог создания папки. onCreate возвращает текст ошибки или null при успехе. */
+/** Шаблоны задают только имя/расширение. Произвольное расширение можно ввести вручную. */
+private enum class NewEntryTemplate(val label: String, val suggestedName: String, val isFolder: Boolean = false) {
+    FOLDER("Новая папка", "", true),
+    TEXT("Текстовый файл (.txt)", "Новый файл.txt"),
+    MARKDOWN("Markdown (.md)", "README.md"),
+    JSON("JSON (.json)", "config.json"),
+    XML("XML (.xml)", "config.xml"),
+    YAML("YAML (.yaml)", "config.yaml"),
+    CONFIG("Конфигурация (.conf)", "config.conf"),
+    CUSTOM("Другой тип файла", ""),
+}
+
 @Composable
-private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: suspend (String) -> String?) {
-    var name by rememberSaveable { mutableStateOf("") }
+private fun NewEntryPicker(onDismiss: () -> Unit, onChoose: (NewEntryTemplate) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Создать") },
+        text = {
+            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                NewEntryTemplate.entries.forEach { template ->
+                    TextButton(onClick = { onChoose(template) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(template.label, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    )
+}
+
+/** Диалог создания папки либо файла. onCreate возвращает ошибку или null при успехе. */
+@Composable
+private fun CreateEntryDialog(
+    template: NewEntryTemplate,
+    onDismiss: () -> Unit,
+    onCreate: suspend (String) -> String?,
+) {
+    var name by rememberSaveable(template) { mutableStateOf(template.suggestedName) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Новая папка") },
+        title = { Text(if (template.isFolder) "Новая папка" else "Новый файл") },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it; error = null },
                 singleLine = true,
-                label = { Text("Имя папки") },
+                label = { Text(if (template.isFolder) "Имя папки" else "Имя файла с расширением") },
                 isError = error != null,
                 supportingText = { error?.let { Text(it) } },
                 modifier = Modifier.focusRequester(focus),

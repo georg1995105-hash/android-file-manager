@@ -38,6 +38,14 @@ object Routes {
     fun browser(path: String) = "browser?path=${Uri.encode(path)}"
 }
 
+/** Соседний раздел для свайпа, только среди реально выбранных вкладок. */
+fun adjacentTab(tabs: List<SectionId>, current: SectionId?, left: Boolean): SectionId? {
+    val i = tabs.indexOf(current)
+    if (i < 0) return null
+    val next = i + if (left) 1 else -1
+    return tabs.getOrNull(next)
+}
+
 interface AppNavigator {
     fun openSection(id: SectionId)
     fun openFile(entry: FileEntry, siblings: List<FileEntry> = emptyList())

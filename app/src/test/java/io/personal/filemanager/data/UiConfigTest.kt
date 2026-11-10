@@ -7,6 +7,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UiConfigTest {
+    @org.junit.Test
+    fun trashShortcutPreferenceSurvivesSerialization() {
+        val config = io.personal.filemanager.data.settings.UiConfig.defaults().copy(showTrashShortcut = false)
+        val restored = io.personal.filemanager.data.settings.UiConfigCodec.decode(
+            io.personal.filemanager.data.settings.UiConfigCodec.encode(config))
+        org.junit.Assert.assertFalse(restored.showTrashShortcut)
+    }
+
     @Test
     fun defaultsKeepExistingOrderAndAppendTransfer() {
         val d = UiConfig.defaults()

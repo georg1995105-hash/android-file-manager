@@ -177,6 +177,18 @@ class FileOperationsTest {
         assertEquals("Папка (1)", uniqueTarget(dst.also { File(it, "Папка").mkdir() }, "Папка").name)
     }
 
+    /** Массовое удаление не должно оставлять файлы на диске или ложно сообщать об успехе. */
+    @Test
+    fun move299AudioFilesToTrash() {
+        val audio = tmp.newFolder("audio-bulk")
+        val files = (1..299).map { n -> File(audio, "voice-$n.opus").apply { writeBytes(byteArrayOf(n.toByte())) } }
+        val report = ops.moveToTrash(files)
+        assertTrue(report.failed.toString(), report.ok)
+        assertEquals(299, report.done.size)
+        assertTrue(audio.listFiles().isNullOrEmpty())
+        assertEquals(299, trash.list(listOf(trashRoot)).size)
+    }
+
     @Test
     fun volumeRoots() {
         assertEquals("/storage/emulated/0", FileOperations.defaultVolumeRoot(File("/storage/emulated/0/Download/x")))

@@ -72,7 +72,7 @@ import io.personal.filemanager.ui.viewer.PdfViewerScreen
 import io.personal.filemanager.ui.viewer.findActivity
 
 @Composable
-fun AppRoot() {
+fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
     val nav = rememberNavController()
     val context = LocalContext.current
     val container = appContainer()
@@ -154,6 +154,12 @@ fun AppRoot() {
                 if (!nav.popBackStack()) context.findActivity()?.finish()
             }
         }
+    }
+
+    LaunchedEffect(incomingPath) {
+        val path = incomingPath ?: return@LaunchedEffect
+        onIncomingConsumed()
+        navigator.openFile(FileEntry.from(File(path)))
     }
 
     CompositionLocalProvider(LocalNavigator provides navigator, LocalCreateDialog provides openCreateDialog) {

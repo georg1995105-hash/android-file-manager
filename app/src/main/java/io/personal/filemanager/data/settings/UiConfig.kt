@@ -96,6 +96,7 @@ data class UiConfig(
     val viewerControls: List<ControlConfig> = defaultViewerControls(),
     val viewModes: Map<String, String> = emptyMap(),
     val gridColumns: Map<String, Int> = emptyMap(),
+    val showTrashShortcut: Boolean = true,
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -186,6 +187,7 @@ object UiConfigCodec {
 
         return UiConfig(
             version = UiConfig.CURRENT_VERSION,
+            showTrashShortcut = config.showTrashShortcut,
             tiles = tiles + missing,
             tabs = tabs.ifEmpty { UiConfig.defaultTabsConfig() },
             tilesPerRow = config.tilesPerRow.takeIf { it in TILES_PER_ROW_OPTIONS } ?: TILES_PER_ROW_AUTO,

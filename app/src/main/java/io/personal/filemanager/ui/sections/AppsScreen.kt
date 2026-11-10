@@ -8,6 +8,8 @@ import io.personal.filemanager.ui.components.ListSearchButton
 import io.personal.filemanager.ui.components.rememberFileView
 import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.tapClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -114,11 +117,13 @@ fun AppsScreen() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun InstalledAppsList(search: ListSearchState) {
     val context = LocalContext.current
     val vm = appSharedViewModel(key = "installed-apps") { AppsViewModel(it) }
     val apps by vm.apps.collectAsStateWithLifecycle()
+    var actionsFor by remember { mutableStateOf<InstalledApp?>(null) }
     RefreshWhileVisible(null) { vm.refresh() }
     val all = apps
     val list = all?.filter { search.matches(it.label, it.packageName) }
@@ -139,10 +144,13 @@ private fun InstalledAppsList(search: ListSearchState) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .tapClickable {
-                            val intent = appLaunch(context, app.packageName)
-                            if (intent == null) FileActions.toast(context, "Приложение нельзя запустить")
-                        }
+                        .combinedClickable(
+                            onClick = {
+                                if (appLaunch(context, app.packageName) == null)
+                                    FileActions.toast(context, "Приложение нельзя запустить")
+                            },
+                            onLongClick = { actionsFor = app },
+                        )
                         .padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -161,11 +169,11 @@ private fun InstalledAppsList(search: ListSearchState) {
                             maxLines = 1,
                         )
                     }
-                    AppMenu(app)
                 }
             }
         }
     }
+    actionsFor?.let { app -> AppMenu(app, onDismiss = { actionsFor = null }) }
 }
 
 private fun appLaunch(context: android.content.Context, packageName: String): android.content.Intent? {
@@ -191,46 +199,49 @@ private fun AppIcon(packageName: String) {
     }
 }
 
-/** Действия с установленным приложением: экспорт APK/набора, отправка, системные сведения. */
+/** Контекстное меню по удержанию приложения, без `⋮` в каждом ряду. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun AppMenu(app: InstalledApp) {
+private fun AppMenu(app: InstalledApp, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val container = appContainer()
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "Действия с «${app.label}»")
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text("Запустить") },
-                onClick = {
-                    open = false
-                    if (appLaunch(context, app.packageName) == null) FileActions.toast(context, "Приложение нельзя запустить")
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(if (app.apkPaths.size > 1) "Экспорт набора (.apks)" else "Экспорт APK") },
-                onClick = {
-                    open = false
-                    val dest = File(container.storage.downloadsPath, EXPORT_DIR)
-                    container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest)
-                },
-            )
-            DropdownMenuItem(
-                text = { Text("Поделиться APK") },
-                onClick = {
-                    open = false
-                    val dest = File(context.cacheDir, "shared-apk").apply { deleteRecursively(); mkdirs() }
-                    container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest) { file ->
-                        FileActions.share(context, listOf(FileEntry.from(file)))
-                    }
-                },
-            )
-            DropdownMenuItem(
-                text = { Text("Сведения (системные)") },
-                onClick = { open = false; FileActions.openAppDetails(context, app.packageName) },
-            )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = io.personal.filemanager.ui.theme.AppColors.Surface,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppIcon(app.packageName)
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(app.label, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                    Text(app.packageName, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.padding(8.dp))
+            TextButton(onClick = {
+                onDismiss()
+                if (appLaunch(context, app.packageName) == null)
+                    FileActions.toast(context, "Приложение нельзя запустить")
+            }, modifier = Modifier.fillMaxWidth()) { Text("Запустить") }
+            TextButton(onClick = {
+                onDismiss()
+                val dest = File(container.storage.downloadsPath, EXPORT_DIR)
+                container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest)
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (app.apkPaths.size > 1) "Экспортировать набор .apks" else "Экспортировать APK")
+            }
+            TextButton(onClick = {
+                onDismiss()
+                val dest = File(context.cacheDir, "shared-apk").apply { deleteRecursively(); mkdirs() }
+                container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest) { file ->
+                    FileActions.share(context, listOf(FileEntry.from(file)))
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Поделиться APK") }
+            TextButton(onClick = { onDismiss(); FileActions.openAppDetails(context, app.packageName) },
+                modifier = Modifier.fillMaxWidth()) { Text("Сведения о приложении") }
         }
     }
 }

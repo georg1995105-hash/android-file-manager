@@ -4,8 +4,6 @@ import io.personal.filemanager.ui.theme.AppColors
 import io.personal.filemanager.core.pluralRu
 import androidx.compose.foundation.layout.heightIn
 import android.widget.Toast
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -88,7 +86,6 @@ fun FileOpsHost(
     var currentFolder by remember { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<FileEntry?>(null) }
     var deleteTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
-    var permanentTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
     var conflict by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
     var compressTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
 
@@ -246,52 +243,33 @@ fun FileOpsHost(
     }
 
     deleteTargets?.let { targets ->
-        val trashable = targets.all { FileOperations.defaultVolumeRoot(File(it.path)) != null && !operations.trash.isInTrash(File(it.path)) }
+        val trashable = targets.all {
+            FileOperations.defaultVolumeRoot(File(it.path)) != null && !operations.trash.isInTrash(File(it.path))
+        }
         AlertDialog(
             onDismissRequest = { deleteTargets = null },
-            title = { Text(if (trashable) "Переместить в корзину?" else "Удалить безвозвратно?") },
+            title = { Text(if (trashable) "В корзину?" else "Удалить навсегда?") },
             text = {
-                TargetsList(
-                    targets,
-                    if (trashable) {
-                        "Восстановить можно в «Корзине» (меню ⋮ на главной)."
-                    } else {
-                        "Для этого места корзина недоступна — удаление нельзя будет отменить."
-                    },
+                Text(
+                    (if (targets.size == 1) "«${targets.first().name}»" else "Выбрано: ${targets.size} объектов") +
+                        if (trashable) "\nМожно восстановить из корзины."
+                        else "\nКорзина для этих файлов недоступна. Отменить удаление нельзя.",
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     deleteTargets = null
-                    if (trashable) operations.moveToTrash(targets.map { it.path }) else permanentTargets = targets
-                }) { Text(if (trashable) "В корзину" else "Продолжить…") }
-            },
-            dismissButton = {
-                Row {
-                    if (trashable) {
-                        TextButton(onClick = { deleteTargets = null; permanentTargets = targets }) {
-                            Text("Удалить навсегда…", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    TextButton(onClick = { deleteTargets = null }) { Text("Отмена") }
+                    if (trashable) operations.moveToTrash(targets.map { it.path })
+                    else operations.deletePermanently(targets.map { it.path })
+                }) {
+                    Text(
+                        if (trashable) "В корзину" else "Удалить",
+                        color = if (trashable) AppColors.Accent else MaterialTheme.colorScheme.error,
+                    )
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        )
-    }
-
-    permanentTargets?.let { targets ->
-        AlertDialog(
-            onDismissRequest = { permanentTargets = null },
-            title = { Text("Удалить без возможности восстановления?") },
-            text = { TargetsList(targets, "Это действие нельзя отменить.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    permanentTargets = null
-                    operations.deletePermanently(targets.map { it.path })
-                }) { Text("Удалить навсегда", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { permanentTargets = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { deleteTargets = null }) { Text("Отмена") } },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         )
     }
@@ -323,32 +301,6 @@ fun FileOpsHost(
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         )
-    }
-}
-
-/** Какие именно файлы будут удалены: имена (первые 12) и остаток, затем пояснение. */
-@Composable
-private fun TargetsList(targets: List<FileEntry>, note: String) {
-    val shown = 12
-    Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-        Text(
-            if (targets.size == 1) "Выбран 1 объект:" else "Выбрано: ${pluralRu(targets.size, "объект", "объекта", "объектов")}",
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Spacer(Modifier.height(6.dp))
-        targets.take(shown).forEach { t ->
-            Text(
-                "• " + t.name + if (t.isDirectory) " (папка)" else "",
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (targets.size > shown) {
-            Text("…и ещё ${targets.size - shown}", style = MaterialTheme.typography.bodyMedium)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(note, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

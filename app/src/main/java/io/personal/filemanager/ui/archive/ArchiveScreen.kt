@@ -320,6 +320,21 @@ fun ArchiveScreen(path: String) {
                 if (selected.isNotEmpty()) {
                     TextButton(onClick = { selected = emptySet() }) { Text("Сбросить") }
                     Spacer(Modifier.weight(1f))
+                    if (selected.size == 1) {
+                        val chosen = (state.result as? ListResult.Ok)?.items
+                            ?.firstOrNull { it.path == selected.first() && !it.isDirectory }
+                        if (chosen != null) {
+                            TextButton(
+                                enabled = !state.previewBusy,
+                                onClick = {
+                                    vm.preview(chosen,
+                                        onReady = { file -> FileActions.share(context, listOf(FileEntry.from(file))) },
+                                        onError = { FileActions.toast(context, it) })
+                                    selected = emptySet()
+                                },
+                            ) { Text("Поделиться") }
+                        }
+                    }
                     Button(onClick = { extractTargets = selected; extractAsk = true }) { Text("Распаковать (${selected.size})") }
                 } else {
                     Text(

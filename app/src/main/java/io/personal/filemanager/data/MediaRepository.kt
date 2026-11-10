@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.provider.MediaStore.Files.FileColumns
+import java.io.File
 import io.personal.filemanager.core.FileTypes
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -95,6 +96,8 @@ class MediaRepository(context: Context) {
         val result = ArrayList<FileEntry>(count)
         while (moveToNext()) {
             val path = getString(iData) ?: continue
+            // MediaScannerConnection is asynchronous: do not show stale index rows.
+            if (!File(path).isFile) continue
             if (skipHidden && FileSystemRepository.hasHiddenSegment(path)) continue
             val name = getString(iName) ?: path.substringAfterLast('/')
             result += FileEntry(
@@ -152,7 +155,7 @@ class MediaRepository(context: Context) {
             var count = 0
             while (c.moveToNext()) {
                 val path = c.getString(iData) ?: continue
-                if (FileSystemRepository.hasHiddenSegment(path)) continue
+                if (!File(path).isFile || FileSystemRepository.hasHiddenSegment(path)) continue
                 total += c.getLong(iSize)
                 count++
             }

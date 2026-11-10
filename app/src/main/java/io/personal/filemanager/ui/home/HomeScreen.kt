@@ -222,6 +222,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
 private fun HomeHeader() {
     val navigator = LocalNavigator.current
     val createFile = LocalCreateDialog.current
+    val config by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
@@ -251,10 +252,12 @@ private fun HomeHeader() {
                     text = { Text("Настроить нижнюю панель") },
                     onClick = { menuOpen = false; navigator.openTabSettings() },
                 )
-                DropdownMenuItem(
-                    text = { Text("Корзина") },
-                    onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
-                )
+                if (config?.showTrashShortcut != false) {
+                    DropdownMenuItem(
+                        text = { Text("Корзина") },
+                        onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Резервные копии") },
                     onClick = { menuOpen = false; navigator.open(Routes.BACKUP) },

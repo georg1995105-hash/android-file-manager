@@ -34,6 +34,18 @@ class StorageAnalyzerTest {
         assertTrue(report.incomplete)
     }
 
+    @Test fun ignoresActualRecoverableTrashFolder() {
+        val original = File(folder.root, "original.opus").apply { writeText("voice") }
+        val trash = File(folder.root, io.personal.filemanager.data.ops.TrashStore.TRASH_DIR)
+        val archived = File(trash, "1234/payload").apply { mkdirs() }
+        File(archived, "old.opus").writeText("voice")
+        val report = StorageAnalyzer().scan(folder.root)
+        assertEquals(1, report.scannedFiles)
+        assertTrue(report.duplicates.isEmpty())
+        assertTrue(original.exists())
+        assertTrue(File(archived, "old.opus").exists())
+    }
+
     @Test fun withoutHashBudgetNoUnverifiedMatches() {
         File(folder.root, "a.json").writeText("{}")
         File(folder.root, "b.json").writeText("{}")

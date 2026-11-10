@@ -2,6 +2,7 @@ package io.personal.filemanager.data.analyzer
 
 import io.personal.filemanager.core.FileKind
 import io.personal.filemanager.core.FileTypes
+import io.personal.filemanager.data.ops.TrashStore
 import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest
@@ -51,7 +52,7 @@ class StorageAnalyzer {
                 check()
                 if (Files.isSymbolicLink(file.toPath())) { skipped++; continue }
                 if (file.isDirectory) {
-                    if (file.name == ".pfm-trash") continue
+                    if (file.name == TrashStore.TRASH_DIR || file.name == ".pfm-trash") continue
                     dirs.add(file)
                 } else if (file.isFile) {
                     val size = file.length().coerceAtLeast(0L)

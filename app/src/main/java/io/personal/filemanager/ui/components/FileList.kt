@@ -143,11 +143,11 @@ fun FileRow(
             .fillMaxWidth()
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            FileThumbnail(entry, 52.dp)
+            FileThumbnail(entry, 40.dp)
             if (selectionMode) {
                 Icon(
                     if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
@@ -160,7 +160,7 @@ fun FileRow(
                 )
             }
         }
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 entry.name,

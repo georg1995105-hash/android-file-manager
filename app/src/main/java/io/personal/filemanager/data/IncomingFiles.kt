@@ -19,7 +19,7 @@ sealed interface IncomingResult {
 object IncomingFiles {
     private const val MAX_SIZE = 128L * 1024 * 1024
 
-    fun import(context: Context, intent: Intent): IncomingResult {
+    fun receive(context: Context, intent: Intent): IncomingResult {
         val uri = intent.data ?: return IncomingResult.Error("Источник не передал файл")
         if (intent.action != Intent.ACTION_VIEW || uri.scheme != "content") {
             return IncomingResult.Error("Поддерживается открытие файлов Android через content://")

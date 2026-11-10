@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
         if (incoming?.action != Intent.ACTION_VIEW) return
         importJob?.cancel()
         importJob = lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) { IncomingFiles.import(this@MainActivity, incoming) }
+            val result = withContext(Dispatchers.IO) { IncomingFiles.receive(this@MainActivity, incoming) }
             when (result) {
                 is IncomingResult.Imported -> {
                     incomingPath = result.file.absolutePath

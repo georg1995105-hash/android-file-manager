@@ -19,12 +19,14 @@ SHOTS=/sdcard/Download/.pfm-test-shots
 SIGNING_APKS=("$APK" "$TEST_APK")
 if [ "$DEVICE" = "phone" ]; then
   CUR=$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
-  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 30 --json tagName -q '.[].tagName' | grep -- '-debug-' | grep -v "^v${CUR}-" | head -1) || exit 1
+  # Берём только опубликованный DEBUG/TEST APK; некоторые подписанные RELEASE
+  # выпуски исторически имели «debug» в имени тега, но другой сертификат.
+  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' | grep -E '(^v.*-debug-build[0-9]+$|^v.*-build[0-9]+$)' | grep -v "^v${CUR}-" | head -1) || exit 1
   if [ -z "$PREV_TAG" ]; then
     echo "Предыдущий пререлиз не найден — проверка обновления невозможна" >&2
     exit 1
   fi
-  gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*universal*.apk' --dir prev-apk --clobber || exit 1
+  gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*debug*universal*.apk' --dir prev-apk --clobber || exit 1
   PREV_APKS=(prev-apk/*.apk)
   [ "${#PREV_APKS[@]}" -eq 1 ] && [ -f "${PREV_APKS[0]}" ] || exit 1
   SIGNING_APKS+=("${PREV_APKS[0]}")

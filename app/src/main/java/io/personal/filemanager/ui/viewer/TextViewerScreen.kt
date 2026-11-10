@@ -45,6 +45,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -197,6 +199,10 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
     val mono = extension in monospaceExtensions
     var confirmDiscard by remember { mutableStateOf(false) }
     val syntax = remember(extension) { SyntaxHighlight(extension) }
+    val editorFocus = remember { FocusRequester() }
+    LaunchedEffect(vm.editing) {
+        if (vm.editing) editorFocus.requestFocus()
+    }
 
     LaunchedEffect(autoEdit, result) {
         if (autoEdit && vm.canEdit && !vm.editing) vm.edit()
@@ -259,7 +265,7 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
                     BasicTextField(
                         value = vm.content,
                         onValueChange = vm::change,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier.fillMaxSize().focusRequester(editorFocus).padding(horizontal = 16.dp, vertical = 12.dp),
                         textStyle = TextStyle(
                             color = AppColors.TextPrimary,
                             fontFamily = FontFamily.Monospace,

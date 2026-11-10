@@ -245,6 +245,10 @@ private fun HomeHeader() {
                     onClick = { menuOpen = false; createFile() },
                 )
                 DropdownMenuItem(
+                    text = { Text("Анализ памяти") },
+                    onClick = { menuOpen = false; navigator.open(Routes.ANALYZER) },
+                )
+                DropdownMenuItem(
                     text = { Text("Настроить разделы") },
                     onClick = { menuOpen = false; navigator.openTileSettings() },
                 )

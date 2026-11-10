@@ -58,6 +58,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import io.personal.filemanager.ui.analyzer.AnalyzerScreen
 import io.personal.filemanager.ui.archive.ArchiveScreen
 import io.personal.filemanager.data.archive.ArchiveFormats
 import io.personal.filemanager.ui.settings.TabSettingsScreen
@@ -228,6 +229,7 @@ fun AppRoot() {
                         BrowserScreen(title = File(path).name.ifEmpty { path }, rootPath = path)
                     }
                     composable(Routes.BACKUP) { BackupScreen() }
+                    composable(Routes.ANALYZER) { AnalyzerScreen() }
                     composable(
                         Routes.PDF,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),

@@ -66,6 +66,7 @@ import io.personal.filemanager.data.TextResult
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.appViewModel
+import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.EmptyState
 import io.personal.filemanager.ui.components.LoadingBox
 import io.personal.filemanager.ui.components.ScreenTopBar
@@ -199,6 +200,8 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
     val mono = extension in monospaceExtensions
     var confirmDiscard by remember { mutableStateOf(false) }
     val syntax = remember(extension) { SyntaxHighlight(extension) }
+    val operations = appContainer().operations
+    val onSaved = { operations.rescan(listOf(path)); FileActions.toast(context, "Файл сохранён") }
     val editorFocus = remember { FocusRequester() }
     LaunchedEffect(vm.editing) {
         if (vm.editing) editorFocus.requestFocus()
@@ -241,7 +244,7 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
             onBack = { leaveEditor() },
             actions = {
                 if (vm.editing) {
-                    IconButton(onClick = { vm.save { FileActions.toast(context, "Файл сохранён") } }, enabled = !vm.busy && vm.modified) {
+                    IconButton(onClick = { vm.save(onSaved) }, enabled = !vm.busy && vm.modified) {
                         Icon(Icons.Filled.Save, contentDescription = "Сохранить")
                     }
                 } else if (vm.canEdit) {
@@ -309,7 +312,7 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
                         Text("Форматировать JSON")
                     }
                 }
-                TextButton(onClick = { vm.save { FileActions.toast(context, "Файл сохранён") } }, enabled = !vm.busy && vm.modified) {
+                TextButton(onClick = { vm.save(onSaved) }, enabled = !vm.busy && vm.modified) {
                     Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Сохранить")

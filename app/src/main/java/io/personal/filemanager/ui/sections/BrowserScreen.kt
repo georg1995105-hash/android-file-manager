@@ -140,6 +140,15 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     var path by rememberSaveable(rootPath) { mutableStateOf(rootPath) }
     var sortMenu by remember { mutableStateOf(false) }
     var createMenu by remember { mutableStateOf(false) }
+
+    var pendingEditPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(createMenu, pendingEditPath) {
+        val next = pendingEditPath ?: return@LaunchedEffect
+        if (!createMenu) {
+            pendingEditPath = null
+            navigator.open(Routes.edit(next))
+        }
+    }
     val view = rememberFileView(viewKey)
 
     // Доступ проверяется системой при каждом чтении, поэтому после выдачи разрешения список появится сам.
@@ -279,7 +288,7 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                 vm.load(path)
                 if (!created.isDirectory) {
                     // Новый текстовый файл сразу готов к вводу, без пустого экрана просмотра.
-                    navigator.open(Routes.edit(created.path))
+                    pendingEditPath = created.path
                 }
             },
         )

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -44,6 +45,7 @@ import io.personal.filemanager.data.MediaRepository
 import io.personal.filemanager.data.MediaSort
 import io.personal.filemanager.data.settings.RecentSort
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.LocalCreateDialog
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.components.AllFilesAccessRequired
@@ -114,11 +116,13 @@ class MediaListViewModel(private val container: AppContainer, private val catego
 @Composable
 fun MediaListScreen(section: SectionId, category: MediaCategory) {
     val navigator = LocalNavigator.current
+    val createFile = LocalCreateDialog.current
     val hasAccess = rememberAllFilesAccess()
     val vm = mediaListViewModel(category)
     val state by vm.state.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
     var sortMenu by remember { mutableStateOf(false) }
+    var actionsMenu by remember { mutableStateOf(false) }
     val view = rememberFileView(category.name)
     val search = rememberListSearch()
 
@@ -148,6 +152,15 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
                                 onClick = { sortMenu = false; vm.setSort(s) },
                             )
                         }
+                    }
+                    IconButton(onClick = { actionsMenu = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
+                    }
+                    DropdownMenu(expanded = actionsMenu, onDismissRequest = { actionsMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Создать файл или папку") },
+                            onClick = { actionsMenu = false; createFile() },
+                        )
                     }
                 }
             },

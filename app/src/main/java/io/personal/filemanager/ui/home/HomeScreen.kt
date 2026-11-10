@@ -68,6 +68,7 @@ import io.personal.filemanager.data.settings.TileConfig
 import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.LocalCreateDialog
 import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
@@ -220,6 +221,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
 @Composable
 private fun HomeHeader() {
     val navigator = LocalNavigator.current
+    val createFile = LocalCreateDialog.current
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
@@ -237,6 +239,10 @@ private fun HomeHeader() {
                 Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Создать файл или папку") },
+                    onClick = { menuOpen = false; createFile() },
+                )
                 DropdownMenuItem(
                     text = { Text("Настроить разделы") },
                     onClick = { menuOpen = false; navigator.openTileSettings() },

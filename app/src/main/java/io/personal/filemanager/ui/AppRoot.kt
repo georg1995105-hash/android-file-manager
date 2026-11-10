@@ -2,13 +2,10 @@ package io.personal.filemanager.ui
 
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -87,14 +84,9 @@ fun AppRoot() {
         else -> null
     }
     val showBar = route == Routes.HOME || route == Routes.SECTION
-    // В «Заметках»/«Ссылках» свои кнопки создания, в «Приложениях»/«Передаче» свои действия.
-    // Не перекрываем их глобальной плавающей кнопкой создания документа.
-    val showGlobalCreate = route == Routes.HOME ||
-        (route == Routes.SECTION && currentSection in setOf(
-            SectionId.RECENT, SectionId.PHOTOS, SectionId.VIDEOS, SectionId.AUDIO,
-            SectionId.DOCUMENTS, SectionId.ARCHIVES,
-        ))
+    // «Создать» находится в меню ⋮ контекстных экранов, а не в глобальной FAB.
     var showCreateDialog by remember { mutableStateOf(false) }
+    val openCreateDialog = { showCreateDialog = true }
 
     // Навигацию выполняем после снятия модального окна из композиции:
     // иначе NavBackStackEntry может остаться в INITIALIZED во время теста/ухода Activity.
@@ -163,22 +155,11 @@ fun AppRoot() {
         }
     }
 
-    CompositionLocalProvider(LocalNavigator provides navigator) {
+    CompositionLocalProvider(LocalNavigator provides navigator, LocalCreateDialog provides openCreateDialog) {
         io.personal.filemanager.ui.transfer.TransferApprovalDialog()
         FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {
             Scaffold(
                 containerColor = AppColors.Background,
-                floatingActionButton = {
-                    if (showGlobalCreate) {
-                        FloatingActionButton(
-                            onClick = { showCreateDialog = true },
-                            containerColor = AppColors.Accent,
-                            contentColor = AppColors.Background,
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = "Создать файл или папку")
-                        }
-                    }
-                },
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 bottomBar = {
                     val tabs = config?.tabs

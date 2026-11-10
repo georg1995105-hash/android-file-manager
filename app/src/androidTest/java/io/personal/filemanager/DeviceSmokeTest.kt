@@ -76,7 +76,8 @@ class DeviceSmokeTest {
         // Уникальное имя: не затрагиваем существующие файлы даже при ручном запуске теста.
         try {
             waitText("Мои файлы")
-            compose.onNodeWithContentDescription("Создать файл или папку").performClick()
+            compose.onNodeWithContentDescription("Меню").performClick()
+            compose.onNodeWithText("Создать файл или папку").performClick()
             compose.onNodeWithText("JSON").performClick()
             compose.onNodeWithText("Имя файла с расширением").performTextClearance()
             compose.onNodeWithText("Имя файла с расширением").performTextInput(file.name)

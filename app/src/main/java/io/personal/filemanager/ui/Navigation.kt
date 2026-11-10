@@ -51,6 +51,9 @@ interface AppNavigator {
 
 val LocalNavigator = staticCompositionLocalOf<AppNavigator> { error("AppNavigator не задан") }
 
+/** Запуск создания только через контекстное меню ⋮, без плавающей кнопки поверх файлов. */
+val LocalCreateDialog = staticCompositionLocalOf<() -> Unit> { error("CreateDialog callback не задан") }
+
 /** Фото и видео для перелистывания во встроенном просмотре (живёт в памяти процесса). */
 object MediaViewerSession {
     @Volatile

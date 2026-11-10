@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -140,6 +140,7 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     var path by rememberSaveable(rootPath) { mutableStateOf(rootPath) }
     var sortMenu by remember { mutableStateOf(false) }
     var createMenu by remember { mutableStateOf(false) }
+    var actionsMenu by remember { mutableStateOf(false) }
 
     var pendingEditPath by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(createMenu, pendingEditPath) {
@@ -187,12 +188,18 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                 IconButton(onClick = { navigator.openSearch() }) {
                     Icon(Icons.Filled.Search, contentDescription = "Поиск")
                 }
-                if (hasAccess) {
-                    IconButton(onClick = { createMenu = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Создать файл или папку")
+                ViewModeButton(view)
+                IconButton(onClick = { actionsMenu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
+                }
+                DropdownMenu(expanded = actionsMenu, onDismissRequest = { actionsMenu = false }) {
+                    if (hasAccess) {
+                        DropdownMenuItem(
+                            text = { Text("Создать файл или папку") },
+                            onClick = { actionsMenu = false; createMenu = true },
+                        )
                     }
                 }
-                ViewModeButton(view)
             },
         )
         if (!hasAccess) {
@@ -264,11 +271,6 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                         if (prefs.showHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
                         contentDescription = if (prefs.showHidden) "Скрыть скрытые файлы" else "Показать скрытые файлы",
                     )
-                }
-                TextButton(onClick = { createMenu = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Создать")
                 }
             }
         }

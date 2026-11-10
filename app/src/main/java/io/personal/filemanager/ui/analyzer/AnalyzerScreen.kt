@@ -84,7 +84,8 @@ fun AnalyzerScreen() {
     val vm = appViewModel { AnalyzerViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
     val nav = LocalNavigator.current
-    val info = remember { appContainer().storage.internalStorage() }
+    val storage = appContainer().storage
+    val info = remember(storage) { storage.internalStorage() }
     LaunchedEffect(Unit) { vm.start() }
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(title = "Анализ памяти", onBack = { nav.back() })

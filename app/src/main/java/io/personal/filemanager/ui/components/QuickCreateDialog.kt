@@ -45,7 +45,7 @@ import io.personal.filemanager.ui.theme.AppColors
 import kotlinx.coroutines.launch
 import java.io.File
 
-private enum class EntryPreset(val label: String, val name: String, val folder: Boolean = false) {
+private enum class EntryPreset(val label: String, val suggestedName: String, val folder: Boolean = false) {
     DIRECTORY("Папка", "", true),
     TXT("TXT", "Новый файл.txt"),
     MD("Markdown", "README.md"),
@@ -67,7 +67,7 @@ fun QuickCreateDialog(
     onCreated: (FileEntry) -> Unit,
 ) {
     var preset by remember { mutableStateOf(EntryPreset.TXT) }
-    var filename by remember { mutableStateOf(EntryPreset.TXT.name) }
+    var filename by remember { mutableStateOf(EntryPreset.TXT.suggestedName) }
     var folder by remember(initialFolder) { mutableStateOf(initialFolder) }
     var folderMenu by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -102,7 +102,7 @@ fun QuickCreateDialog(
                                     .border(1.dp, if (active) AppColors.Accent else AppColors.CardBorder, RoundedCornerShape(12.dp))
                                     .clickable {
                                         preset = item
-                                        filename = item.name
+                                        filename = item.suggestedName
                                         error = null
                                     }
                                     .padding(vertical = 10.dp, horizontal = 2.dp),

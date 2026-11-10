@@ -2,10 +2,13 @@ package io.personal.filemanager.ui
 
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -15,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +40,7 @@ import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.MediaCategory
 import io.personal.filemanager.data.settings.TabConfig
 import io.personal.filemanager.ui.home.HomeScreen
+import io.personal.filemanager.ui.components.QuickCreateDialog
 import io.personal.filemanager.ui.icons.IconCatalog
 import io.personal.filemanager.ui.sections.ApkScreen
 import io.personal.filemanager.ui.sections.AppsScreen
@@ -51,6 +57,8 @@ import io.personal.filemanager.ui.personal.NotesScreen
 import io.personal.filemanager.ui.settings.BackupScreen
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import io.personal.filemanager.ui.archive.ArchiveScreen
 import io.personal.filemanager.data.archive.ArchiveFormats
@@ -78,6 +86,9 @@ fun AppRoot() {
         else -> null
     }
     val showBar = route == Routes.HOME || route == Routes.SECTION
+    val showGlobalCreate = route == Routes.HOME ||
+        (route == Routes.SECTION && currentSection != SectionId.FILES && currentSection != SectionId.DOWNLOADS)
+    var showCreateDialog by remember { mutableStateOf(false) }
 
     val navigator = remember(nav) {
         object : AppNavigator {
@@ -140,6 +151,17 @@ fun AppRoot() {
         FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {
             Scaffold(
                 containerColor = AppColors.Background,
+                floatingActionButton = {
+                    if (showGlobalCreate) {
+                        FloatingActionButton(
+                            onClick = { showCreateDialog = true },
+                            containerColor = AppColors.Accent,
+                            contentColor = AppColors.Background,
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Создать файл или папку")
+                        }
+                    }
+                },
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 bottomBar = {
                     val tabs = config?.tabs
@@ -169,6 +191,10 @@ fun AppRoot() {
                         SectionScreen(id)
                     }
                     composable(Routes.SEARCH) { SearchScreen() }
+                    composable(
+                        Routes.EDIT,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> TextViewerScreen(entry.arguments?.getString("path").orEmpty(), autoEdit = true) }
                     composable(
                         Routes.IMAGE,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
@@ -213,6 +239,24 @@ fun AppRoot() {
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> ApkScreen(entry.arguments?.getString("path").orEmpty()) }
                 }
+            }
+            if (showCreateDialog) {
+                QuickCreateDialog(
+                    initialFolder = container.storage.downloadsPath,
+                    rootFolder = container.storage.rootPath,
+                    downloadsFolder = container.storage.downloadsPath,
+                    onDismiss = { showCreateDialog = false },
+                    onCreate = { folder, isFolder, name ->
+                        withContext(Dispatchers.IO) {
+                            if (isFolder) container.fileSystem.createFolder(folder, name)
+                            else container.fileSystem.createFile(folder, name)
+                        }
+                    },
+                    onCreated = { created ->
+                        container.operations.notify(if (created.isDirectory) "Папка создана" else "Файл создан")
+                        if (!created.isDirectory) navigator.open(Routes.edit(created.path))
+                    },
+                )
             }
         }
     }

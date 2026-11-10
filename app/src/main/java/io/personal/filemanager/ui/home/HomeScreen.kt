@@ -138,8 +138,8 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 row.forEach { tile ->
                     val id = SectionId.fromKey(tile.id) ?: return@forEach
@@ -148,7 +148,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
                         title = id.title,
                         subtitle = state.stats[id],
                         onClick = { navigator.openSection(id) },
-                        minHeight = if (compactHeight) 108.dp else 128.dp,
+                        minHeight = if (compactHeight) 94.dp else 104.dp,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -267,18 +267,18 @@ private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifie
             .clip(RoundedCornerShape(20.dp))
             .card(RoundedCornerShape(20.dp))
             .tapClickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
-                .size(64.dp)
+                .size(48.dp)
                 .background(AppColors.Surface, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(38.dp))
+            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(30.dp))
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Внутренняя память", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -360,7 +360,7 @@ private fun SectionTile(
     subtitle: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    minHeight: Dp = 128.dp,
+    minHeight: Dp = 104.dp,
 ) {
     Column(
         modifier = modifier
@@ -368,12 +368,12 @@ private fun SectionTile(
             .clip(RoundedCornerShape(18.dp))
             .card()
             .tapClickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 14.dp),
+            .padding(horizontal = 6.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        SectionIcon(tile.icon, tile.color, 44.dp)
-        Spacer(Modifier.height(10.dp))
+        SectionIcon(tile.icon, tile.color, 34.dp)
+        Spacer(Modifier.height(6.dp))
         // Название в одну строку: в узкой плитке шрифт уменьшается, а не рвёт слово по слогам.
         val titleStyle = MaterialTheme.typography.bodyMedium.copy(
             fontWeight = FontWeight.Medium,

@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.FixMethodOrder
 import org.junit.Rule
 import org.junit.Test
@@ -42,8 +43,20 @@ class DeviceSmokeTest {
     private fun shot(name: String) {
         compose.waitForIdle()
         Thread.sleep(400)
-        val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
-        File(shots, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
+        // Compose v2 иногда не получает redraw на медленном эмуляторе планшета
+        // в отведённые библиотекой 2 секунды. Только для screenshot используем
+        // системный UiAutomation как резерв; остальные UI-assertions не ослабляем.
+        val bitmap = try {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+        } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                ?: throw timeout
+        }
+        File(shots, "$name.png").outputStream().use {
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 90, it)) {
+                "Не удалось сохранить тестовый скриншот $name"
+            }
+        }
     }
 
     private fun waitText(text: String, timeoutMs: Long = 10_000) {

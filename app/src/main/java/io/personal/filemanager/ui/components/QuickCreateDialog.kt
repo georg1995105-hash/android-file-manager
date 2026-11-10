@@ -74,8 +74,8 @@ fun QuickCreateDialog(
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val documentsFolder = File(rootFolder, "Documents").absolutePath
-    val destinations = listOf(
-        "Текущая папка" to initialFolder,
+    val destinations = listOfNotNull(
+        if (initialFolder != downloadsFolder) "Эта папка" to initialFolder else null,
         "Загрузки" to downloadsFolder,
         "Документы" to documentsFolder,
         "Внутренняя память" to rootFolder,

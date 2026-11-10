@@ -3,6 +3,7 @@ package io.personal.filemanager
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -71,16 +72,15 @@ class DeviceSmokeTest {
     /** Реальная проверка нового сценария: создать JSON, вставить, форматировать, сохранить. */
     @Test
     fun aa_createAndEditJson() {
-        val file = File("/sdcard/Download/pfm-editor-ci-test.json")
-        // Только наш одноразовый тестовый файл; пользовательские данные не трогаем.
-        if (file.exists()) file.delete()
+        val file = File("/sdcard/Download/pfm-editor-ci-${System.nanoTime()}.json")
+        // Уникальное имя: не затрагиваем существующие файлы даже при ручном запуске теста.
         try {
             waitText("Мои файлы")
             compose.onNodeWithContentDescription("Создать файл или папку").performClick()
             compose.onNodeWithText("JSON").performClick()
             compose.onNodeWithText("Имя файла с расширением").performTextClearance()
             compose.onNodeWithText("Имя файла с расширением").performTextInput(file.name)
-            compose.onNodeWithText("Создать").performClick()
+            compose.onAllNodes(hasText("Создать") and hasClickAction()).onFirst().performClick()
             compose.waitUntil(15_000) {
                 compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
             }
@@ -93,7 +93,7 @@ class DeviceSmokeTest {
             }
             shot("d01b_json_editor")
         } finally {
-            // Не удаляем чужой файл, поскольку имя фиксировано только в тестовом окружении.
+            // Удаляем только созданный этим тестом одноразовый файл.
             file.delete()
         }
     }

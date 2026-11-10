@@ -86,8 +86,13 @@ fun AppRoot() {
         else -> null
     }
     val showBar = route == Routes.HOME || route == Routes.SECTION
+    // В «Заметках»/«Ссылках» свои кнопки создания, в «Приложениях»/«Передаче» свои действия.
+    // Не перекрываем их глобальной плавающей кнопкой создания документа.
     val showGlobalCreate = route == Routes.HOME ||
-        (route == Routes.SECTION && currentSection != SectionId.FILES && currentSection != SectionId.DOWNLOADS)
+        (route == Routes.SECTION && currentSection in setOf(
+            SectionId.RECENT, SectionId.PHOTOS, SectionId.VIDEOS, SectionId.AUDIO,
+            SectionId.DOCUMENTS, SectionId.ARCHIVES,
+        ))
     var showCreateDialog by remember { mutableStateOf(false) }
 
     val navigator = remember(nav) {

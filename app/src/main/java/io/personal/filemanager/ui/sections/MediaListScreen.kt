@@ -117,7 +117,7 @@ class MediaListViewModel(private val container: AppContainer, private val catego
     fun setSort(sort: RecentSort) {
         viewModelScope.launch {
             container.settings.setMediaSort(category.name, sort)
-            refresh()
+            refresh(force = true)
         }
     }
 }

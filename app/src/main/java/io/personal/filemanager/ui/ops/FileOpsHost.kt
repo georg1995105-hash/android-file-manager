@@ -148,7 +148,10 @@ fun FileOpsHost(
                             .padding(14.dp),
                     ) {
                         val p = op.progress
-                        val known = p != null && p.totalBytes > 0
+                        val known = p != null && (p.totalBytes > 0 || p.totalItems > 0)
+                        val fraction = if (p == null) 0f else if (p.totalBytes > 0) p.fraction
+                            else if (p.totalItems > 0) (p.doneItems.toFloat() / p.totalItems).coerceIn(0f, 1f)
+                            else 0f
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 op.title,
@@ -158,7 +161,7 @@ fun FileOpsHost(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
-                            if (known) Text("${(p!!.fraction * 100).toInt()}%", style = MaterialTheme.typography.titleSmall, color = AppColors.TextPrimary)
+                            if (known) Text("${(fraction * 100).toInt()}%", style = MaterialTheme.typography.titleSmall, color = AppColors.TextPrimary)
                         }
                         p?.current?.takeIf { it.isNotEmpty() }?.let {
                             Text(
@@ -171,9 +174,16 @@ fun FileOpsHost(
                         }
                         Spacer(Modifier.height(8.dp))
                         if (known) {
-                            LinearProgressIndicator(progress = { p!!.fraction }, modifier = Modifier.fillMaxWidth())
+                            LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                         } else {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        if (p != null && p.totalBytes == 0L && p.totalItems > 0) {
+                            Text(
+                                "Обработано: ${p.doneItems} из ${p.totalItems}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         if (p != null && p.doneBytes > 0) {
                             val seconds = (android.os.SystemClock.elapsedRealtime() - op.startedAt).coerceAtLeast(1L) / 1000.0
@@ -269,7 +279,7 @@ fun FileOpsHost(
                         deleteTargets = null
                         operations.deletePermanently(targets.map { it.path })
                     }) {
-                        Text("Навсегда", color = MaterialTheme.colorScheme.error)
+                        Text("Удалить навсегда", color = MaterialTheme.colorScheme.error)
                     }
                     if (trashable) {
                         TextButton(onClick = {

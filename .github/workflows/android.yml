@@ -8,6 +8,11 @@ on:
       - '.github/workflows/release-key-setup.yml'
       - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      device_tests:
+        description: 'Run full Android emulator UI checks (phone + tablet)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,7 +63,8 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon testDebugUnitTest assembleDebug 2>&1 | tee build.log
 
-      - name: Screenshots (non-blocking)
+      - name: Screenshots (manual full-check only)
+        if: github.event_name == 'workflow_dispatch' && inputs.device_tests
         continue-on-error: true
         run: |
           set -o pipefail
@@ -195,8 +201,10 @@ jobs:
             --title "$TAG (DEBUG/TEST)" \
             --notes "DEBUG/TEST APK, не постоянная release-сборка. versionCode ${{ steps.apk.outputs.version_code }}. Для vivo X300 Pro — файл *-arm64-*.apk; *-universal-* — для любых устройств. SHA-256 — в SHA256SUMS.txt. Коммит $GITHUB_SHA. Подписан тестовым debug-ключом CI: release-версию поверх установить нельзя без удаления."
 
-  # Проверка на эмуляторе Android (ART): запуск, экраны, тестовые файлы, скриншоты. Не блокирует выпуск APK.
+  # Full device suites run only when explicitly requested. Normal commits build, unit-test and sign APK.
+  # Avoid 2 large emulator runs for each tiny UI correction; keep regressions available on demand.
   device-tests:
+    if: github.event_name == 'workflow_dispatch' && inputs.device_tests
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:

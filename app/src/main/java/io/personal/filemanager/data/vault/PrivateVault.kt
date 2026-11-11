@@ -141,7 +141,12 @@ class PrivateVault(private val context: Context) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(allowCreate = false))
         FileOutputStream(target).use { fileOut ->
-            val out = DataOutputStream(fileOut)
+            // Closing CipherOutputStream must finalize the GCM tag without closing the
+            // underlying file descriptor before fd.sync() is called.
+            val nonClosing = object : java.io.FilterOutputStream(fileOut) {
+                override fun close() { flush() }
+            }
+            val out = DataOutputStream(nonClosing)
             out.write(byteArrayOf(0x50, 0x46, 0x4D, 0x56)) // PFMV
             out.writeByte(1)
             out.writeByte(cipher.iv.size)
@@ -176,7 +181,7 @@ class PrivateVault(private val context: Context) {
 
     private fun safeFile(id: String): File {
         UUID.fromString(id) // Never allow paths read from the index to escape the vault directory.
-        return File(dir, "$"+"{id}.pfm")
+        return File(dir, id + ".pfm")
     }
 
     @Synchronized
@@ -234,8 +239,8 @@ class PrivateVault(private val context: Context) {
         val id = oldId ?: UUID.randomUUID().toString()
         if (oldId != null && original.none { it.id == oldId }) throw IOException("Запись не найдена")
         val itemFile = safeFile(id)
-        val temp = File(dir, "$"+"{id}.tmp")
-        val oldCipher = if (itemFile.exists()) File(dir, "$"+"{id}.previous") else null
+        val temp = File(dir, id + ".tmp")
+        val oldCipher = if (itemFile.exists()) File(dir, id + ".previous") else null
         try {
             ByteArrayInputStream(text.toByteArray(Charsets.UTF_8)).use { writeEncrypted(it, temp) }
             if (oldCipher != null) Files.copy(itemFile.toPath(), oldCipher.toPath(), StandardCopyOption.REPLACE_EXISTING)
@@ -272,7 +277,7 @@ class PrivateVault(private val context: Context) {
         }
         val mime = context.contentResolver.getType(uri).orEmpty()
         val target = safeFile(id)
-        val temp = File(dir, "$"+"{id}.tmp")
+        val temp = File(dir, id + ".tmp")
         try {
             val input = context.contentResolver.openInputStream(uri) ?: throw IOException("Не удалось прочитать исходный файл")
             input.use { writeEncrypted(it, temp) }
@@ -316,7 +321,7 @@ class PrivateVault(private val context: Context) {
             "video/quicktime" -> "mov"
             else -> if (item.kind == VaultKind.PHOTO) "jpg" else "mp4"
         }
-        val temp = File(previewDir, "$"+"{item.id}.$"+"{ext}")
+        val temp = File(previewDir, item.id + "." + ext)
         try {
             FileOutputStream(temp).use { readEncrypted(safeFile(item.id), it) }
             return temp

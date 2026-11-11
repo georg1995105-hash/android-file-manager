@@ -93,17 +93,24 @@ class DeviceSmokeTest {
     @Test
     fun a1_swipeOnlyInsideApplications() {
         waitText("Мои файлы")
-        compose.onRoot().performTouchInput { swipeLeft() }
+        // Не начинаем жест от края Android, чтобы не активировать системную навигацию «Назад».
+        compose.onRoot().performTouchInput {
+            swipeLeft(startX = size.width * 0.75f, endX = size.width * 0.25f)
+        }
         waitText("Мои файлы")
         openTile("Приложения")
         compose.onNodeWithText("Установленные").assertIsSelected()
-        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.onRoot().performTouchInput {
+            swipeLeft(startX = size.width * 0.75f, endX = size.width * 0.25f)
+        }
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("APK-файлы").fetchSemanticsNodes().any { node ->
                 node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Selected) == true
             }
         }
-        compose.onRoot().performTouchInput { swipeRight() }
+        compose.onRoot().performTouchInput {
+            swipeRight(startX = size.width * 0.25f, endX = size.width * 0.75f)
+        }
         compose.onNodeWithText("Установленные").assertIsSelected()
     }
 
@@ -239,6 +246,13 @@ class DeviceSmokeTest {
         waitText("Копировать всё")
         compose.onNodeWithText("Заголовок").performTextInput("Проверка CI")
         compose.onNodeWithText("Текст заметки").performTextInput("Текст заметки из теста")
+        compose.onNodeWithText("Копировать всё").performClick()
+        var copiedNote: String? = null
+        compose.activityRule.scenario.onActivity { activity ->
+            copiedNote = activity.getSystemService(ClipboardManager::class.java)
+                .primaryClip?.getItemAt(0)?.text?.toString()
+        }
+        org.junit.Assert.assertEquals("# Проверка CI\n\nТекст заметки из теста", copiedNote)
         Thread.sleep(1_500) // автосохранение
         shot("d08_note_editor")
         back()

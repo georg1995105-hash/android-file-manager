@@ -90,7 +90,8 @@ class StorageAnalyzer {
         var bytesHashed = 0L
         var filesHashed = 0
         var partialDuplicates = incomplete
-        for ((size, files) in candidates.entries.asSequence().filter { it.value.size > 1 }.sortedBy { it.key }) {
+        for ((size, files) in candidates.entries.asSequence().filter { it.value.size > 1 }
+            .sortedByDescending { it.key * (it.value.size - 1L) }) {
             check()
             for (file in files) {
                 check()

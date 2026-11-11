@@ -354,26 +354,29 @@ private val GRID_SIDE = 2.dp
 private val GRID_GAP = 3.dp
 
 /**
- * Compact, shared metadata across every grid in the app. Date/time always remains visible;
+ * Compact metadata shown under every square thumbnail, never on top of it;
  * "Новые" uses MediaStore date-added when supplied, other sections use modification time.
  * Unknown dates are not substituted with the current time.
  */
 @Composable
 private fun FileGridMetadata(entry: FileEntry, dateShown: DateShown, includeName: Boolean) {
     val (epoch, fallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
-    val date = remember(epoch, fallback) {
-        gridStamp(epoch)?.oneLine?.let { if (fallback) "изм. $it" else it } ?: "Дата неизвестна"
+    val stamp = remember(epoch) { gridStamp(epoch) }
+    val date = remember(stamp, fallback) {
+        stamp?.oneLine?.let { if (fallback) "изм. $it" else it } ?: "Дата неизвестна"
     }
+
+    // This is a footer BELOW the thumbnail, not a scrim covering its lower edge.
     Column(
         modifier = Modifier.fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.76f))
-            .padding(horizontal = 5.dp, vertical = 4.dp),
+            .background(AppColors.Card)
+            .padding(horizontal = 5.dp, vertical = 3.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         if (includeName) {
             Text(
                 entry.name,
-                color = Color.White,
+                color = AppColors.TextPrimary,
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 softWrap = false,
@@ -382,24 +385,29 @@ private fun FileGridMetadata(entry: FileEntry, dateShown: DateShown, includeName
         }
         Text(
             date,
-            color = Color.White.copy(alpha = 0.95f),
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            softWrap = false,
+            color = AppColors.TextSecondary,
+            fontSize = 10.sp,
+            maxLines = 2,
+            softWrap = true,
+            lineHeight = 12.sp,
             overflow = TextOverflow.Ellipsis,
         )
         if (!entry.isDirectory) {
             Text(
                 formatSize(entry.size),
-                color = Color.White.copy(alpha = 0.88f),
-                style = MaterialTheme.typography.labelSmall,
+                color = AppColors.TextSecondary,
+                fontSize = 10.sp,
                 maxLines = 1,
                 softWrap = false,
             )
         } else {
-            entry.childCount?.let {
-                Text("$it объектов", color = Color.White.copy(alpha = 0.88f),
-                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            entry.childCount?.let { count ->
+                Text(
+                    "$count объектов",
+                    color = AppColors.TextSecondary,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                )
             }
         }
     }
@@ -416,28 +424,29 @@ private fun GalleryMediaCell(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    Box(
-        Modifier.fillMaxWidth().aspectRatio(1f)
+    Column(
+        Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        GridThumbnail(entry)
-        if (selected) Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.25f)))
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            FileGridMetadata(entry, dateShown, includeName = false)
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            GridThumbnail(entry)
+            if (selected) {
+                Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.25f)))
+            }
+            if (selectionMode) {
+                Icon(
+                    if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                    contentDescription = if (selected) "Выбрано" else "Выбрать",
+                    tint = if (selected) AppColors.Accent else Color.White,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50)),
+                )
+            }
         }
-        if (selectionMode) {
-            Icon(
-                if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                contentDescription = if (selected) "Выбрано" else "Выбрать",
-                tint = if (selected) AppColors.Accent else Color.White,
-                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
-                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50)),
-            )
-        }
+        FileGridMetadata(entry, dateShown, includeName = false)
     }
 }
-
 
 /** Время для подписи: в «Новых» по дате появления — дата добавления; если она неизвестна — честно «изм.». */
 private fun FileEntry.stampTime(mode: DateShown): Pair<Long?, Boolean> =
@@ -446,9 +455,8 @@ private fun FileEntry.stampTime(mode: DateShown): Pair<Long?, Boolean> =
     else lastModified.takeIf { it > 0 } to false
 
 /**
- * Shared compact grid item. Photos/videos are full-bleed square thumbnails:
- * no card margins, filename or extra footer. Other files retain a concise
- * label and size in a bottom scrim, without growing the entire grid row.
+ * Shared compact grid item. Preserve full-size square previews and add a slim
+ * metadata footer outside the preview for ALL types, including APKs and folders.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -473,30 +481,26 @@ private fun GridCell(
     }
 
     val shape = RoundedCornerShape(7.dp)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
+    Column(
+        Modifier.fillMaxWidth()
             .clip(shape)
             .background(if (selected) AppColors.AccentContainer else AppColors.Card)
             .then(if (selected) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        // All files have a bottom scrim for name, exact date/time and size.
-        // Do not reduce image/icon size by allocating a second vertical block.
-        GridThumbnail(entry)
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            FileGridMetadata(entry, dateShown, includeName = true)
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            GridThumbnail(entry)
+            if (selectionMode) {
+                Icon(
+                    if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                    contentDescription = if (selected) "Выбрано" else "Выбрать",
+                    tint = if (selected) AppColors.Accent else Color.White,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
+                        .background(Color.Black.copy(alpha = 0.48f), RoundedCornerShape(50)),
+                )
+            }
         }
-        if (selectionMode) {
-            Icon(
-                if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                contentDescription = if (selected) "Выбрано" else "Выбрать",
-                tint = if (selected) AppColors.Accent else Color.White,
-                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
-                    .background(Color.Black.copy(alpha = 0.48f), RoundedCornerShape(50)),
-            )
-        }
+        FileGridMetadata(entry, dateShown, includeName = true)
     }
 }
 

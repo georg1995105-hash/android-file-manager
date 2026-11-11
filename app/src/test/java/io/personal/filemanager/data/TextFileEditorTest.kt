@@ -63,6 +63,16 @@ class TextFileEditorTest {
         }
     }
 
+    @Test fun multibyteTextUsesActualSavedByteLimit() {
+        val file = folder.newFile("unicode.md")
+        file.writeText("оригинал")
+        val initial = requireNotNull(TextFileEditor.snapshot(file, "UTF-8"))
+        val oversized = "😀".repeat(1_050_000) // > 4 МБ в UTF-8
+        assertTrue(TextFileEditor.validationError(oversized, "UTF-8") != null)
+        assertTrue(TextFileEditor.save(file, oversized, initial) is TextFileEditor.Result.Failure)
+        assertEquals("оригинал", file.readText())
+    }
+
     @Test fun overFourMegabytesNeverOverwritesOriginal() {
         val f = folder.newFile("config.json")
         f.writeText("{}")

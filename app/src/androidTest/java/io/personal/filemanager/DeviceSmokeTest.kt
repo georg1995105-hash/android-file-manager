@@ -1,6 +1,8 @@
 package io.personal.filemanager
 
 import android.graphics.Bitmap
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
@@ -114,6 +116,41 @@ class DeviceSmokeTest {
         }
     }
 
+    /** Многострочный Markdown: нижняя панель «Вставить», «Копировать всё», «Сохранить». */
+    @Test
+    fun ab_pasteAndCopyAllMarkdown() {
+        val file = File("/sdcard/Download/pfm-editor-clipboard-" + System.nanoTime() + ".md")
+        val body = "# Заголовок\n" + "Текст с переносами\n".repeat(2_000)
+        try {
+            compose.activityRule.scenario.onActivity { activity ->
+                activity.getSystemService(ClipboardManager::class.java)
+                    .setPrimaryClip(ClipData.newPlainText("fixture", body))
+            }
+            waitText("Мои файлы")
+            compose.onNodeWithContentDescription("Меню").performClick()
+            compose.onNodeWithText("Создать файл или папку").performClick()
+            compose.onNodeWithText("Markdown").performClick()
+            compose.onNodeWithText("Имя файла с расширением").performTextClearance()
+            compose.onNodeWithText("Имя файла с расширением").performTextInput(file.name)
+            compose.onAllNodes(hasText("Создать") and hasClickAction()).onFirst().performClick()
+            compose.waitUntil(15_000) {
+                compose.onAllNodesWithText("Вставить").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Вставить").performClick()
+            compose.onNodeWithText("Копировать всё").performClick()
+            var copied: String? = null
+            compose.activityRule.scenario.onActivity { activity ->
+                copied = activity.getSystemService(ClipboardManager::class.java)
+                    .primaryClip?.getItemAt(0)?.text?.toString()
+            }
+            org.junit.Assert.assertEquals(body, copied)
+            compose.onNodeWithText("Сохранить").performClick()
+            compose.waitUntil(15_000) { file.exists() && file.readText() == body }
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test
     fun b_recentAndText() {
         openTile("Новые")
@@ -197,7 +234,10 @@ class DeviceSmokeTest {
         waitText("Корзина")
         shot("d11_trash")
         back()
-        compose.onNodeWithText("Настроить").performClick()
+        compose.onNodeWithContentDescription("Меню").performClick()
+        compose.onNodeWithText("Настройки").performClick()
+        waitText("Удаление и корзина")
+        compose.onNodeWithText("Главная и размер плиток").performClick()
         waitText("Иконки разделов")
         shot("d12_tiles")
     }

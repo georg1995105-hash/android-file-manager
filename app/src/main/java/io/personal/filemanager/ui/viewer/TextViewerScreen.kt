@@ -167,7 +167,14 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
     fun formatJson() {
         val formatted = JsonPrettyPrinter.format(content.text)
         if (formatted.isSuccess) {
-            content = content.copy(text = formatted.getOrThrow())
+            val pretty = formatted.getOrThrow()
+            val charset = snapshot?.charsetName ?: return
+            val problem = TextFileEditor.validationError(pretty, charset)
+            if (problem != null) {
+                message = "Не удалось форматировать: $problem"
+                return
+            }
+            content = content.copy(text = pretty, selection = TextRange(pretty.length))
             message = "JSON отформатирован. Для записи нажмите «Сохранить»."
         } else {
             message = "Некорректный JSON: проверьте скобки, кавычки и запятые"
@@ -247,8 +254,12 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
         // Не называем «всем файлом» отрывок, если просмотр большого файла ограничен.
         val contents = if (vm.editing) vm.content.text else displayed.text
         try {
-            context.getSystemService(ClipboardManager::class.java)
-                ?.setPrimaryClip(ClipData.newPlainText(file.name, contents))
+            val clipboard = context.getSystemService(ClipboardManager::class.java)
+            if (clipboard == null) {
+                vm.showMessage("Буфер обмена недоступен")
+                return
+            }
+            clipboard.setPrimaryClip(ClipData.newPlainText(file.name, contents))
             FileActions.toast(
                 context,
                 if (!vm.editing && displayed.truncated) "Скопирована только отображаемая часть"

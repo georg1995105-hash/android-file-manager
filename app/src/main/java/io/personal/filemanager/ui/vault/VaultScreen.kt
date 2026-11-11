@@ -156,7 +156,8 @@ fun VaultScreen() {
                 editing = null
                 editorText = ""
                 deleting = null
-                exporting = null
+                // Keep the explicitly chosen export item until the Android document picker
+                // returns; the picker itself can stop this Activity.
                 currentKind = null
             }
         }

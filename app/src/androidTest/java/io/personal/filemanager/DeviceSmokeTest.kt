@@ -213,6 +213,8 @@ class DeviceSmokeTest {
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("Заголовок").fetchSemanticsNodes().isNotEmpty()
         }
+        waitText("Вставить")
+        waitText("Копировать всё")
         compose.onNodeWithText("Заголовок").performTextInput("Проверка CI")
         compose.onNodeWithText("Текст заметки").performTextInput("Текст заметки из теста")
         Thread.sleep(1_500) // автосохранение

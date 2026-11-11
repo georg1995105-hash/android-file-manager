@@ -72,6 +72,11 @@ fun AppSettingsScreen() {
                 Text("Нижняя панель и разделы")
             }
             HorizontalDivider()
+            Text("Личные данные", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = { navigator.open(Routes.VAULT) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Личный сейф · PIN и биометрия")
+            }
+            HorizontalDivider()
             Text("Инструменты", style = MaterialTheme.typography.titleMedium)
             TextButton(onClick = { navigator.open(Routes.ANALYZER) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Анализ памяти")

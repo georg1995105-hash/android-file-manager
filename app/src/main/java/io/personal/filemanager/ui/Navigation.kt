@@ -24,6 +24,7 @@ object Routes {
     const val BROWSER = "browser?path={path}"
     const val BACKUP = "backup"
     const val ANALYZER = "analyzer"
+    const val VAULT = "vault"
     const val PDF = "pdf?path={path}"
 
     fun section(id: SectionId) = "section/${id.name}"

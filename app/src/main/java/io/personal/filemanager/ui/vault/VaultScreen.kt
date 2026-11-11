@@ -151,6 +151,12 @@ fun VaultScreen() {
                 mediaPreview = null
                 previewKind = null
                 items = emptyList()
+                editingKind = null
+                editing = null
+                editorText = ""
+                deleting = null
+                exporting = null
+                currentKind = null
             }
         }
         owner.lifecycle.addObserver(observer)
@@ -388,8 +394,10 @@ fun VaultScreen() {
                                 activity.mainExecutor,
                                 object : BiometricPrompt.AuthenticationCallback() {
                                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                        unlocked = true
-                                        refreshItems()
+                                        if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                                            unlocked = true
+                                            refreshItems()
+                                        }
                                     }
                                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                                         // Dismiss and PIN fallback are expected: don't turn them into errors.

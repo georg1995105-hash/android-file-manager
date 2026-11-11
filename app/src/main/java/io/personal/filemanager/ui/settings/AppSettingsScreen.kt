@@ -7,6 +7,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import io.personal.filemanager.ui.theme.AppColors
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -73,8 +85,39 @@ fun AppSettingsScreen() {
             }
             HorizontalDivider()
             Text("Личные данные", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = { navigator.open(Routes.VAULT) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Личный сейф · PIN и биометрия")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { navigator.open(Routes.VAULT) },
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = AppColors.Card),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 116.dp)
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.Surface(
+                        color = AppColors.AccentContainer,
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = AppColors.Accent,
+                            modifier = Modifier.padding(14.dp).size(36.dp),
+                        )
+                    }
+                    Spacer(Modifier.padding(horizontal = 8.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("Личный сейф", fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Фото, видео, ссылки, заметки",
+                            color = AppColors.TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                        Text("PIN · лицо или отпечаток",
+                            color = AppColors.Accent, style = MaterialTheme.typography.labelLarge)
+                    }
+                    Icon(Icons.Filled.ChevronRight, contentDescription = "Открыть",
+                        modifier = Modifier.size(26.dp), tint = AppColors.TextSecondary)
+                }
             }
             HorizontalDivider()
             Text("Инструменты", style = MaterialTheme.typography.titleMedium)

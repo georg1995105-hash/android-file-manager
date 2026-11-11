@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
@@ -122,7 +123,7 @@ fun VaultScreen() {
     val biometricAvailable = remember(context, configured) {
         configured && runCatching {
             context.getSystemService(BiometricManager::class.java)
-                ?.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+                ?.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
                 BiometricManager.BIOMETRIC_SUCCESS
         }.getOrDefault(false)
     }
@@ -288,8 +289,18 @@ fun VaultScreen() {
                 if (unlocked) {
                     TextButton(onClick = {
                         unlocked = false
+                        pin = ""
+                        firstPin = null
                         items = emptyList()
                         currentKind = null
+                        editingKind = null
+                        editing = null
+                        editorText = ""
+                        deleting = null
+                        exporting = null
+                        mediaPreview?.delete()
+                        mediaPreview = null
+                        previewKind = null
                     }) {
                         Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text("Закрыть")
@@ -319,7 +330,7 @@ fun VaultScreen() {
                 )
                 Text(
                     if (!configured) "Фото, видео, ссылки и заметки будут храниться зашифрованными на этом устройстве."
-                    else "Откройте сейф с помощью PIN или защищённой биометрии.",
+                    else "Введите PIN или используйте распознавание лица либо отпечатка Android.",
                     color = AppColors.TextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -385,12 +396,12 @@ fun VaultScreen() {
                 ) { Text(if (!configured) (if (firstPin == null) "Продолжить" else "Создать сейф") else "Открыть") }
 
                 if (biometricAvailable && configured && activity != null) {
-                    TextButton(
+                    Button(
                         onClick = {
                             val prompt = BiometricPrompt.Builder(activity)
                                 .setTitle("Открыть личный сейф")
-                                .setSubtitle("Подтвердите вход защищённой биометрией Android")
-                                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                                .setSubtitle("Лицо или отпечаток — способ выбирает Android")
+                                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
                                 .setNegativeButton("Ввести PIN", activity.mainExecutor) { _, _ -> }
                                 .build()
                             prompt.authenticate(
@@ -409,12 +420,20 @@ fun VaultScreen() {
                                 },
                             )
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
                     ) {
-                        Icon(Icons.Filled.Fingerprint, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Открыть биометрией")
+                        Icon(Icons.Filled.Face, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Открыть лицом или отпечатком")
                     }
+                }
+                if (configured && !biometricAvailable) {
+                    Text(
+                        "Android не разрешает этому приложению биометрический вход. Используйте PIN.",
+                        color = AppColors.TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 Text(
                     "Данные привязаны к ключу этого устройства. При удалении приложения или потере ключа сейф не восстановить. Сохраняйте нужные копии отдельно.",

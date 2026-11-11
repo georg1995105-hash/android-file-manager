@@ -347,10 +347,12 @@ private fun GridCell(
     val stamp = remember(time, zone) { gridStamp(time, zone) }
     Column(
         Modifier
+            .fillMaxWidth()
             .clip(shape)
-            .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
+            .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.65f) else AppColors.Card)
+            .border(1.dp, if (selected) AppColors.Accent.copy(alpha = 0.65f) else AppColors.CardBorder, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(4.dp),
+            .padding(7.dp),
     ) {
         Box(
             Modifier
@@ -374,27 +376,33 @@ private fun GridCell(
                 )
             }
         }
-        Spacer(Modifier.size(4.dp))
+        Spacer(Modifier.size(7.dp))
         Text(
             entry.name,
+            modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.labelMedium,
             maxLines = nameLines,
-            minLines = nameLines,
+            softWrap = nameLines > 1,
             overflow = TextOverflow.Ellipsis,
         )
         val prefix = if (modifiedFallback) "изм. " else ""
         val stampStyle = MaterialTheme.typography.labelSmall
         val stampColor = MaterialTheme.colorScheme.onSurfaceVariant
         when {
-            stamp == null -> Text("время неизвестно", style = stampStyle, color = stampColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            stamp == null -> Text("время неизвестно", modifier = Modifier.fillMaxWidth(), style = stampStyle,
+                color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             compactStamp -> {
-                Text(prefix + stamp.day, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-                Text(stamp.time, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
+                Text(prefix + stamp.day, modifier = Modifier.fillMaxWidth(),
+                    style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                Text(stamp.time, modifier = Modifier.fillMaxWidth(),
+                    style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             }
-            else -> Text(prefix + stamp.oneLine, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
+            else -> Text(prefix + stamp.oneLine, modifier = Modifier.fillMaxWidth(),
+                style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
         }
         if (!entry.isDirectory) {
-            Text(formatSize(entry.size), style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
+            Text(formatSize(entry.size), modifier = Modifier.fillMaxWidth(),
+                style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
         }
     }
 }

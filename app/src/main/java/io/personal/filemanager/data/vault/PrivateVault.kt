@@ -65,7 +65,9 @@ class PrivateVault(private val context: Context) {
     fun setupPin(pin: String) {
         require(pin.matches(Regex("[0-9]{4}"))) { "PIN должен состоять из четырёх цифр" }
         if (isConfigured()) throw IllegalStateException("Сейф уже создан")
-        if (dir.listFiles()?.isNotEmpty() == true) {
+        val existing = dir.listFiles().orEmpty()
+        // Recovery from an interrupted initial setup is safe only if no protected items exist.
+        if (existing.any { it.name != "index.pfm" && it.name != "index.tmp" }) {
             throw IOException("Обнаружены существующие данные сейфа. Новый ключ создавать нельзя")
         }
         if (!dir.exists() && !dir.mkdirs()) throw IOException("Не удалось создать закрытую папку")

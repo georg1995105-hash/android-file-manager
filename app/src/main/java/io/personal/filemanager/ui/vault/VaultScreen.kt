@@ -330,11 +330,13 @@ fun VaultScreen() {
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     singleLine = true,
+                    enabled = !busy,
                     shape = RoundedCornerShape(16.dp),
                 )
                 Button(
                     onClick = {
                         if (pin.length != 4) return@Button
+                        val submittedPin = pin
                         if (!configured) {
                             val expected = firstPin
                             if (expected == null) {
@@ -349,7 +351,7 @@ fun VaultScreen() {
                                 busy = true
                                 scope.launch {
                                     try {
-                                        withContext(Dispatchers.IO) { vault.setupPin(pin) }
+                                        withContext(Dispatchers.IO) { vault.setupPin(submittedPin) }
                                         configured = true
                                         unlocked = true
                                         pin = ""
@@ -364,7 +366,7 @@ fun VaultScreen() {
                             busy = true
                             scope.launch {
                                 try {
-                                    val valid = withContext(Dispatchers.IO) { vault.checkPin(pin) }
+                                    val valid = withContext(Dispatchers.IO) { vault.checkPin(submittedPin) }
                                     if (valid) {
                                         unlocked = true
                                         pin = ""
@@ -563,11 +565,13 @@ fun VaultScreen() {
                 Button(
                     onClick = {
                         val id = editing?.id
+                        val titleToSave = editorTitle
+                        val textToSave = editorText
                         busy = true
                         scope.launch {
                             try {
                                 withContext(Dispatchers.IO) {
-                                    vault.saveText(kindToEdit, editorTitle, editorText, id)
+                                    vault.saveText(kindToEdit, titleToSave, textToSave, id)
                                 }
                                 editingKind = null
                                 editing = null

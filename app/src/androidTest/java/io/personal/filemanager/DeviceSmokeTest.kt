@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.hasClickAction
@@ -29,6 +30,7 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.FixMethodOrder
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,6 +49,30 @@ class DeviceSmokeTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     private val shots = File(SHOTS_DIR).apply { mkdirs() }
+
+    // Each instrumented method can reuse the same app process and its navigation state.
+    // Restore the home route before each test instead of assuming the previous one succeeded.
+    @Before
+    fun returnToHome() {
+        fun onHome(): Boolean = compose.onAllNodesWithText("Мои файлы")
+            .fetchSemanticsNodes().isNotEmpty()
+        compose.waitForIdle()
+        if (onHome()) return
+        repeat(8) {
+            val homeTab = compose.onAllNodesWithTag("bottom-tab-FILES")
+                .fetchSemanticsNodes()
+            if (homeTab.isNotEmpty()) {
+                compose.onNodeWithTag("bottom-tab-FILES").performClick()
+            } else {
+                compose.activityRule.scenario.onActivity {
+                    it.onBackPressedDispatcher.onBackPressed()
+                }
+            }
+            compose.waitForIdle()
+            if (onHome()) return
+        }
+        throw AssertionError("Не удалось вернуться на главный экран перед UI-тестом")
+    }
 
     private fun shot(name: String) {
         compose.waitForIdle()
@@ -108,24 +134,32 @@ class DeviceSmokeTest {
         // Exercise the real bottom navigation, avoiding an unrelated lazy-home scroll.
         compose.onNodeWithTag("bottom-tab-APPS").performClick()
         stage("apps opened using bottom navigation")
-        compose.onNodeWithText("Установленные").assertIsSelected()
+        compose.onNodeWithTag("apps-tab-installed").assertIsSelected()
         stage("installed selected")
+        // Move across most of the pager (not a short/fling-like swipe in a nested LazyColumn).
         compose.onNodeWithTag("apps-swipe-content").performTouchInput {
-            swipeLeft(startX = center.x * 2f * 0.75f, endX = center.x * 2f * 0.25f)
+            swipeLeft(startX = right * 0.88f, endX = right * 0.12f, durationMillis = 400)
         }
         stage("apps swipe left complete")
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("APK-файлы").fetchSemanticsNodes().any { node ->
+        compose.waitUntil(12_000) {
+            compose.onAllNodesWithTag("apps-tab-apks").fetchSemanticsNodes().any { node ->
                 node.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Selected) &&
                     node.config[androidx.compose.ui.semantics.SemanticsProperties.Selected]
             }
         }
+        compose.onNodeWithTag("apps-tab-apks").assertIsSelected()
         stage("APK selected")
         compose.onNodeWithTag("apps-swipe-content").performTouchInput {
-            swipeRight(startX = center.x * 2f * 0.25f, endX = center.x * 2f * 0.75f)
+            swipeRight(startX = right * 0.12f, endX = right * 0.88f, durationMillis = 400)
         }
         stage("apps swipe right complete")
-        compose.onNodeWithText("Установленные").assertIsSelected()
+        compose.waitUntil(12_000) {
+            compose.onAllNodesWithTag("apps-tab-installed").fetchSemanticsNodes().any { node ->
+                node.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Selected) &&
+                    node.config[androidx.compose.ui.semantics.SemanticsProperties.Selected]
+            }
+        }
+        compose.onNodeWithTag("apps-tab-installed").assertIsSelected()
         stage("done")
     }
 

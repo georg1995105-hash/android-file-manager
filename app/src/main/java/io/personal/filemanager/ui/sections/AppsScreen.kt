@@ -124,11 +124,13 @@ fun AppsScreen() {
             Tab(
                 selected = selectedTab == 0,
                 onClick = { scope.launch { pager.animateScrollToPage(0) } },
+                modifier = Modifier.testTag("apps-tab-installed"),
                 text = { Text("Установленные") },
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { scope.launch { pager.animateScrollToPage(1) } },
+                modifier = Modifier.testTag("apps-tab-apks"),
                 text = { Text("APK-файлы") },
             )
         }

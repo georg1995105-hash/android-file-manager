@@ -2,7 +2,6 @@ package io.personal.filemanager.ui
 
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -21,8 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import kotlin.math.abs
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +62,7 @@ import io.personal.filemanager.ui.analyzer.AnalyzerScreen
 import io.personal.filemanager.ui.archive.ArchiveScreen
 import io.personal.filemanager.data.archive.ArchiveFormats
 import io.personal.filemanager.ui.settings.TabSettingsScreen
+import io.personal.filemanager.ui.settings.AppSettingsScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
 import io.personal.filemanager.ui.theme.AppColors
@@ -88,27 +86,6 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
         else -> null
     }
     val showBar = route == Routes.HOME || route == Routes.SECTION
-    val activeTabs = config?.tabs.orEmpty().mapNotNull { SectionId.fromKey(it.id) }
-    // Горизонтальный жест доступен только для нижних разделов; просмотрщики
-    // фото/видео, редактор и архив управляют своими жестами без перехвата.
-    val swipeBetweenTabs = if (showBar) Modifier.pointerInput(activeTabs, currentSection) {
-        var distance = 0f
-        detectHorizontalDragGestures(
-            onDragStart = { distance = 0f },
-            onHorizontalDrag = { change, drag ->
-                distance += drag
-                if (abs(distance) > 24.dp.toPx()) change.consume()
-            },
-            onDragEnd = {
-                if (abs(distance) >= 96.dp.toPx()) {
-                    adjacentTab(activeTabs, currentSection, left = distance < 0f)
-                        ?.let { selectTab(nav, it) }
-                }
-                distance = 0f
-            },
-            onDragCancel = { distance = 0f },
-        )
-    } else Modifier
     // «Создать» находится в меню ⋮ контекстных экранов, а не в глобальной FAB.
     var showCreateDialog by remember { mutableStateOf(false) }
     val openCreateDialog = { showCreateDialog = true }
@@ -209,8 +186,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                     popExitTransition = { ExitTransition.None },
                     modifier = Modifier
                         .padding(inner)
-                        .consumeWindowInsets(inner)
-                        .then(swipeBetweenTabs),
+                        .consumeWindowInsets(inner),
                 ) {
                     composable(Routes.HOME) { HomeScreen() }
                     composable(
@@ -241,6 +217,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                         Routes.AUDIO,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> AudioPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    composable(Routes.SETTINGS) { AppSettingsScreen() }
                     composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
                     composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
                     composable(Routes.TRASH) { TrashScreen() }

@@ -249,12 +249,8 @@ private fun HomeHeader() {
                     onClick = { menuOpen = false; navigator.open(Routes.ANALYZER) },
                 )
                 DropdownMenuItem(
-                    text = { Text("Настроить разделы") },
-                    onClick = { menuOpen = false; navigator.openTileSettings() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Настроить нижнюю панель") },
-                    onClick = { menuOpen = false; navigator.openTabSettings() },
+                    text = { Text("Настройки") },
+                    onClick = { menuOpen = false; navigator.open(Routes.SETTINGS) },
                 )
                 if (config?.showTrashShortcut != false) {
                     DropdownMenuItem(

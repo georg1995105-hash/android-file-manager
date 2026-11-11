@@ -10,6 +10,9 @@ import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.tapClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.abs
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -90,6 +93,10 @@ class AppsViewModel(private val container: AppContainer) : ViewModel() {
     }
 }
 
+/** Индекс вкладки приложения после горизонтального свайпа. */
+fun nextAppTab(current: Int, left: Boolean): Int =
+    if (left) (current + 1).coerceAtMost(1) else (current - 1).coerceAtLeast(0)
+
 /**
  * «Приложения»: установленные (запуск, системные сведения) и локальные APK-файлы.
  * Экспорт APK и split-наборов (.apks), отправка; установка APK-файлов — через экран APK.
@@ -114,7 +121,27 @@ fun AppsScreen() {
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("APK-файлы") })
         }
         ListSearchField(search)
-        if (tab == 0) InstalledAppsList(search) else MediaListBody(MediaCategory.APKS, search = search)
+        // Свайп относится только к двум внутренним вкладкам «Приложений».
+        // Нижние разделы приложения этим жестом не переключаются.
+        Box(Modifier.fillMaxSize().pointerInput(tab) {
+            var horizontal = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { horizontal = 0f },
+                onHorizontalDrag = { change, dragAmount ->
+                    horizontal += dragAmount
+                    if (abs(horizontal) > 16.dp.toPx()) change.consume()
+                },
+                onDragEnd = {
+                    if (abs(horizontal) > 72.dp.toPx()) {
+                        tab = nextAppTab(tab, left = horizontal < 0f)
+                    }
+                    horizontal = 0f
+                },
+                onDragCancel = { horizontal = 0f },
+            )
+        }) {
+            if (tab == 0) InstalledAppsList(search) else MediaListBody(MediaCategory.APKS, search = search)
+        }
     }
 }
 

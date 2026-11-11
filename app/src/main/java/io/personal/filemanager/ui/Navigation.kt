@@ -14,6 +14,7 @@ object Routes {
     const val EDIT = "edit?path={path}"
     const val VIDEO = "video?path={path}"
     const val AUDIO = "audio?path={path}"
+    const val SETTINGS = "settings"
     const val SETTINGS_TILES = "settings/tiles"
     const val SETTINGS_TABS = "settings/tabs"
     const val TRASH = "trash"
@@ -36,14 +37,6 @@ object Routes {
     fun note(id: Long) = "note?id=$id"
     fun pdf(path: String) = "pdf?path=${Uri.encode(path)}"
     fun browser(path: String) = "browser?path=${Uri.encode(path)}"
-}
-
-/** Соседний раздел для свайпа, только среди реально выбранных вкладок. */
-fun adjacentTab(tabs: List<SectionId>, current: SectionId?, left: Boolean): SectionId? {
-    val i = tabs.indexOf(current)
-    if (i < 0) return null
-    val next = i + if (left) 1 else -1
-    return tabs.getOrNull(next)
 }
 
 interface AppNavigator {

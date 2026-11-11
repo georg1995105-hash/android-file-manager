@@ -3,6 +3,7 @@ package io.personal.filemanager.ui.viewer
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -26,12 +28,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +56,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +73,7 @@ import io.personal.filemanager.data.TextLoader
 import io.personal.filemanager.data.TextResult
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.ops.LocalFileOps
 import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.EmptyState
@@ -94,13 +102,15 @@ internal fun insertAtSelection(value: TextFieldValue, inserted: String): TextFie
     return TextFieldValue(result, selection = TextRange(begin + inserted.length))
 }
 
-class TextViewerViewModel(private val path: String) : ViewModel() {
+class TextViewerViewModel(private val path: String, private val allowDraft: Boolean = false) : ViewModel() {
     private val _result = MutableStateFlow<TextResult?>(null)
     val result: StateFlow<TextResult?> = _result.asStateFlow()
 
     var chunks: List<String> = emptyList()
         private set
     var editing by mutableStateOf(false)
+        private set
+    var isNew by mutableStateOf(false)
         private set
     var content by mutableStateOf(TextFieldValue(""))
         private set
@@ -112,11 +122,21 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
     private var savedText = ""
     private var snapshot: TextFileEditor.Snapshot? = null
     val modified: Boolean get() = content.text != savedText
-    val canEdit: Boolean get() = snapshot != null && (_result.value as? TextResult.Ok)?.truncated == false
+    val canEdit: Boolean get() = isNew || (snapshot != null && (_result.value as? TextResult.Ok)?.truncated == false)
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
             val file = File(path)
+            if (allowDraft && !file.exists()) {
+                withContext(Dispatchers.Main) {
+                    isNew = true
+                    editing = true
+                    content = TextFieldValue("")
+                    savedText = ""
+                    _result.value = TextResult.Ok("", "UTF-8", false, 0)
+                }
+                return@launch
+            }
             val r = TextLoader.load(file)
             val original = (r as? TextResult.Ok)?.text
             val snap = if (r is TextResult.Ok && !r.truncated) TextFileEditor.snapshot(file, r.charsetName) else null
@@ -139,7 +159,7 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
         // Лимит по символам — дешёвый верхний барьер во время печати.
         // Точное ограничение в байтах проверяется при вставке и сохранении.
         if (value.text.length > TextFileEditor.MAX_EDIT_BYTES) {
-            message = "Максимальный размер редактируемого файла — 4 МБ"
+            message = "Максимальный размер редактируемого файла — 12 МБ"
             return
         }
         content = value
@@ -149,7 +169,7 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
     fun paste(text: String) {
         if (!canEdit || busy || !editing) return
         val candidate = insertAtSelection(content, text)
-        val charset = snapshot?.charsetName ?: return
+        val charset = snapshot?.charsetName ?: if (isNew) "UTF-8" else return
         val problem = TextFileEditor.validationError(candidate.text, charset)
         if (problem != null) { message = problem; return }
         content = candidate
@@ -165,10 +185,14 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
     }
 
     fun formatJson() {
+        if (content.text.length > 2_000_000) {
+            message = "Большой JSON можно редактировать и сохранять, но автоформатирование ограничено 2 млн символов."
+            return
+        }
         val formatted = JsonPrettyPrinter.format(content.text)
         if (formatted.isSuccess) {
             val pretty = formatted.getOrThrow()
-            val charset = snapshot?.charsetName ?: return
+            val charset = snapshot?.charsetName ?: if (isNew) "UTF-8" else return
             val problem = TextFileEditor.validationError(pretty, charset)
             if (problem != null) {
                 message = "Не удалось форматировать: $problem"
@@ -183,8 +207,8 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
 
     fun save(onSaved: () -> Unit) {
         if (busy || !editing) return
-        val current = snapshot ?: return
-        if (!modified) {
+        val current = snapshot
+        if (!modified && !isNew) {
             message = "Изменений нет"
             return
         }
@@ -192,11 +216,14 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
         val textToSave = content.text
         viewModelScope.launch {
             val outcome = withContext(Dispatchers.IO) {
-                TextFileEditor.save(File(path), textToSave, current)
+                if (isNew) TextFileEditor.create(File(path), textToSave)
+                else if (current != null) TextFileEditor.save(File(path), textToSave, current)
+                else TextFileEditor.Result.Failure("Файл недоступен для сохранения")
             }
             when (outcome) {
                 is TextFileEditor.Result.Saved -> {
                     snapshot = outcome.snapshot
+                    isNew = false
                     savedText = textToSave
                     val newResult = TextResult.Ok(
                         text = textToSave,
@@ -228,13 +255,21 @@ private val monospaceExtensions = setOf(
 fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val vm = appViewModel(key = "text-$path") { TextViewerViewModel(path) }
+    val vm = appViewModel(key = (if (autoEdit) "edit-" else "text-") + path) {
+        TextViewerViewModel(path, allowDraft = autoEdit)
+    }
     val result by vm.result.collectAsStateWithLifecycle()
     val file = remember(path) { File(path) }
     val extension = file.extension.lowercase()
     val entry = remember(path) { FileEntry.from(file) }
     val mono = extension in monospaceExtensions
     var confirmDiscard by remember { mutableStateOf(false) }
+    var confirmEmpty by remember { mutableStateOf(false) }
+    val fileOps = LocalFileOps.current
+    val opsVersion by appContainer().operations.version.collectAsStateWithLifecycle()
+    LaunchedEffect(opsVersion) {
+        if (opsVersion > 0 && !vm.isNew && result is TextResult.Ok && !file.exists()) navigator.back()
+    }
     val syntax = remember(extension) { SyntaxHighlight(extension) }
     val operations = appContainer().operations
     val onSaved = { operations.rescan(listOf(path)); FileActions.toast(context, "Файл сохранён") }
@@ -279,9 +314,24 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
     }
 
     fun leaveEditor() {
+        if (vm.busy) return
         if (!vm.editing) navigator.back()
-        else if (vm.modified) confirmDiscard = true
+        else if (vm.isNew) {
+            if (vm.modified) confirmDiscard = true else navigator.back()
+        } else if (vm.modified) confirmDiscard = true
         else vm.discard()
+    }
+
+    val saveAction: () -> Unit = {
+        if (vm.isNew && vm.content.text.isEmpty()) confirmEmpty = true
+        else vm.save(onSaved)
+    }
+    val deleteAction: () -> Unit = {
+        if (vm.isNew) {
+            if (vm.modified) confirmDiscard = true else navigator.back()
+        } else if (file.exists()) {
+            fileOps.delete(listOf(FileEntry.from(file)))
+        }
     }
 
     BackHandler(enabled = vm.editing) { leaveEditor() }
@@ -292,7 +342,10 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
             title = { Text("Несохранённые изменения") },
             text = { Text("Изменения в файле не сохранены. Отменить редактирование?") },
             confirmButton = {
-                TextButton(onClick = { confirmDiscard = false; vm.discard() }) {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    if (vm.isNew) navigator.back() else vm.discard()
+                }) {
                     Text("Не сохранять")
                 }
             },
@@ -300,18 +353,32 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
         )
     }
 
+    if (confirmEmpty) {
+        AlertDialog(
+            onDismissRequest = { confirmEmpty = false },
+            title = { Text("Создать пустой файл?") },
+            text = { Text("В файле пока нет текста. Он появится в памяти только после подтверждения.") },
+            confirmButton = {
+                TextButton(onClick = { confirmEmpty = false; vm.save(onSaved) }) {
+                    Text("Создать пустой файл")
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmEmpty = false }) { Text("Вернуться") } },
+        )
+    }
+
     Column(Modifier.fillMaxSize()) {
         val ok = result as? TextResult.Ok
         ScreenTopBar(
             title = file.name,
-            subtitle = ok?.let {
+            subtitle = if (vm.isNew) "Новый файл • не сохранён" else ok?.let {
                 "${it.charsetName} • ${formatSize(it.totalBytes)}" +
                     if (it.truncated) " • показано начало" else if (vm.editing) " • редактор" else ""
             },
             onBack = { leaveEditor() },
             actions = {
                 if (vm.editing) {
-                    IconButton(onClick = { vm.save(onSaved) }, enabled = !vm.busy && vm.modified) {
+                    IconButton(onClick = saveAction, enabled = !vm.busy && (vm.modified || vm.isNew)) {
                         Icon(Icons.Filled.Save, contentDescription = "Сохранить")
                     }
                 } else if (vm.canEdit) {
@@ -371,26 +438,63 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
                 .padding(horizontal = 4.dp, vertical = 4.dp),
         ) {
             if (vm.editing) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    TextButton(onClick = { pasteFromClipboard() }, enabled = !vm.busy, modifier = Modifier.weight(1f)) {
-                        Text("Вставить", fontSize = 12.sp, maxLines = 1)
-                    }
-                    TextButton(onClick = { copyAll() }, modifier = Modifier.weight(1f)) {
-                        Text("Копировать всё", fontSize = 12.sp, maxLines = 1)
-                    }
-                    TextButton(onClick = { vm.save(onSaved) },
-                        enabled = !vm.busy && vm.modified, modifier = Modifier.weight(1f)) {
-                        Text("Сохранить", fontSize = 12.sp, maxLines = 1)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = saveAction,
+                        enabled = !vm.busy && (vm.modified || vm.isNew),
+                        modifier = Modifier.weight(1f).heightIn(min = 50.dp),
+                        shape = RoundedCornerShape(15.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF174C3C),
+                            contentColor = Color(0xFFB6F3D6),
+                            disabledContainerColor = AppColors.Card,
+                            disabledContentColor = AppColors.TextSecondary,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) { Text("Сохранить", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                    OutlinedButton(
+                        onClick = { leaveEditor() },
+                        enabled = !vm.busy,
+                        modifier = Modifier.weight(1f).heightIn(min = 50.dp),
+                        shape = RoundedCornerShape(15.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = AppColors.Card,
+                            contentColor = AppColors.TextPrimary,
+                        ),
+                        border = BorderStroke(1.dp, AppColors.CardBorder),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) { Text("Отмена", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                    OutlinedButton(
+                        onClick = deleteAction,
+                        enabled = !vm.busy,
+                        modifier = Modifier.weight(1f).heightIn(min = 50.dp),
+                        shape = RoundedCornerShape(15.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color(0xFF321B20),
+                            contentColor = AppColors.Danger,
+                        ),
+                        border = BorderStroke(1.dp, AppColors.Danger.copy(alpha = 0.5f)),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) {
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Удалить", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    if (extension == "json") {
-                        TextButton(onClick = { vm.formatJson() }, enabled = !vm.busy) {
-                            Text("Форматировать JSON", fontSize = 12.sp)
-                        }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    TextButton(onClick = { pasteFromClipboard() }, enabled = !vm.busy, modifier = Modifier.weight(1f)) {
+                        Text("Вставить", fontSize = 13.sp, maxLines = 1)
                     }
-                    TextButton(onClick = { leaveEditor() }, enabled = !vm.busy) {
-                        Text("Отмена", fontSize = 12.sp)
+                    TextButton(onClick = { copyAll() }, modifier = Modifier.weight(1f)) {
+                        Text("Копировать всё", fontSize = 13.sp, maxLines = 1)
+                    }
+                    if (extension == "json") {
+                        TextButton(onClick = { vm.formatJson() }, enabled = !vm.busy, modifier = Modifier.weight(1f)) {
+                            Text("Формат JSON", fontSize = 13.sp, maxLines = 1)
+                        }
                     }
                 }
             } else {

@@ -3,6 +3,13 @@ package io.personal.filemanager.ui.analyzer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,8 +28,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,75 +103,204 @@ fun AnalyzerScreen() {
     val nav = LocalNavigator.current
     val storage = appContainer().storage
     val info = remember(storage) { storage.internalStorage() }
-    LaunchedEffect(Unit) { vm.start() }
+    var activeTab by rememberSaveable { mutableIntStateOf(0) }
+    var expanded by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var showAll by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    val result = state.result
+    val fill = if (info.totalBytes > 0) {
+        (info.usedBytes.toDouble() / info.totalBytes).toFloat().coerceIn(0f, 1f)
+    } else 0f
+
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(title = "Анализ памяти", onBack = { nav.back() })
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Память устройства", style = MaterialTheme.typography.titleMedium)
-            Text("Занято ${formatSize(info.usedBytes)} из ${formatSize(info.totalBytes)}")
-            Text("Сканируются доступные файлы общей памяти, без закрытых Android данных и кэша других приложений.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            when {
-                state.scanning -> {
-                    Text("Проверено файлов: ${state.progress}")
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Память устройства", style = MaterialTheme.typography.titleMedium)
+                        Text("${formatSize(info.usedBytes)} из ${formatSize(info.totalBytes)}",
+                            style = MaterialTheme.typography.titleLarge)
+                        LinearProgressIndicator(progress = { fill }, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            "Общий объём занятой памяти включает системные данные, " +
+                                "которые Android не позволяет просканировать.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (state.scanning) {
+                item {
+                    Text("Идёт анализ: ${state.progress} файлов", style = MaterialTheme.typography.titleMedium)
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     TextButton(onClick = vm::cancel) { Text("Остановить") }
                 }
-                state.error != null -> {
+            } else if (state.error != null) {
+                item {
                     Text(state.error.orEmpty(), color = MaterialTheme.colorScheme.error)
-                    Button(onClick = vm::start) { Text("Повторить") }
+                    Button(onClick = vm::start) { Text("Повторить анализ") }
                 }
-                state.result != null -> {
-                    val r = state.result!!
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Результаты", style = MaterialTheme.typography.titleMedium)
-                        TextButton(onClick = vm::start) { Text("Обновить") }
-                    }
-                    Text("Файлов: ${r.scannedFiles} · доступный объём: ${formatSize(r.scannedBytes)}")
-                    if (r.incomplete) Text(
-                        "Данные неполные: недоступные папки или ограничение 150 000 файлов.",
-                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    HorizontalDivider()
-                    Text("По типам", style = MaterialTheme.typography.titleMedium)
-                    r.categories.forEach { cat ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(categoryName(cat.kind) + " (${cat.count})", modifier = Modifier.weight(1f))
-                            Text(formatSize(cat.bytes))
-                        }
-                    }
-                    HorizontalDivider()
-                    Text("Самые большие файлы", style = MaterialTheme.typography.titleMedium)
-                    r.largeFiles.take(15).forEach { item ->
-                        Column(Modifier.fillMaxWidth().clickable {
-                            nav.openFile(FileEntry.from(File(item.path)))
-                        }.padding(vertical = 5.dp)) {
-                            Text(item.name, maxLines = 1)
-                            Text(formatSize(item.bytes), style = MaterialTheme.typography.bodySmall,
+            } else if (result != null) {
+                item {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Файлов: ${result.scannedFiles}", style = MaterialTheme.typography.titleSmall)
+                            Text("Найдено: ${formatSize(result.scannedBytes)}",
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        TextButton(onClick = vm::start) { Text("Обновить") }
                     }
-                    HorizontalDivider()
-                    Text("Точные дубликаты (SHA-256)", style = MaterialTheme.typography.titleMedium)
-                    if (r.duplicates.isEmpty()) Text("Подтверждённые дубликаты не найдены.")
-                    else {
-                        Text("Повторяющийся объём: " + formatSize(r.duplicates.sumOf { it.reclaimableBytes }))
-                        r.duplicates.forEach { group ->
-                            Text("${group.files.size} файла по ${formatSize(group.bytesPerFile)}",
-                                style = MaterialTheme.typography.titleSmall)
-                            group.files.forEach { item ->
-                                Text(item.path, modifier = Modifier.fillMaxWidth().clickable {
-                                    nav.openFile(FileEntry.from(File(item.path)))
-                                }.padding(vertical = 4.dp), maxLines = 2,
-                                    style = MaterialTheme.typography.bodySmall)
+                    if (result.incomplete) Text(
+                        "Некоторые системные папки недоступны. Данные по типам могут быть неполными.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("Обзор", "Крупные", "Дубликаты").forEachIndexed { index, name ->
+                            FilterChip(
+                                selected = activeTab == index,
+                                onClick = { activeTab = index },
+                                label = { Text(name) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+                when (activeTab) {
+                    0 -> {
+                        item {
+                            Text("Размеры найденных файлов", style = MaterialTheme.typography.titleMedium)
+                            Text("Не вся занятая память телефона: только доступные файлы.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        itemsIndexed(groupedCategories(result)) { _, category ->
+                            val proportion = if (result.scannedBytes > 0)
+                                (category.bytes.toDouble() / result.scannedBytes).toFloat().coerceIn(0f, 1f)
+                            else 0f
+                            Card(shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(category.name, modifier = Modifier.weight(1f))
+                                        Text(formatSize(category.bytes))
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { proportion }, modifier = Modifier.fillMaxWidth())
+                                    Text("${category.count} файлов",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
-                    if (r.duplicatesIncomplete) Text(
-                        "Поиск дубликатов ограничен объёмом чтения. Непроверенные файлы не считаются одинаковыми.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Ничего не удаляется автоматически.", modifier = Modifier.padding(bottom = 24.dp))
+                    1 -> {
+                        item {
+                            Text("Самые большие файлы", style = MaterialTheme.typography.titleMedium)
+                            Text("Нажми файл, чтобы открыть. Показаны 25 самых крупных.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        itemsIndexed(result.largeFiles) { _, file ->
+                            AnalyzerFileRow(file.path, formatSize(file.bytes)) {
+                                nav.openFile(FileEntry.from(File(file.path)))
+                            }
+                        }
+                    }
+                    2 -> {
+                        item {
+                            Text("Подтверждённые дубликаты", style = MaterialTheme.typography.titleMedium)
+                            Text("Совпадение SHA-256. Ничего не удаляется автоматически.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "Повторяющийся объём: ${formatSize(result.duplicates.sumOf { it.reclaimableBytes })}",
+                                style = MaterialTheme.typography.titleSmall)
+                        }
+                        if (result.duplicates.isEmpty()) {
+                            item { Text("Одинаковые файлы не найдены.") }
+                        }
+                        itemsIndexed(result.duplicates) { index, group ->
+                            val opened = index in expanded
+                            Card(
+                                onClick = {
+                                    expanded = if (opened) expanded - index else expanded + index
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text("${group.files.size} одинаковых файлов",
+                                        style = MaterialTheme.typography.titleMedium)
+                                    Text(
+                                        "По ${formatSize(group.bytesPerFile)} · повторяется ${formatSize(group.reclaimableBytes)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(if (opened) "Свернуть" else "Посмотреть файлы",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            if (opened) {
+                                val visible = if (index in showAll) group.files else group.files.take(8)
+                                visible.forEach { file ->
+                                    AnalyzerFileRow(file.path, "") {
+                                        nav.openFile(FileEntry.from(File(file.path)))
+                                    }
+                                }
+                                if (visible.size < group.files.size) {
+                                    TextButton(onClick = { showAll = showAll + index }) {
+                                        Text("Показать остальные ${group.files.size - visible.size}")
+                                    }
+                                }
+                            }
+                        }
+                        if (result.duplicatesIncomplete) item {
+                            Text("Не все файлы проверены: действует ограничение объёма чтения.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
+
+private data class DisplayCategory(val name: String, val bytes: Long, val count: Int)
+
+private fun groupedCategories(result: AnalysisResult): List<DisplayCategory> =
+    result.categories.groupBy { categoryName(it.kind) }.map { (name, entries) ->
+        DisplayCategory(name, entries.sumOf { it.bytes }, entries.sumOf { it.count })
+    }.sortedByDescending { it.bytes }
+
+@Composable
+private fun AnalyzerFileRow(path: String, size: String, onOpen: () -> Unit) {
+    Card(onClick = onOpen, shape = RoundedCornerShape(14.dp)) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(File(path).name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium)
+                Text(File(path).parentFile?.name.orEmpty(), maxLines = 1,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (size.isNotEmpty()) {
+                Spacer(Modifier.width(8.dp))
+                Text(size, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -168,5 +314,5 @@ private fun categoryName(kind: FileKind): String = when (kind) {
     FileKind.ARCHIVE -> "Архивы"
     FileKind.APK -> "APK"
     FileKind.FOLDER -> "Папки"
-    FileKind.OTHER -> "Другие"
+    FileKind.OTHER -> "Прочие"
 }

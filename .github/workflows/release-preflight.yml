@@ -27,3 +27,52 @@ jobs:
           python3 tools/test_ci_signing.py -v
           python3 -m py_compile tools/release_signing.py tools/create_release_identity.py tools/release_upgrade.py
           bash -n tools/build_signed_release.sh tools/build_release_update_pair.sh
+
+  # One-time publication of an already signed, validated APK from the successful CI run.
+  # The public GitHub Release asset avoids broken ChatGPT Library-file download links.
+  publish-downloadable-0-12-17:
+    if: github.ref == 'refs/heads/feature/compact-create-files-20261110'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Restore signed APK from successful CI
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh run download 43118069741 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name personal-file-manager-0.12.17-vc32-5623bd7 \
+            --dir dist
+          cd dist
+          sha256sum -c SHA256SUMS.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('RELEASE_IDENTITY.json').read_text())[0]
+          assert r['package']=='io.personal.filemanager'
+          assert r['version_code']==32 and r['version_name']=='0.12.17'
+          assert r['signature_verified'] and not r['debuggable']
+          assert r['certificate_sha256']=='d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7'
+          assert Path(r['file']).is_file()
+          print('Validated owner-signed 0.12.17 for existing-app updates')
+          PY
+      - name: Publish publicly downloadable APK
+        run: |
+          set -euo pipefail
+          TAG="v0.12.17-release-vc32-5623bd7"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Verified release already exists, not overwriting."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            dist/personal-file-manager-0.12.17-release-vc32-universal.apk \
+            dist/SHA256SUMS.txt dist/RELEASE_IDENTITY.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 5623bd71bce9cc084ba38d6ee8b4e54158c9dc90 \
+            --title "Мои файлы 0.12.17 — APK для обновления" \
+            --notes "Подписанная 0.12.17 (versionCode 32). Обновление поверх 0.12.16 без удаления данных. SHA-256 и сертификат подтверждены."

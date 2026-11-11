@@ -417,6 +417,7 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
                 }
             }
         }
+    }
 }
 
 @Composable

@@ -1,0 +1,14 @@
+[
+  {
+    "package": "io.personal.filemanager",
+    "version_code": 33,
+    "version_name": "0.12.18",
+    "certificate_sha256": "d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7",
+    "sha256": "a697b0797f90483dcecc7892b4694c6951803396b12d5b83e6714cb05e7bd4dd",
+    "signature_verified": true,
+    "debuggable": false,
+    "zipalign_16k": true,
+    "file": "personal-file-manager-0.12.18-release-vc33-universal.apk",
+    "abi": "universal"
+  }
+]

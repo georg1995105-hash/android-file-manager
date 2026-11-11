@@ -216,7 +216,6 @@ class DeviceSmokeTest {
         try {
             waitText("Мои файлы")
             compose.onNodeWithContentDescription("Меню").performClick()
-            compose.onRoot().printToLog("PFM_CREATE_MENU_TREE")
             compose.onNodeWithText("Создать файл или папку").performClick()
             compose.onNodeWithText("JSON").performClick()
             compose.onNodeWithText("Имя файла с расширением").performTextClearance()

@@ -12,6 +12,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import kotlin.math.abs
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -123,7 +124,7 @@ fun AppsScreen() {
         ListSearchField(search)
         // Свайп относится только к двум внутренним вкладкам «Приложений».
         // Нижние разделы приложения этим жестом не переключаются.
-        Box(Modifier.fillMaxSize().pointerInput(tab) {
+        Box(Modifier.fillMaxSize().testTag("apps-swipe-content").pointerInput(tab) {
             var horizontal = 0f
             detectHorizontalDragGestures(
                 onDragStart = { horizontal = 0f },

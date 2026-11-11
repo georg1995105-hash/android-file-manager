@@ -110,7 +110,7 @@ class DeviceSmokeTest {
         stage("apps opened using bottom navigation")
         compose.onNodeWithText("Установленные").assertIsSelected()
         stage("installed selected")
-        compose.onRoot().performTouchInput {
+        compose.onNodeWithTag("apps-swipe-content").performTouchInput {
             swipeLeft(startX = center.x * 2f * 0.75f, endX = center.x * 2f * 0.25f)
         }
         stage("apps swipe left complete")
@@ -121,7 +121,7 @@ class DeviceSmokeTest {
             }
         }
         stage("APK selected")
-        compose.onRoot().performTouchInput {
+        compose.onNodeWithTag("apps-swipe-content").performTouchInput {
             swipeRight(startX = center.x * 2f * 0.25f, endX = center.x * 2f * 0.75f)
         }
         stage("apps swipe right complete")

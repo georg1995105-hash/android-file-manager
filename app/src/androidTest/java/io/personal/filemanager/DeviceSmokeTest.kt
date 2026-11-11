@@ -137,6 +137,14 @@ class DeviceSmokeTest {
     @Test
     fun a_home() {
         waitText("Мои файлы")
+        // Regression: a bottom tab must never stretch to the full screen and cover Home.
+        val rootHeight = compose.onRoot().fetchSemanticsNode().boundsInRoot.height
+        val tabHeight = compose.onNodeWithTag("bottom-tab-FILES")
+            .fetchSemanticsNode().boundsInRoot.height
+        org.junit.Assert.assertTrue(
+            "Bottom tab covers the screen: tab=$tabHeight, root=$rootHeight",
+            tabHeight > 0f && tabHeight < rootHeight / 3f,
+        )
         compose.onRoot().printToLog("PFM_HOME_TREE")
         try {
             waitText("Внутренняя память")

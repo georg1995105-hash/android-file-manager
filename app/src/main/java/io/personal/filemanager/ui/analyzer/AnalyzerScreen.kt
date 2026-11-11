@@ -61,6 +61,7 @@ import io.personal.filemanager.ui.ops.LocalFileOps
 import io.personal.filemanager.ui.theme.AppColors
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
+import io.personal.filemanager.ui.components.FileThumbnail
 import io.personal.filemanager.ui.components.ScreenTopBar
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -385,6 +386,7 @@ private fun AnalyzerFileRow(path: String, size: String, onOpen: () -> Unit) {
     val nav = LocalNavigator.current
     val fileOps = LocalFileOps.current
     val file = remember(path) { File(path) }
+    val entry = remember(path) { FileEntry.from(file) }
     Card(
         onClick = onOpen,
         shape = RoundedCornerShape(14.dp),
@@ -392,6 +394,8 @@ private fun AnalyzerFileRow(path: String, size: String, onOpen: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically) {
+            FileThumbnail(entry, 36.dp)
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium)

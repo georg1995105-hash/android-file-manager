@@ -147,7 +147,7 @@ fun FileRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            FileThumbnail(entry, 40.dp)
+            FileThumbnail(entry, 44.dp)
             if (selectionMode) {
                 Icon(
                     if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
@@ -221,6 +221,12 @@ fun FileListPane(
                     onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
                     onLongClick = { selection.toggle(entry.path) },
                     onMenu = { menuFor = entry },
+                )
+                // Ненавязчивая граница вместо отдельных тяжёлых карточек для каждой строки.
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 70.dp),
+                    thickness = 0.5.dp,
+                    color = AppColors.Divider,
                 )
             }
         }

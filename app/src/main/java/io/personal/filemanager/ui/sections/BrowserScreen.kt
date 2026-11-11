@@ -181,7 +181,7 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
 
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(
-            title = if (relative.isEmpty()) title else File(path).name,
+            title = if (relative.isEmpty() && title == "Внутренняя память") "Память" else if (relative.isEmpty()) title else File(path).name,
             subtitle = if (relative.isEmpty()) path else "$title/$relative",
             onBack = { if (canGoUp) File(path).parent?.let { go(it) } else navigator.back() },
             actions = {

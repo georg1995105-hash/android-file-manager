@@ -66,6 +66,17 @@ class FileSystemRepository {
      * существующее имя: содержимое пользовательского файла никогда не перезаписываем.
      * Тип определяется расширением имени; автоматически исполняемый файл не создаём.
      */
+    /** Validate a new document without writing an empty file before the editor is saved. */
+    fun prepareFile(parentPath: String, rawName: String): CreateFolderResult {
+        val name = rawName.trim()
+        validateName(name)?.let { return CreateFolderResult.Invalid(it) }
+        val parent = File(parentPath)
+        if (!parent.isDirectory || !parent.canWrite() || isRestrictedByAndroid(parent)) return CreateFolderResult.Failed
+        val target = File(parent, name)
+        return if (target.exists()) CreateFolderResult.AlreadyExists
+        else CreateFolderResult.Created(FileEntry.from(target))
+    }
+
     fun createFile(parentPath: String, rawName: String): CreateFolderResult {
         val name = rawName.trim()
         validateName(name)?.let { return CreateFolderResult.Invalid(it) }

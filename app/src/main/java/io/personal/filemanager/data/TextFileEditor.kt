@@ -12,7 +12,7 @@ import java.security.MessageDigest
 
 /** Редактор ограничен небольшими файлами: большие остаются в потоковом просмотрщике. */
 object TextFileEditor {
-    const val MAX_EDIT_BYTES = 4 * 1024 * 1024
+    const val MAX_EDIT_BYTES = 12 * 1024 * 1024
 
     data class Snapshot(val sha256: String, val charsetName: String)
 
@@ -28,7 +28,7 @@ object TextFileEditor {
      */
     fun validationError(text: String, charsetName: String): String? = try {
         if (text.length > MAX_EDIT_BYTES || encode(text, charsetName).size > MAX_EDIT_BYTES)
-            "Текст превышает лимит редактора (4 МБ)."
+            "Текст превышает лимит редактора 12 МБ."
         else null
     } catch (_: CharacterCodingException) {
         "Текст содержит символы, не поддерживаемые кодировкой файла."
@@ -65,7 +65,7 @@ object TextFileEditor {
         } catch (_: Exception) {
             return Result.Failure("Неизвестная кодировка файла")
         }
-        if (bytes.size > MAX_EDIT_BYTES) return Result.Failure("Превышен лимит редактора (4 МБ)")
+        if (bytes.size > MAX_EDIT_BYTES) return Result.Failure("Превышен лимит редактора 12 МБ")
 
         val parent = file.parentFile ?: return Result.Failure("Не найдена папка файла")
         var temp: File? = null
@@ -86,6 +86,36 @@ object TextFileEditor {
             Result.Saved(Snapshot(hash(file), expected.charsetName))
         } catch (_: Exception) {
             Result.Failure("Не удалось сохранить файл. Исходный файл не должен быть изменён.")
+        } finally {
+            temp?.delete()
+        }
+    }
+
+    /** Commit a draft only after explicit Save, never replacing a colliding file. */
+    fun create(file: File, contents: String): Result {
+        if (file.exists()) return Result.ChangedExternally
+        val parent = file.parentFile ?: return Result.Failure("Не найдена папка файла")
+        if (!parent.isDirectory || !parent.canWrite()) return Result.Failure("Нет доступа к папке назначения")
+        val bytes = try {
+            encode(contents, "UTF-8")
+        } catch (_: Exception) {
+            return Result.Failure("Не удалось подготовить текст в UTF-8")
+        }
+        if (bytes.size > MAX_EDIT_BYTES) return Result.Failure("Превышен лимит редактора (12 МБ)")
+        var temp: File? = null
+        return try {
+            temp = File.createTempFile(".myfiles-new-", ".tmp", parent)
+            FileOutputStream(temp).use { output ->
+                output.write(bytes)
+                output.fd.sync()
+            }
+            if (file.exists()) return Result.ChangedExternally
+            Files.move(temp.toPath(), file.toPath())
+            Result.Saved(Snapshot(hash(file), "UTF-8"))
+        } catch (_: java.nio.file.FileAlreadyExistsException) {
+            Result.ChangedExternally
+        } catch (_: Exception) {
+            Result.Failure("Не удалось создать файл. Проверьте место и права доступа.")
         } finally {
             temp?.delete()
         }

@@ -26,7 +26,7 @@ class DraftTextFileTest {
         val dir = Files.createTempDirectory("myfiles-draft").toFile()
         try {
             val file = File(dir, "config.json")
-            val data = "{\\"message\\":\\"Привет\\",\\"items\\":[1,2,3]}\n"
+            val data = """{"message":"Привет","items":[1,2,3]}""" + "\n"
             assertTrue(TextFileEditor.create(file, data) is TextFileEditor.Result.Saved)
             assertEquals(data, file.readText(Charsets.UTF_8))
         } finally {

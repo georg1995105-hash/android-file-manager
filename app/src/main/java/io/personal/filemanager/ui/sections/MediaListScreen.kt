@@ -57,6 +57,7 @@ import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.components.rememberAllFilesAccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -84,8 +85,15 @@ class MediaListViewModel(private val container: AppContainer, private val catego
     )
 
     private var job: Job? = null
+    private var lastRefreshAt = 0L
+    private var generation = 0
 
-    fun refresh() {
+    fun refresh(force: Boolean = false) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        // Coalesce MediaStore reads when quickly switching between bottom tabs.
+        if (!force && now - lastRefreshAt < 700L) return
+        lastRefreshAt = now
+        val request = ++generation
         job?.cancel()
         job = viewModelScope.launch(Dispatchers.IO) {
             if (!container.storage.hasAllFilesAccess()) {
@@ -95,6 +103,7 @@ class MediaListViewModel(private val container: AppContainer, private val catego
             val sort = MediaSort.valueOf(container.settings.mediaSort(category.name).first().name)
             val limit = if (category == MediaCategory.AUDIO) MediaRepository.AUDIO_LIMIT else MediaRepository.DEFAULT_LIMIT
             val result = runCatching { container.media.list(category, sort, limit = limit) }
+            if (request != generation || !kotlinx.coroutines.currentCoroutineContext().isActive) return@launch
             _state.update {
                 MediaListState(
                     loading = false,
@@ -186,12 +195,11 @@ fun MediaListBody(
     val hasAccess = rememberAllFilesAccess()
     val state by vm.state.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
-    val isRecent = category == MediaCategory.RECENT
-    val shown = if (search == null) state.entries else state.entries.filter { search.matches(it.name) }
+      val shown = if (search == null) state.entries else state.entries.filter { search.matches(it.name) }
 
     RefreshWhileVisible(vm.changes) { vm.refresh() }
     val opsVersion by appContainer().operations.version.collectAsStateWithLifecycle()
-    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.refresh() }
+    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.refresh(force = true) }
 
     when {
         !hasAccess -> AllFilesAccessRequired()
@@ -204,14 +212,8 @@ fun MediaListBody(
             view = view,
             // При сортировке по появлению под файлом дата добавления в память; иначе — дата изменения.
             dateShown = if (sort == RecentSort.ADDED) DateShown.ADDED else DateShown.MODIFIED,
-            headerText = if (!isRecent || sort == RecentSort.SIZE || sort == RecentSort.NAME) {
-                null
-            } else if (sort == RecentSort.ADDED) {
-                "Свежие сверху по дате появления файла в памяти телефона. " +
-                    "Android не хранит точную дату скачивания для каждого файла."
-            } else {
-                "Свежие сверху по дате последнего изменения файла."
-            },
+            // Date mode is already visible in the subtitle. Keep the grid clean and readable.
+            headerText = null,
         )
     }
 }

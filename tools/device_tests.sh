@@ -32,7 +32,7 @@ if [ "$DEVICE" = "phone" ]; then
   SIGNING_APKS+=("${PREV_APKS[0]}")
 fi
 bash tools/check_debug_signatures.sh "${SIGNING_APKS[@]}" || exit 1
-adb wait-for-device
+timeout 90s adb wait-for-device || { echo "::error::Emulator never became available through adb"; exit 1; }
 
 # «Доступ ко всем файлам» — режим appop по uid (как переключатель в настройках).
 grant_files() {
@@ -51,8 +51,28 @@ rotate() {
 
 RESULTS=()
 run_tests() { # $1 — метка, $2 — классы через запятую
-  adb shell am instrument -w -r -e class "$2" $RUNNER | tee "instr-$1.log"
-  if grep -q "OK (" "instr-$1.log"; then RESULTS+=("$1: OK"); else RESULTS+=("$1: FAIL"); fi
+  local label="$1" classes="$2" rc
+  # Instrumentation may block forever after an emulator/app deadlock.
+  # Bound each suite and retain the last successful test in the output.
+  echo "===== INSTRUMENTATION START: $label ($(date -u +%FT%TZ)) ====="
+  timeout --signal=TERM --kill-after=20s 480s \
+    adb shell am instrument -w -r -e class "$classes" "$RUNNER" 2>&1 | tee "instr-$label.log"
+  rc=${PIPESTATUS[0]}
+  if [ "$rc" -eq 0 ] && grep -q "OK (" "instr-$label.log"; then
+    RESULTS+=("$label: OK")
+    echo "===== INSTRUMENTATION OK: $label ====="
+    return 0
+  fi
+  RESULTS+=("$label: FAIL (exit $rc)")
+  echo "::error::Android instrumentation $label failed or timed out (exit $rc)"
+  echo "===== LAST INSTRUMENTATION OUTPUT: $label ====="
+  tail -100 "instr-$label.log" || true
+  echo "===== LAST ANDROID LOGCAT ====="
+  timeout 20s adb logcat -d -t 1200 | tail -160 || true
+  echo "===== ANDROID ACTIVITY STATE ====="
+  timeout 20s adb shell dumpsys activity activities | tail -100 || true
+  timeout 15s adb shell am force-stop "$PKG" || true
+  return 1
 }
 
 # «Обновление поверх» (приёмочный сценарий ТЗ): предыдущий опубликованный APK -> заметка ->
@@ -87,10 +107,10 @@ sleep 8
 adb logcat -c
 
 rotate 0
-run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest,$PKG.GridViewTest"
+run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest,$PKG.GridViewTest" || exit 1
 # Горизонтальная ориентация: тест сам поворачивает экран через UiAutomation (команды adb на эмуляторе
 # телефона не меняли поворот дисплея).
-run_tests landscape "$PKG.OrientationTest"
+run_tests landscape "$PKG.OrientationTest" || exit 1
 
 mkdir -p device-shots
 adb pull "$SHOTS/." device-shots/ >/dev/null 2>&1 || true

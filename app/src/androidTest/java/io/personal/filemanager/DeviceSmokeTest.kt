@@ -133,7 +133,7 @@ class DeviceSmokeTest {
             compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("""{"server":{"port":443,"active":true}}""")
             waitText("Вставить")
             waitText("Копировать всё")
-            compose.onNodeWithText("Форматировать JSON").performClick()
+            compose.onNodeWithText("Формат JSON").performClick()
             compose.onNodeWithContentDescription("Сохранить").performClick()
             compose.waitUntil(15_000) {
                 file.exists() && file.readText().contains("\n") &&

@@ -1,6 +1,7 @@
 package io.personal.filemanager.ui.analyzer
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +17,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -47,6 +56,9 @@ import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.analyzer.AnalysisResult
 import io.personal.filemanager.data.analyzer.StorageAnalyzer
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.Routes
+import io.personal.filemanager.ui.ops.LocalFileOps
+import io.personal.filemanager.ui.theme.AppColors
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.components.ScreenTopBar
@@ -108,6 +120,8 @@ fun AnalyzerScreen() {
     var activeTab by rememberSaveable { mutableIntStateOf(0) }
     var expanded by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var showAll by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var expandedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showSmallDuplicates by rememberSaveable { mutableStateOf(false) }
     val result = state.result
     val fill = if (info.totalBytes > 0) {
         (info.usedBytes.toDouble() / info.totalBytes).toFloat().coerceIn(0f, 1f)
@@ -169,13 +183,15 @@ fun AnalyzerScreen() {
                     )
                 }
                 item {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("Обзор", "Крупные", "Дубликаты").forEachIndexed { index, name ->
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf("Обзор", "Папки", "Крупные", "Дубликаты").forEachIndexed { index, name ->
                             FilterChip(
                                 selected = activeTab == index,
                                 onClick = { activeTab = index },
                                 label = { Text(name) },
-                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
@@ -189,26 +205,79 @@ fun AnalyzerScreen() {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         itemsIndexed(groupedCategories(result)) { _, category ->
+                            val opened = category.name in expandedCategories
                             val proportion = if (result.scannedBytes > 0)
                                 (category.bytes.toDouble() / result.scannedBytes).toFloat().coerceIn(0f, 1f)
                             else 0f
-                            Card(shape = RoundedCornerShape(14.dp)) {
-                                Column(Modifier.fillMaxWidth().padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Card(
+                                onClick = {
+                                    expandedCategories = if (opened) expandedCategories - category.name
+                                        else expandedCategories + category.name
+                                },
+                                shape = RoundedCornerShape(18.dp),
+                                colors = CardDefaults.cardColors(containerColor = AppColors.Card),
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text(category.name, modifier = Modifier.weight(1f))
                                         Text(formatSize(category.bytes))
                                     }
                                     LinearProgressIndicator(
                                         progress = { proportion }, modifier = Modifier.fillMaxWidth())
-                                    Text("${category.count} файлов",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("${category.count} файлов",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(if (opened) "Свернуть" else "Посмотреть",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = AppColors.Accent)
+                                    }
+                                    if (opened) {
+                                        val samples = result.categoryFiles.filterKeys { it in category.kinds }
+                                            .values.flatten().sortedByDescending { it.bytes }.take(15)
+                                        Text("Крупнейшие файлы категории (до 15)", style = MaterialTheme.typography.bodySmall,
+                                            color = AppColors.TextSecondary)
+                                        if (samples.isEmpty()) Text("Файлы не найдены.")
+                                        samples.forEach { file ->
+                                            AnalyzerFileRow(file.path, formatSize(file.bytes)) {
+                                                nav.openFile(FileEntry.from(File(file.path)))
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                     1 -> {
+                        item {
+                            Text("Папки по занятому месту", style = MaterialTheme.typography.titleMedium)
+                            Text("Учитываются вложенные файлы. Нажмите папку, чтобы перейти к её содержимому.",
+                                style = MaterialTheme.typography.bodySmall, color = AppColors.TextSecondary)
+                        }
+                        if (result.topFolders.isEmpty()) item { Text("Папки с файлами не найдены.") }
+                        itemsIndexed(result.topFolders) { _, folder ->
+                            Card(
+                                onClick = { nav.open(Routes.browser(folder.path)) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = AppColors.Card),
+                            ) {
+                                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.FolderOpen, contentDescription = null, tint = AppColors.Accent)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(File(folder.path).name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("${folder.count} файлов • ${folder.path}",
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodySmall, color = AppColors.TextSecondary)
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(formatSize(folder.bytes), style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+                    }
+                    2 -> {
                         item {
                             Text("Самые большие файлы", style = MaterialTheme.typography.titleMedium)
                             Text("Нажми файл, чтобы открыть. Показаны 25 самых крупных.",
@@ -221,7 +290,7 @@ fun AnalyzerScreen() {
                             }
                         }
                     }
-                    2 -> {
+                    3 -> {
                         item {
                             Text("Подтверждённые дубликаты", style = MaterialTheme.typography.titleMedium)
                             Text("Совпадение SHA-256. Ничего не удаляется автоматически.",
@@ -231,10 +300,30 @@ fun AnalyzerScreen() {
                                 "Повторяющийся объём: ${formatSize(result.duplicates.sumOf { it.reclaimableBytes })}",
                                 style = MaterialTheme.typography.titleSmall)
                         }
-                        if (result.duplicates.isEmpty()) {
-                            item { Text("Одинаковые файлы не найдены.") }
+                        val filteredGroups = result.duplicates.filter {
+                            showSmallDuplicates || it.bytesPerFile >= 64 * 1024
                         }
-                        itemsIndexed(result.duplicates) { index, group ->
+                        if (filteredGroups.size != result.duplicates.size) {
+                            item {
+                                TextButton(onClick = {
+                                    showSmallDuplicates = true
+                                    expanded = emptySet()
+                                    showAll = emptySet()
+                                }) { Text("Показать мелкие дубликаты (до 64 КБ): ${result.duplicates.size - filteredGroups.size} групп") }
+                            }
+                        } else if (showSmallDuplicates) {
+                            item {
+                                TextButton(onClick = {
+                                    showSmallDuplicates = false
+                                    expanded = emptySet()
+                                    showAll = emptySet()
+                                }) { Text("Скрыть мелкие дубликаты") }
+                            }
+                        }
+                        if (filteredGroups.isEmpty()) {
+                            item { Text("Крупные дубликаты не найдены.") }
+                        }
+                        itemsIndexed(filteredGroups) { index, group ->
                             val opened = index in expanded
                             Card(
                                 onClick = {
@@ -281,28 +370,61 @@ fun AnalyzerScreen() {
     }
 }
 
-private data class DisplayCategory(val name: String, val bytes: Long, val count: Int)
+private data class DisplayCategory(
+    val name: String, val bytes: Long, val count: Int, val kinds: Set<FileKind>,
+)
 
 private fun groupedCategories(result: AnalysisResult): List<DisplayCategory> =
     result.categories.groupBy { categoryName(it.kind) }.map { (name, entries) ->
-        DisplayCategory(name, entries.sumOf { it.bytes }, entries.sumOf { it.count })
+        DisplayCategory(name, entries.sumOf { it.bytes }, entries.sumOf { it.count }, entries.map { it.kind }.toSet())
     }.sortedByDescending { it.bytes }
 
 @Composable
 private fun AnalyzerFileRow(path: String, size: String, onOpen: () -> Unit) {
-    Card(onClick = onOpen, shape = RoundedCornerShape(14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+    var menu by remember { mutableStateOf(false) }
+    val nav = LocalNavigator.current
+    val fileOps = LocalFileOps.current
+    val file = remember(path) { File(path) }
+    Card(
+        onClick = onOpen,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = AppColors.Card),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(File(path).name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium)
-                Text(File(path).parentFile?.name.orEmpty(), maxLines = 1,
+                Text(file.parentFile?.name.orEmpty(), maxLines = 1,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = AppColors.TextSecondary)
             }
             if (size.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
-                Text(size, style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(size, style = MaterialTheme.typography.labelMedium, color = AppColors.TextSecondary)
+            }
+            androidx.compose.foundation.layout.Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Действия с файлом")
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Открыть папку") },
+                        leadingIcon = { Icon(Icons.Filled.FolderOpen, contentDescription = null) },
+                        onClick = {
+                            menu = false
+                            file.parentFile?.let { nav.open(Routes.browser(it.absolutePath)) }
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("В корзину…") },
+                        leadingIcon = { Icon(Icons.Filled.DeleteOutline, contentDescription = null) },
+                        onClick = {
+                            menu = false
+                            if (file.isFile) fileOps.delete(listOf(FileEntry.from(file)))
+                        },
+                    )
+                }
             }
         }
     }

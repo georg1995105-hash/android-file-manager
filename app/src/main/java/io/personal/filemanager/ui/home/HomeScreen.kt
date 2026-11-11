@@ -160,7 +160,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
         if (config != null && tiles.isEmpty()) {
             item {
                 Text(
-                    "Все разделы скрыты. Нажмите «Настроить», чтобы вернуть нужные.",
+                    "Все разделы скрыты. Нажмите значок карандаша, чтобы вернуть нужные.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
@@ -348,18 +348,20 @@ private fun AccessBanner(modifier: Modifier = Modifier) {
 
 @Composable
 private fun ConfigureButton(onClick: () -> Unit) {
-    Row(
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .border(1.dp, AppColors.CardBorder, RoundedCornerShape(50))
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, AppColors.CardBorder, RoundedCornerShape(12.dp))
             .background(AppColors.Card)
-            .tapClickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .tapClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("Настроить", style = MaterialTheme.typography.labelLarge)
+        Icon(
+            Icons.Filled.Edit,
+            contentDescription = "Настроить разделы",
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

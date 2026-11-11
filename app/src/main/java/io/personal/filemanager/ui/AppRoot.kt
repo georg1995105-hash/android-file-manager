@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -23,6 +25,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -338,11 +341,12 @@ internal fun BottomTabBar(
             val id = SectionId.fromKey(tab.id) ?: return@forEach
             val selected = id == current
             val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
+            var recentCreateMenu by remember(id) { mutableStateOf(false) }
             val press = if (id == SectionId.RECENT) {
                 Modifier.combinedClickable(
                     onClick = { onSelect(id) },
-                    onLongClick = onCreateRecent,
-                    onLongClickLabel = "Создать файл или папку",
+                    onLongClick = { recentCreateMenu = true },
+                    onLongClickLabel = "Открыть меню создания",
                 )
             } else Modifier.clickable { onSelect(id) }
             Column(
@@ -371,6 +375,14 @@ internal fun BottomTabBar(
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (id == SectionId.RECENT) {
+                    DropdownMenu(expanded = recentCreateMenu, onDismissRequest = { recentCreateMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Создать файл или папку") },
+                            onClick = { recentCreateMenu = false; onCreateRecent() },
+                        )
+                    }
+                }
             }
         }
     }

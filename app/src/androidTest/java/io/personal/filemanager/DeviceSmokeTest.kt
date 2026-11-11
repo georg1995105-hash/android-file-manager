@@ -201,6 +201,26 @@ class DeviceSmokeTest {
     }
 
     @Test
+    fun g2_settingsAndAnalyzer() {
+        waitText("Мои файлы")
+        compose.onNodeWithContentDescription("Меню").performClick()
+        compose.onNodeWithText("Настройки").performClick()
+        waitText("Использовать корзину")
+        waitText("Показывать корзину в меню")
+        waitText("Открыть корзину")
+        shot("d12a_settings")
+        back()
+        compose.onNodeWithContentDescription("Меню").performClick()
+        compose.onNodeWithText("Анализ памяти").performClick()
+        waitText("Память устройства")
+        compose.waitUntil(40_000) {
+            compose.onAllNodesWithText("Размеры найденных файлов").fetchSemanticsNodes().isNotEmpty()
+        }
+        waitText("Обзор")
+        shot("d12b_analyzer")
+    }
+
+    @Test
     fun h_browserAndApps() {
         compose.onNodeWithText("Внутренняя память").performClick()
         waitText("Download")

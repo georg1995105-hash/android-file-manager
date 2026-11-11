@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -104,8 +105,9 @@ class DeviceSmokeTest {
         stage("home swipe complete")
         waitText("Мои файлы")
         stage("home remained visible")
-        openTile("Приложения")
-        stage("apps opened")
+        // Exercise the real bottom navigation, avoiding an unrelated lazy-home scroll.
+        compose.onNodeWithTag("bottom-tab-APPS").performClick()
+        stage("apps opened using bottom navigation")
         compose.onNodeWithText("Установленные").assertIsSelected()
         stage("installed selected")
         compose.onRoot().performTouchInput {

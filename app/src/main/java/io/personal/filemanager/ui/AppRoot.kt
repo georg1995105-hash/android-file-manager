@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -350,6 +351,7 @@ internal fun BottomTabBar(
             } else Modifier.clickable { onSelect(id) }
             Column(
                 modifier = Modifier.weight(1f).fillMaxHeight()
+                    .testTag("bottom-tab-${id.name}")
                     .semantics { role = Role.Tab; this.selected = selected }
                     .then(press),
                 horizontalAlignment = Alignment.CenterHorizontally,

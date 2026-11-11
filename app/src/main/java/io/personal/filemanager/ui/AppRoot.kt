@@ -327,7 +327,7 @@ private fun selectTab(nav: NavHostController, id: SectionId) {
 internal fun BottomTabBar(
     tabs: List<TabConfig>,
     current: SectionId?,
-    onSelect: (SectionId) -> Unit,
+    onSelect: (SectionId) -> Unit = {},
     onCreateRecent: () -> Unit = {},
 ) {
     NavigationBar(containerColor = AppColors.Surface, tonalElevation = 0.dp) {

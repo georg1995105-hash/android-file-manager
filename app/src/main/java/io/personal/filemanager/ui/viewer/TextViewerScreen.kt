@@ -49,6 +49,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -81,7 +82,17 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private const val LINES_PER_CHUNK = 120
-private const val MAX_COPY_CHARS = 500_000
+/** Вставка по позиции курсора с заменой выделения; не превращает текст в одну строку. */
+internal fun insertAtSelection(value: TextFieldValue, inserted: String): TextFieldValue {
+    val begin = value.selection.min.coerceIn(0, value.text.length)
+    val end = value.selection.max.coerceIn(begin, value.text.length)
+    val result = buildString(value.text.length - (end - begin) + inserted.length) {
+        append(value.text, 0, begin)
+        append(inserted)
+        append(value.text, end, value.text.length)
+    }
+    return TextFieldValue(result, selection = TextRange(begin + inserted.length))
+}
 
 class TextViewerViewModel(private val path: String) : ViewModel() {
     private val _result = MutableStateFlow<TextResult?>(null)
@@ -125,9 +136,27 @@ class TextViewerViewModel(private val path: String) : ViewModel() {
     }
 
     fun change(value: TextFieldValue) {
+        // Лимит по символам — дешёвый верхний барьер во время печати.
+        // Точное ограничение в байтах проверяется при вставке и сохранении.
+        if (value.text.length > TextFileEditor.MAX_EDIT_BYTES) {
+            message = "Максимальный размер редактируемого файла — 4 МБ"
+            return
+        }
         content = value
         message = null
     }
+
+    fun paste(text: String) {
+        if (!canEdit || busy || !editing) return
+        val candidate = insertAtSelection(content, text)
+        val charset = snapshot?.charsetName ?: return
+        val problem = TextFileEditor.validationError(candidate.text, charset)
+        if (problem != null) { message = problem; return }
+        content = candidate
+        message = null
+    }
+
+    fun showMessage(value: String) { message = value }
 
     fun discard() {
         content = TextFieldValue(savedText)
@@ -202,6 +231,33 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
     val syntax = remember(extension) { SyntaxHighlight(extension) }
     val operations = appContainer().operations
     val onSaved = { operations.rescan(listOf(path)); FileActions.toast(context, "Файл сохранён") }
+
+    fun pasteFromClipboard() {
+        val clip = context.getSystemService(ClipboardManager::class.java)?.primaryClip
+        val pasted = try {
+            if (clip == null || clip.itemCount == 0) null
+            else clip.getItemAt(0).coerceToText(context)?.toString()
+        } catch (_: Exception) { null }
+        if (pasted == null) vm.showMessage("В буфере обмена нет доступного текста")
+        else vm.paste(pasted)
+    }
+
+    fun copyAll() {
+        val displayed = (result as? TextResult.Ok) ?: return
+        // Не называем «всем файлом» отрывок, если просмотр большого файла ограничен.
+        val contents = if (vm.editing) vm.content.text else displayed.text
+        try {
+            context.getSystemService(ClipboardManager::class.java)
+                ?.setPrimaryClip(ClipData.newPlainText(file.name, contents))
+            FileActions.toast(
+                context,
+                if (!vm.editing && displayed.truncated) "Скопирована только отображаемая часть"
+                else "Весь текст скопирован",
+            )
+        } catch (_: Exception) {
+            vm.showMessage("Android не смог скопировать такой объём текста. Используй «Поделиться».")
+        }
+    }
     val editorFocus = remember { FocusRequester() }
     LaunchedEffect(vm.editing) {
         if (vm.editing) editorFocus.requestFocus()
@@ -295,64 +351,61 @@ fun TextViewerScreen(path: String, autoEdit: Boolean = false) {
             )
         }
 
-        Row(
+        Column(
             Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .card(RoundedCornerShape(18.dp))
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .padding(horizontal = 4.dp, vertical = 4.dp),
         ) {
             if (vm.editing) {
-                if (extension == "json") {
-                    TextButton(onClick = { vm.formatJson() }, enabled = !vm.busy) {
-                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Форматировать JSON")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    TextButton(onClick = { pasteFromClipboard() }, enabled = !vm.busy, modifier = Modifier.weight(1f)) {
+                        Text("Вставить", fontSize = 12.sp, maxLines = 1)
+                    }
+                    TextButton(onClick = { copyAll() }, modifier = Modifier.weight(1f)) {
+                        Text("Копировать всё", fontSize = 12.sp, maxLines = 1)
+                    }
+                    TextButton(onClick = { vm.save(onSaved) },
+                        enabled = !vm.busy && vm.modified, modifier = Modifier.weight(1f)) {
+                        Text("Сохранить", fontSize = 12.sp, maxLines = 1)
                     }
                 }
-                TextButton(onClick = { vm.save(onSaved) }, enabled = !vm.busy && vm.modified) {
-                    Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Сохранить")
-                }
-                TextButton(onClick = { leaveEditor() }, enabled = !vm.busy) { Text("Отмена") }
-            } else {
-                if (vm.canEdit) {
-                    TextButton(onClick = { vm.edit() }) {
-                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Редактировать")
-                    }
-                }
-                if (ok != null) {
-                    TextButton(onClick = {
-                        val text = ok.text.take(MAX_COPY_CHARS)
-                        context.getSystemService(ClipboardManager::class.java)
-                            ?.setPrimaryClip(ClipData.newPlainText(file.name, text))
-                        if (ok.text.length > MAX_COPY_CHARS) {
-                            FileActions.toast(context, "Скопированы первые ${MAX_COPY_CHARS / 1000} тыс. символов")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    if (extension == "json") {
+                        TextButton(onClick = { vm.formatJson() }, enabled = !vm.busy) {
+                            Text("Форматировать JSON", fontSize = 12.sp)
                         }
-                    }) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Копировать всё")
+                    }
+                    TextButton(onClick = { leaveEditor() }, enabled = !vm.busy) {
+                        Text("Отмена", fontSize = 12.sp)
                     }
                 }
-                TextButton(onClick = { FileActions.share(context, listOf(FileEntry.from(file))) }) {
-                    Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Поделиться")
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    if (vm.canEdit) {
+                        TextButton(onClick = { vm.edit() }, modifier = Modifier.weight(1f)) {
+                            Text("Редактировать", fontSize = 12.sp, maxLines = 1)
+                        }
+                    }
+                    if (ok != null) {
+                        TextButton(onClick = { copyAll() }, modifier = Modifier.weight(1f)) {
+                            Text(if (ok.truncated) "Копировать часть" else "Копировать всё",
+                                fontSize = 12.sp, maxLines = 1)
+                        }
+                    }
+                    TextButton(onClick = { FileActions.share(context, listOf(FileEntry.from(file))) },
+                        modifier = Modifier.weight(1f)) {
+                        Text("Поделиться", fontSize = 12.sp, maxLines = 1)
+                    }
                 }
-                TextButton(onClick = { FileActions.openExternally(context, entry) }) {
-                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Открыть в…")
+                TextButton(onClick = { FileActions.openExternally(context, entry) },
+                    modifier = Modifier.align(androidx.compose.ui.Alignment.End)) {
+                    Text("Открыть в другом приложении", fontSize = 12.sp)
                 }
             }
         }
-    }
 }
 
 @Composable

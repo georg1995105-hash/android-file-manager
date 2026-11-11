@@ -99,6 +99,8 @@ class DeviceSmokeTest {
                 compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
             }
             compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("""{"server":{"port":443,"active":true}}""")
+            waitText("Вставить")
+            waitText("Копировать всё")
             compose.onNodeWithText("Форматировать JSON").performClick()
             compose.onNodeWithContentDescription("Сохранить").performClick()
             compose.waitUntil(15_000) {

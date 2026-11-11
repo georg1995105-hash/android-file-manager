@@ -46,6 +46,32 @@ class TextFileEditorTest {
         assertEquals("abc", file.readText())
     }
 
+    @Test fun longDocumentsSaveAcrossAllFormats() {
+        val bodies = mapOf(
+            "txt" to "Большая заметка\\n".repeat(35_000),
+            "md" to "# Документ\\nДлинный текст\\n".repeat(24_000),
+            "json" to """{"text":"${"a".repeat(550_000)}"}""",
+            "xml" to "<root>${"content".repeat(80_000)}</root>",
+            "yaml" to "notes: |\\n  строка\\n".repeat(30_000),
+            "conf" to "key=value\\n".repeat(55_000),
+        )
+        for ((ext, body) in bodies) {
+            val f = folder.newFile("large.$ext")
+            val before = requireNotNull(TextFileEditor.snapshot(f, "UTF-8"))
+            assertTrue("$ext: ${body.length}", TextFileEditor.save(f, body, before) is TextFileEditor.Result.Saved)
+            assertEquals("$ext not preserved", body, f.readText())
+        }
+    }
+
+    @Test fun overFourMegabytesNeverOverwritesOriginal() {
+        val f = folder.newFile("config.json")
+        f.writeText("{}")
+        val snapshot = requireNotNull(TextFileEditor.snapshot(f, "UTF-8"))
+        val body = "a".repeat(TextFileEditor.MAX_EDIT_BYTES + 1)
+        assertTrue(TextFileEditor.save(f, body, snapshot) is TextFileEditor.Result.Failure)
+        assertEquals("{}", f.readText())
+    }
+
     @Test fun largeFilesStayReadOnly() {
         val file = folder.newFile("huge.txt")
         file.writeBytes(ByteArray(TextFileEditor.MAX_EDIT_BYTES + 1))

@@ -12,7 +12,7 @@ import java.security.MessageDigest
 
 /** Редактор ограничен небольшими файлами: большие остаются в потоковом просмотрщике. */
 object TextFileEditor {
-    const val MAX_EDIT_BYTES = 256 * 1024
+    const val MAX_EDIT_BYTES = 4 * 1024 * 1024
 
     data class Snapshot(val sha256: String, val charsetName: String)
 
@@ -20,6 +20,20 @@ object TextFileEditor {
         data class Saved(val snapshot: Snapshot) : Result
         data object ChangedExternally : Result
         data class Failure(val message: String) : Result
+    }
+
+    /**
+     * Проверка вставляемого текста с учётом исходной кодировки и BOM.
+     * В отличие от проверки числа символов, учитывает фактический размер сохранения.
+     */
+    fun validationError(text: String, charsetName: String): String? = try {
+        if (text.length > MAX_EDIT_BYTES || encode(text, charsetName).size > MAX_EDIT_BYTES)
+            "Текст превышает лимит редактора (4 МБ)."
+        else null
+    } catch (_: CharacterCodingException) {
+        "Текст содержит символы, не поддерживаемые кодировкой файла."
+    } catch (_: Exception) {
+        "Неизвестная кодировка файла."
     }
 
     fun snapshot(file: File, charsetName: String): Snapshot? {
@@ -51,7 +65,7 @@ object TextFileEditor {
         } catch (_: Exception) {
             return Result.Failure("Неизвестная кодировка файла")
         }
-        if (bytes.size > MAX_EDIT_BYTES) return Result.Failure("Превышен лимит редактора (256 КБ)")
+        if (bytes.size > MAX_EDIT_BYTES) return Result.Failure("Превышен лимит редактора (4 МБ)")
 
         val parent = file.parentFile ?: return Result.Failure("Не найдена папка файла")
         var temp: File? = null

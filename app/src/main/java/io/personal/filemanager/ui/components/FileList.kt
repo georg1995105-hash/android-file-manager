@@ -1,8 +1,5 @@
 package io.personal.filemanager.ui.components
 
-import androidx.compose.ui.platform.LocalDensity
-import java.time.ZoneId
-import io.personal.filemanager.core.gridStamp
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -279,12 +276,6 @@ fun FileGridPane(
     }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
-        // Ширина ячейки определяет подписи: узкая — дата и время в две строки, широкая — имя в две строки.
-        val cellWidth = (maxWidth - GRID_SIDE * 2 - GRID_GAP * (columns - 1)) / columns
-        // «25.10 · 16:15» ≈ 84 dp при обычном шрифте; крупный шрифт Android — раньше переход на две строки.
-        val compactStamp = cellWidth - 8.dp < 84.dp * LocalDensity.current.fontScale
-        val nameLines = if (cellWidth >= 120.dp) 2 else 1
-        val zone = remember { ZoneId.systemDefault() }
         val monthGroups = remember(entries, dateShown, galleryMode) {
             if (galleryMode) {
                 entries.groupBy { entry ->
@@ -335,10 +326,6 @@ fun FileGridPane(
                         entry = entry,
                         selected = entry.path in selection.paths,
                         selectionMode = selection.active,
-                        dateShown = dateShown,
-                        zone = zone,
-                        compactStamp = compactStamp,
-                        nameLines = nameLines,
                         onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
                         onLongClick = { selection.toggle(entry.path) },
                     )
@@ -359,8 +346,9 @@ fun FileGridPane(
     detailsFor?.let { entry -> FileDetailsSheet(entry, onDismiss = { detailsFor = null }) }
 }
 
-private val GRID_SIDE = 12.dp
-private val GRID_GAP = 6.dp
+// Almost edge-to-edge, matching a modern gallery; no bulky card margins.
+private val GRID_SIDE = 2.dp
+private val GRID_GAP = 3.dp
 
 /** Square gallery thumbnails, no file names or additional cards. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -398,83 +386,80 @@ private fun FileEntry.stampTime(mode: DateShown): Pair<Long?, Boolean> =
     else if (mode == DateShown.ADDED) lastModified.takeIf { it > 0 } to true
     else lastModified.takeIf { it > 0 } to false
 
+/**
+ * Shared compact grid item. Photos/videos are full-bleed square thumbnails:
+ * no card margins, filename or extra footer. Other files retain a concise
+ * label and size in a bottom scrim, without growing the entire grid row.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GridCell(
     entry: FileEntry,
     selected: Boolean,
     selectionMode: Boolean,
-    dateShown: DateShown,
-    zone: ZoneId,
-    compactStamp: Boolean,
-    nameLines: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    val (time, modifiedFallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
-    val stamp = remember(time, zone) { gridStamp(time, zone) }
-    Column(
+    if (entry.kind == FileKind.IMAGE || entry.kind == FileKind.VIDEO) {
+        GalleryMediaCell(
+            entry = entry,
+            selected = selected,
+            selectionMode = selectionMode,
+            onClick = onClick,
+            onLongClick = onLongClick,
+        )
+        return
+    }
+
+    val shape = RoundedCornerShape(7.dp)
+    Box(
         Modifier
             .fillMaxWidth()
+            .aspectRatio(1f)
             .clip(shape)
-            .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.65f) else AppColors.Card)
-            .border(1.dp, if (selected) AppColors.Accent.copy(alpha = 0.65f) else AppColors.CardBorder, shape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(7.dp),
+            .background(if (selected) AppColors.AccentContainer else AppColors.Card)
+            .then(if (selected) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(10.dp))
-                .then(if (selected) Modifier.border(3.dp, AppColors.Accent, RoundedCornerShape(10.dp)) else Modifier),
-        ) {
+        // The image/icon takes nearly all of the tile. Labels overlay only
+        // its lowest strip instead of pushing the next row down.
+        Box(Modifier.fillMaxSize().padding(bottom = 29.dp)) {
             GridThumbnail(entry)
-            if (selected) Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.22f)))
-            if (selectionMode) {
-                Icon(
-                    if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                    contentDescription = if (selected) "Выбрано" else "Не выбрано",
-                    tint = if (selected) AppColors.Accent else Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(5.dp)
-                        .size(24.dp)
-                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(50)),
+        }
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(AppColors.Surface.copy(alpha = 0.96f))
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Text(
+                entry.name,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                color = AppColors.TextPrimary,
+            )
+            if (!entry.isDirectory) {
+                Text(
+                    formatSize(entry.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppColors.TextSecondary,
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         }
-        Spacer(Modifier.size(7.dp))
-        // In a mixed grid the media thumbnail carries the identity; filenames stay in the viewer.
-        if (entry.kind != FileKind.IMAGE && entry.kind != FileKind.VIDEO) {
-            Text(
-                entry.name,
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = nameLines,
-                softWrap = nameLines > 1,
-                overflow = TextOverflow.Ellipsis,
+        if (selectionMode) {
+            Icon(
+                if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                contentDescription = if (selected) "Выбрано" else "Выбрать",
+                tint = if (selected) AppColors.Accent else Color.White,
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
+                    .background(Color.Black.copy(alpha = 0.48f), RoundedCornerShape(50)),
             )
-        }
-        val prefix = if (modifiedFallback) "изм. " else ""
-        val stampStyle = MaterialTheme.typography.labelSmall
-        val stampColor = MaterialTheme.colorScheme.onSurfaceVariant
-        when {
-            stamp == null -> Text("время неизвестно", modifier = Modifier.fillMaxWidth(), style = stampStyle,
-                color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
-            compactStamp -> {
-                Text(prefix + stamp.day, modifier = Modifier.fillMaxWidth(),
-                    style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
-                Text(stamp.time, modifier = Modifier.fillMaxWidth(),
-                    style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
-            }
-            else -> Text(prefix + stamp.oneLine, modifier = Modifier.fillMaxWidth(),
-                style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
-        }
-        if (!entry.isDirectory) {
-            Text(formatSize(entry.size), modifier = Modifier.fillMaxWidth(),
-                style = stampStyle, color = stampColor, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -698,7 +683,7 @@ private fun GridThumbnail(entry: FileEntry) {
             }
         } else {
             // Папки, документы, архивы, APK (иконка приложения) — понятный значок типа.
-            FileThumbnail(entry, 56.dp)
+            FileThumbnail(entry, 74.dp)
         }
     }
 }

@@ -162,8 +162,8 @@ private fun ApkThumbnail(entry: FileEntry, size: Dp, modifier: Modifier) {
     }
     val image = visual?.second
     if (visual?.first == true) {
-        // Our older launcher icon resembles a blue folder: don't mix that with directory icons.
-        KindBadge(FileKind.FOLDER, size, modifier)
+        // APK is an application package, never a directory — show its type explicitly.
+        KindBadge(FileKind.APK, size, modifier)
     } else if (image != null) {
         Image(image, contentDescription = null, modifier = modifier.size(size).padding(size / 12))
     } else {

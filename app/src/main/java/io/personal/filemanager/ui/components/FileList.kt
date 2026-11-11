@@ -261,6 +261,7 @@ fun FileGridPane(
     modifier: Modifier = Modifier,
     columns: Int = 3,
     dateShown: DateShown = DateShown.MODIFIED,
+    galleryMode: Boolean = false,
     onOpen: ((FileEntry) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 16.dp),
     header: (LazyGridScope.() -> Unit)? = null,
@@ -284,32 +285,64 @@ fun FileGridPane(
         val compactStamp = cellWidth - 8.dp < 84.dp * LocalDensity.current.fontScale
         val nameLines = if (cellWidth >= 120.dp) 2 else 1
         val zone = remember { ZoneId.systemDefault() }
+        val monthGroups = remember(entries, dateShown, galleryMode) {
+            if (galleryMode) {
+                entries.groupBy { entry ->
+                    val timestamp = entry.stampTime(dateShown).first
+                    if (timestamp != null && timestamp > 0L) {
+                        java.text.SimpleDateFormat("LLLL yyyy", java.util.Locale.forLanguageTag("ru"))
+                            .format(java.util.Date(timestamp))
+                            .replaceFirstChar { it.titlecase(java.util.Locale.forLanguageTag("ru")) }
+                    } else "Без даты"
+                }
+            } else emptyMap()
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = GRID_SIDE,
-                end = GRID_SIDE,
+                start = if (galleryMode) 2.dp else GRID_SIDE,
+                end = if (galleryMode) 2.dp else GRID_SIDE,
                 top = 4.dp,
                 bottom = contentPadding.calculateBottomPadding() + if (selection.active) 140.dp else 0.dp,
             ),
-            horizontalArrangement = Arrangement.spacedBy(GRID_GAP),
-            verticalArrangement = Arrangement.spacedBy(GRID_GAP),
+            horizontalArrangement = Arrangement.spacedBy(if (galleryMode) 3.dp else GRID_GAP),
+            verticalArrangement = Arrangement.spacedBy(if (galleryMode) 3.dp else GRID_GAP),
         ) {
             header?.invoke(this)
-            items(entries, key = { it.path }, contentType = { "file" }) { entry ->
-                GridCell(
-                    entry = entry,
-                    selected = entry.path in selection.paths,
-                    selectionMode = selection.active,
-                    dateShown = dateShown,
-                    zone = zone,
-                    compactStamp = compactStamp,
-                    nameLines = nameLines,
-                    onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                    // Удержание включает выбор (как в списке); действия — в панели выбора.
-                    onLongClick = { selection.toggle(entry.path) },
-                )
+            if (galleryMode) {
+                monthGroups.forEach { (month, groupEntries) ->
+                    fullWidthItem {
+                        Text(
+                            month,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    items(groupEntries, key = { it.path }, contentType = { "gallery-media" }) { entry ->
+                        GalleryMediaCell(
+                            entry = entry,
+                            selected = entry.path in selection.paths,
+                            selectionMode = selection.active,
+                            onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
+                            onLongClick = { selection.toggle(entry.path) },
+                        )
+                    }
+                }
+            } else {
+                items(entries, key = { it.path }, contentType = { "file" }) { entry ->
+                    GridCell(
+                        entry = entry,
+                        selected = entry.path in selection.paths,
+                        selectionMode = selection.active,
+                        dateShown = dateShown,
+                        zone = zone,
+                        compactStamp = compactStamp,
+                        nameLines = nameLines,
+                        onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
+                        onLongClick = { selection.toggle(entry.path) },
+                    )
+                }
             }
         }
         SelectionBar(selection, entries, Modifier.align(Alignment.BottomCenter), onAllActions = { menuFor = it })
@@ -328,6 +361,36 @@ fun FileGridPane(
 
 private val GRID_SIDE = 12.dp
 private val GRID_GAP = 6.dp
+
+/** Square gallery thumbnails, no file names or additional cards. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GalleryMediaCell(
+    entry: FileEntry,
+    selected: Boolean,
+    selectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Box(
+        Modifier.fillMaxWidth().aspectRatio(1f)
+            .clip(RoundedCornerShape(4.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+    ) {
+        GridThumbnail(entry)
+        if (selected) Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.25f)))
+        if (selectionMode) {
+            Icon(
+                if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                contentDescription = if (selected) "Выбрано" else "Выбрать",
+                tint = if (selected) AppColors.Accent else Color.White,
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50)),
+            )
+        }
+    }
+}
+
 
 /** Время для подписи: в «Новых» по дате появления — дата добавления; если она неизвестна — честно «изм.». */
 private fun FileEntry.stampTime(mode: DateShown): Pair<Long?, Boolean> =
@@ -383,14 +446,17 @@ private fun GridCell(
             }
         }
         Spacer(Modifier.size(7.dp))
-        Text(
-            entry.name,
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = nameLines,
-            softWrap = nameLines > 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // In a mixed grid the media thumbnail carries the identity; filenames stay in the viewer.
+        if (entry.kind != FileKind.IMAGE && entry.kind != FileKind.VIDEO) {
+            Text(
+                entry.name,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = nameLines,
+                softWrap = nameLines > 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         val prefix = if (modifiedFallback) "изм. " else ""
         val stampStyle = MaterialTheme.typography.labelSmall
         val stampColor = MaterialTheme.colorScheme.onSurfaceVariant

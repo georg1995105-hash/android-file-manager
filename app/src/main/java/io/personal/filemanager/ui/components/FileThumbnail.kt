@@ -151,15 +151,20 @@ fun FileThumbnail(entry: FileEntry, size: Dp, modifier: Modifier = Modifier) {
 private fun ApkThumbnail(entry: FileEntry, size: Dp, modifier: Modifier) {
     val context = LocalContext.current
     val apps = remember { (context.applicationContext as FileManagerApp).container.apps }
-    val bitmap by produceState<ImageBitmap?>(null, entry.path) {
+    val visual by produceState<Pair<Boolean, ImageBitmap?>?>(null, entry.path) {
         value = if (entry.extension == "apk") {
-            withContext(Dispatchers.IO) { apps.apkArchive(entry.path)?.second?.toImage() }
-        } else {
-            null
-        }
+            withContext(Dispatchers.IO) {
+                apps.apkArchive(entry.path)?.let { data ->
+                    (data.first.packageName == context.packageName) to data.second?.toImage()
+                }
+            }
+        } else null
     }
-    val image = bitmap
-    if (image != null) {
+    val image = visual?.second
+    if (visual?.first == true) {
+        // Our older launcher icon resembles a blue folder: don't mix that with directory icons.
+        KindBadge(FileKind.FOLDER, size, modifier)
+    } else if (image != null) {
         Image(image, contentDescription = null, modifier = modifier.size(size).padding(size / 12))
     } else {
         KindBadge(FileKind.APK, size, modifier)

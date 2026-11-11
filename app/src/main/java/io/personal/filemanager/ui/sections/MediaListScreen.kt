@@ -210,6 +210,7 @@ fun MediaListBody(
         else -> FilesPane(
             entries = shown,
             view = view,
+            galleryMode = category == MediaCategory.PHOTOS || category == MediaCategory.VIDEOS,
             // При сортировке по появлению под файлом дата добавления в память; иначе — дата изменения.
             dateShown = if (sort == RecentSort.ADDED) DateShown.ADDED else DateShown.MODIFIED,
             // Date mode is already visible in the subtitle. Keep the grid clean and readable.

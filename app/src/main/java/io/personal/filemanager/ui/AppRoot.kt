@@ -336,7 +336,14 @@ internal fun BottomTabBar(
     onSelect: (SectionId) -> Unit = {},
     onCreateRecent: () -> Unit = {},
 ) {
-    NavigationBar(containerColor = AppColors.Surface, tonalElevation = 0.dp) {
+    // Never let a weighted bottom tab measure its parent at full screen height.
+    // A fixed bar height is essential when NavigationBar is hosted by Scaffold.bottomBar.
+    NavigationBar(
+        modifier = Modifier.height(80.dp),
+        containerColor = AppColors.Surface,
+        tonalElevation = 0.dp,
+        windowInsets = WindowInsets(0, 0, 0, 0),
+    ) {
         tabs.forEach { tab ->
             val id = SectionId.fromKey(tab.id) ?: return@forEach
             val selected = id == current
@@ -350,7 +357,7 @@ internal fun BottomTabBar(
                 )
             } else Modifier.clickable { onSelect(id) }
             Column(
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                modifier = Modifier.weight(1f).height(72.dp)
                     .testTag("bottom-tab-${id.name}")
                     .semantics { role = Role.Tab; this.selected = selected }
                     .then(press),

@@ -93,7 +93,8 @@ class MediaListViewModel(private val container: AppContainer, private val catego
                 return@launch
             }
             val sort = MediaSort.valueOf(container.settings.mediaSort(category.name).first().name)
-            val result = runCatching { container.media.list(category, sort) }
+            val limit = if (category == MediaCategory.AUDIO) MediaRepository.AUDIO_LIMIT else MediaRepository.DEFAULT_LIMIT
+            val result = runCatching { container.media.list(category, sort, limit = limit) }
             _state.update {
                 MediaListState(
                     loading = false,
@@ -129,7 +130,7 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
     val subtitle = when {
         !hasAccess || state.loading -> null
         else -> "${sort.title} • ${pluralRu(state.entries.size, "файл", "файла", "файлов")}" +
-            if (state.entries.size >= MediaRepository.DEFAULT_LIMIT) " (первые)" else ""
+            if (state.entries.size >= (if (category == MediaCategory.AUDIO) MediaRepository.AUDIO_LIMIT else MediaRepository.DEFAULT_LIMIT)) " (первые)" else ""
     }
 
     Column(Modifier.fillMaxSize()) {

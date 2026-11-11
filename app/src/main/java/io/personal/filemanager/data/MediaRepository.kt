@@ -177,5 +177,7 @@ class MediaRepository(context: Context) {
 
     companion object {
         const val DEFAULT_LIMIT = 300
+        /** Аудио часто содержит десятки тысяч голосовых: 300 — не «всё». */
+        const val AUDIO_LIMIT = 25_000
     }
 }

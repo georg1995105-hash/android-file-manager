@@ -55,6 +55,7 @@ import io.personal.filemanager.data.ops.FileOperations
 import io.personal.filemanager.data.ops.RenameResult
 import io.personal.filemanager.data.ops.TransferMode
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.card
@@ -83,6 +84,7 @@ fun FileOpsHost(
     val operations = appContainer().operations
     val clipboard by operations.clipboard.collectAsStateWithLifecycle()
     val running by operations.running.collectAsStateWithLifecycle()
+    val uiConfig by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = UiConfig.defaults())
     val scope = rememberCoroutineScope()
 
     var currentFolder by remember { mutableStateOf<String?>(null) }
@@ -245,30 +247,38 @@ fun FileOpsHost(
     }
 
     deleteTargets?.let { targets ->
-        val trashable = targets.all {
-            FileOperations.defaultVolumeRoot(File(it.path)) != null && !operations.trash.isInTrash(File(it.path))
+        val trashable = uiConfig.trashEnabled && targets.all {
+            FileOperations.defaultVolumeRoot(File(it.path)) != null &&
+                !operations.trash.isInTrash(File(it.path))
         }
+        val count = targets.size
         AlertDialog(
             onDismissRequest = { deleteTargets = null },
-            title = { Text(if (trashable) "В корзину?" else "Удалить навсегда?") },
+            title = { Text(if (count == 1) "Удалить файл?" else "Удалить $count файлов?") },
             text = {
                 Text(
-                    (if (targets.size == 1) "«${targets.first().name}»" else "Выбрано: ${targets.size} объектов") +
-                        if (trashable) "\nМожно восстановить из корзины."
-                        else "\nКорзина для этих файлов недоступна. Отменить удаление нельзя.",
+                    (if (count == 1) "«${targets.first().name}»" else "Выбрано: $count объектов") +
+                        if (trashable) "\nВ корзине файлы можно восстановить. Безвозвратное удаление отменить нельзя."
+                        else "\nБезвозвратное удаление нельзя отменить.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    deleteTargets = null
-                    if (trashable) operations.moveToTrash(targets.map { it.path })
-                    else operations.deletePermanently(targets.map { it.path })
-                }) {
-                    Text(
-                        if (trashable) "В корзину" else "Удалить",
-                        color = if (trashable) AppColors.Accent else MaterialTheme.colorScheme.error,
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        deleteTargets = null
+                        operations.deletePermanently(targets.map { it.path })
+                    }) {
+                        Text("Навсегда", color = MaterialTheme.colorScheme.error)
+                    }
+                    if (trashable) {
+                        TextButton(onClick = {
+                            deleteTargets = null
+                            operations.moveToTrash(targets.map { it.path })
+                        }) {
+                            Text("В корзину", color = AppColors.Accent)
+                        }
+                    }
                 }
             },
             dismissButton = { TextButton(onClick = { deleteTargets = null }) { Text("Отмена") } },

@@ -69,10 +69,32 @@ jobs:
             echo "Verified release already exists, not overwriting."
             exit 0
           fi
-          gh release create "$TAG" \
+          if gh release create "$TAG" \
             dist/personal-file-manager-0.12.18-release-vc33-universal.apk \
             dist/SHA256SUMS.txt dist/RELEASE_IDENTITY.json \
             --repo "$GITHUB_REPOSITORY" \
             --target 8fc7ab75ae76bdd72dc8eb937e8e0a67d30be6dc \
             --title "Мои файлы 0.12.18 — APK для обновления" \
-            --notes "Подписанная 0.12.18 (versionCode 33). Обновление поверх 0.12.17 без удаления данных. SHA-256 и сертификат подтверждены."
+            --notes "Подписанная 0.12.18 (versionCode 33). Обновление поверх 0.12.17 без удаления данных. SHA-256 и сертификат подтверждены."; then
+            exit 0
+          fi
+
+          echo "::warning::GitHub Release API is unavailable to this workflow token; publishing the same validated APK to a direct-download branch."
+          WORK="$RUNNER_TEMP/apk-downloads"
+          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$WORK"
+          cd "$WORK"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin refs/heads/apk-downloads >/dev/null 2>&1; then
+            git fetch --quiet origin apk-downloads
+            git checkout --quiet -B apk-downloads origin/apk-downloads
+          else
+            git checkout --quiet --orphan apk-downloads
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          cp "$GITHUB_WORKSPACE/dist/personal-file-manager-0.12.18-release-vc33-universal.apk" .
+          cp "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt" .
+          cp "$GITHUB_WORKSPACE/dist/RELEASE_IDENTITY.json" .
+          git add personal-file-manager-0.12.18-release-vc33-universal.apk SHA256SUMS.txt RELEASE_IDENTITY.json
+          git commit -m "Publish signed 0.12.18 APK"
+          git push --quiet origin apk-downloads

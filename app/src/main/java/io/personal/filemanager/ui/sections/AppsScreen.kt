@@ -10,8 +10,9 @@ import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.tapClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.testTag
 import kotlin.math.abs
 import androidx.compose.foundation.Image
@@ -105,7 +106,9 @@ fun nextAppTab(current: Int, left: Boolean): Int =
 @Composable
 fun AppsScreen() {
     val navigator = LocalNavigator.current
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val pager = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val scope = rememberCoroutineScope()
+    val selectedTab = pager.currentPage
     Column(Modifier.fillMaxSize()) {
         val apkView = rememberFileView(MediaCategory.APKS.name)
         val search = rememberListSearch()
@@ -114,34 +117,31 @@ fun AppsScreen() {
             onBack = { navigator.back() },
             actions = {
                 ListSearchButton(search)
-                if (tab == 1) ViewModeButton(apkView)
+                if (selectedTab == 1) ViewModeButton(apkView)
             },
         )
-        PrimaryTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Установленные") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("APK-файлы") })
+        PrimaryTabRow(selectedTabIndex = selectedTab, containerColor = MaterialTheme.colorScheme.background) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { scope.launch { pager.animateScrollToPage(0) } },
+                text = { Text("Установленные") },
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { scope.launch { pager.animateScrollToPage(1) } },
+                text = { Text("APK-файлы") },
+            )
         }
         ListSearchField(search)
-        // Свайп относится только к двум внутренним вкладкам «Приложений».
-        // Нижние разделы приложения этим жестом не переключаются.
-        Box(Modifier.fillMaxSize().testTag("apps-swipe-content").pointerInput(tab) {
-            var horizontal = 0f
-            detectHorizontalDragGestures(
-                onDragStart = { horizontal = 0f },
-                onHorizontalDrag = { change, dragAmount ->
-                    horizontal += dragAmount
-                    if (abs(horizontal) > 16.dp.toPx()) change.consume()
-                },
-                onDragEnd = {
-                    if (abs(horizontal) > 72.dp.toPx()) {
-                        tab = nextAppTab(tab, left = horizontal < 0f)
-                    }
-                    horizontal = 0f
-                },
-                onDragCancel = { horizontal = 0f },
-            )
-        }) {
-            if (tab == 0) InstalledAppsList(search) else MediaListBody(MediaCategory.APKS, search = search)
+        // Compose Pager owns horizontal swipes and coordinates them with vertical
+        // lists. No global swipe navigation between main sections.
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.fillMaxSize().testTag("apps-swipe-content"),
+            beyondViewportPageCount = 0,
+        ) { page ->
+            if (page == 0) InstalledAppsList(search)
+            else MediaListBody(MediaCategory.APKS, search = search)
         }
     }
 }

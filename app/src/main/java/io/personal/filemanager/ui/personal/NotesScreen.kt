@@ -266,15 +266,16 @@ fun NoteEditorScreen(noteId: Long) {
     val scope = rememberCoroutineScope()
     var title by rememberSaveable { mutableStateOf<String?>(null) }
     // Сохраняем и текст, и позицию курсора/выделение при повороте экрана.
-    var bodyValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(""))
-    }
+    // Текст заметки хранится в ViewModel/БД: не кладём мегабайты в Android Bundle
+    // (иначе возможен TransactionTooLargeException при повороте).
+    var bodyValue by remember { mutableStateOf(TextFieldValue("")) }
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.loaded) {
-        if (state.loaded && title == null) {
-            title = vm.title
+        if (state.loaded) {
+            if (title == null) title = vm.title
+            // При пересоздании Activity берём актуальное значение из ViewModel.
             bodyValue = TextFieldValue(vm.body)
         }
     }

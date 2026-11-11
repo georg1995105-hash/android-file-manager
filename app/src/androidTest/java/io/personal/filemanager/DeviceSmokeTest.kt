@@ -5,6 +5,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -85,6 +89,24 @@ class DeviceSmokeTest {
     }
 
     /** Реальная проверка нового сценария: создать JSON, вставить, форматировать, сохранить. */
+    /** Запрет свайпа между главными разделами и разрешение только внутри вкладок приложений. */
+    @Test
+    fun a1_swipeOnlyInsideApplications() {
+        waitText("Мои файлы")
+        compose.onRoot().performTouchInput { swipeLeft() }
+        waitText("Мои файлы")
+        openTile("Приложения")
+        compose.onNodeWithText("Установленные").assertIsSelected()
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("APK-файлы").fetchSemanticsNodes().any { node ->
+                node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Selected) == true
+            }
+        }
+        compose.onRoot().performTouchInput { swipeRight() }
+        compose.onNodeWithText("Установленные").assertIsSelected()
+    }
+
     @Test
     fun aa_createAndEditJson() {
         val file = File("/sdcard/Download/pfm-editor-ci-${System.nanoTime()}.json")

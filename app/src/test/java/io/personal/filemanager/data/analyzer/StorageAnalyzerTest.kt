@@ -27,6 +27,21 @@ class StorageAnalyzerTest {
         assertEquals(1, report.categories.first { it.kind == FileKind.AUDIO }.count)
     }
 
+    @Test fun ranksNestedFoldersAndExposesFilesByCategory() {
+        val root = folder.root
+        val parent = File(root, "Media").apply { mkdirs() }
+        val nested = File(parent, "Videos").apply { mkdirs() }
+        val video = File(nested, "clip.mp4").apply { writeBytes(ByteArray(4096)) }
+        File(parent, "notes.txt").writeText("notes")
+        val report = StorageAnalyzer().scan(root)
+        val media = report.topFolders.first { it.path == parent.absolutePath }
+        assertEquals(4096L + 5, media.bytes)
+        assertEquals(2, media.count)
+        val videos = report.topFolders.first { it.path == nested.absolutePath }
+        assertEquals(4096L, videos.bytes)
+        assertTrue(report.categoryFiles[FileKind.VIDEO]?.any { it.path == video.absolutePath } == true)
+    }
+
     @Test fun hasStrictFileCap() {
         repeat(5) { File(folder.root, "a$it.txt").writeText("x") }
         val report = StorageAnalyzer().scan(folder.root, maxFiles = 3)

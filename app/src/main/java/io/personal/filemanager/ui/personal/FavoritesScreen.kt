@@ -102,7 +102,7 @@ fun FavoritesScreen() {
                             Text(
                                 if (!available) "Недоступно: файл удалён или перемещён"
                                 else listOfNotNull(
-                                    fileInfo?.lastModified()?.takeIf { it > 0 }?.let(::formatShortDate),
+                                    fileInfo?.lastModified()?.takeIf { it > 0 }?.let { formatShortDate(it) },
                                     fileInfo?.takeIf { it.isFile }?.length()?.let(::formatSize),
                                 ).joinToString(" · ").ifBlank { "Данные недоступны" },
                                 style = MaterialTheme.typography.bodySmall,

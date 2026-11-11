@@ -147,6 +147,7 @@ fun VaultScreen() {
             if (event == Lifecycle.Event.ON_STOP) {
                 unlocked = false
                 pin = ""
+                firstPin = null
                 mediaPreview?.delete()
                 mediaPreview = null
                 previewKind = null

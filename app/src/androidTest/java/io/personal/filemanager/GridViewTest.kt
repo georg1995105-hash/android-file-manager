@@ -97,9 +97,11 @@ class GridViewTest {
         compose.shot("g03_grid_selected")
         compose.onNodeWithContentDescription("Удалить").performClick()
         // Новый диалог удаления компактен: без длинного списка имён и без второго подтверждения.
-        compose.waitText("В корзину?")
+        compose.waitText("Удалить файл?")
+        assertTrue(compose.onAllNodesWithText("Удалить навсегда").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("В корзину").fetchSemanticsNodes().isNotEmpty())
         assertTrue(compose.onAllNodesWithText("«$name»", substring = true).fetchSemanticsNodes().isNotEmpty())
-        compose.shot("g04_delete_list")
+        compose.shot("g04_delete_choices")
         compose.onNodeWithText("Отмена").performClick()
         compose.back()
         compose.waitUntil(5_000) { !compose.textShown("Выбрано:") }

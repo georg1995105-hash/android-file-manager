@@ -100,6 +100,8 @@ class AnalyzerViewModel(private val container: AppContainer) : ViewModel() {
 fun AnalyzerScreen() {
     val vm = appViewModel { AnalyzerViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
+    // Сканирование стартует при открытии экрана, а не только после нажатия «Повторить».
+    LaunchedEffect(vm) { vm.start() }
     val nav = LocalNavigator.current
     val storage = appContainer().storage
     val info = remember(storage) { storage.internalStorage() }

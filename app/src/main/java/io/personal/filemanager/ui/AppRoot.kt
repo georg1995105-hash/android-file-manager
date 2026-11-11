@@ -3,8 +3,11 @@ package io.personal.filemanager.ui
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -349,8 +352,17 @@ internal fun BottomTabBar(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color)
-                androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier
+                        .height(34.dp)
+                        .width(58.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
+                        .background(if (selected) color.copy(alpha = 0.17f) else Color.Transparent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color)
+                }
+                androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
                 Text(
                     id.title,
                     style = MaterialTheme.typography.labelSmall,

@@ -12,6 +12,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.testTag
 import kotlin.math.abs
@@ -109,6 +110,11 @@ fun AppsScreen() {
     val pager = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val scope = rememberCoroutineScope()
     val selectedTab = pager.currentPage
+    if (io.personal.filemanager.BuildConfig.DEBUG) {
+        LaunchedEffect(selectedTab) {
+            android.util.Log.i("PFM_PAGER", "Apps page changed: $selectedTab")
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         val apkView = rememberFileView(MediaCategory.APKS.name)
         val search = rememberListSearch()

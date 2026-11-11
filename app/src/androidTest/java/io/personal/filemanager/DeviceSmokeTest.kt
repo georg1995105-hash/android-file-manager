@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -57,8 +58,17 @@ class DeviceSmokeTest {
     fun returnToHome() {
         fun onHome(): Boolean = compose.onAllNodesWithText("Мои файлы")
             .fetchSemanticsNodes().isNotEmpty()
+        fun resetHomeScroll() {
+            if (compose.onAllNodesWithTag("home-content-list").fetchSemanticsNodes().isNotEmpty()) {
+                compose.onNodeWithTag("home-content-list").performScrollToIndex(0)
+                compose.waitForIdle()
+            }
+        }
         compose.waitForIdle()
-        if (onHome()) return
+        if (onHome()) {
+            resetHomeScroll()
+            return
+        }
         repeat(8) {
             val homeTab = compose.onAllNodesWithTag("bottom-tab-FILES")
                 .fetchSemanticsNodes()
@@ -70,7 +80,10 @@ class DeviceSmokeTest {
                 }
             }
             compose.waitForIdle()
-            if (onHome()) return
+            if (onHome()) {
+                resetHomeScroll()
+                return
+            }
         }
         throw AssertionError("Не удалось вернуться на главный экран перед UI-тестом")
     }
@@ -104,9 +117,19 @@ class DeviceSmokeTest {
     }
 
     private fun openTile(title: String) {
-        // Плитка может быть ниже края экрана (ленивый список): сначала прокрутить к ней.
-        compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText(title))
-        compose.onAllNodesWithText(title).onFirst().performClick()
+        // Prefer the stable bottom navigation for configured sections.
+        val tab = when (title) {
+            "Новые" -> "RECENT"
+            "Приложения" -> "APPS"
+            else -> null
+        }
+        if (tab != null && compose.onAllNodesWithTag("bottom-tab-$tab").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithTag("bottom-tab-$tab").performClick()
+        } else {
+            // Other shortcuts can be below the fold of the home LazyColumn.
+            compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText(title))
+            compose.onAllNodesWithText(title).onFirst().performClick()
+        }
         compose.waitForIdle()
     }
 
@@ -120,7 +143,7 @@ class DeviceSmokeTest {
     /** Реальная проверка нового сценария: создать JSON, вставить, форматировать, сохранить. */
     /** Запрет свайпа между главными разделами и разрешение только внутри вкладок приложений. */
     @Test
-    fun a1_swipeOnlyInsideApplications() {
+    fun zz_swipeOnlyInsideApplications() {
         fun stage(where: String) = Log.i("PFM_UI", "a1_swipe: $where")
         stage("start")
         waitText("Мои файлы")
@@ -137,9 +160,16 @@ class DeviceSmokeTest {
         stage("apps opened using bottom navigation")
         compose.onNodeWithTag("apps-tab-installed").assertIsSelected()
         stage("installed selected")
+        // First verify the two explicit tabs actually control PagerState.
+        compose.onNodeWithTag("apps-tab-apks").performClick()
+        compose.onNodeWithTag("apps-tab-apks").assertIsSelected()
+        stage("APK selected by tap")
+        compose.onNodeWithTag("apps-tab-installed").performClick()
+        compose.onNodeWithTag("apps-tab-installed").assertIsSelected()
+        stage("installed restored by tap")
         // Move across most of the pager (not a short/fling-like swipe in a nested LazyColumn).
         compose.onNodeWithTag("apps-swipe-content").performTouchInput {
-            swipeLeft(startX = right * 0.88f, endX = right * 0.12f, durationMillis = 400)
+            swipeLeft(durationMillis = 350)
         }
         stage("apps swipe left complete")
         compose.waitUntil(12_000) {
@@ -151,7 +181,7 @@ class DeviceSmokeTest {
         compose.onNodeWithTag("apps-tab-apks").assertIsSelected()
         stage("APK selected")
         compose.onNodeWithTag("apps-swipe-content").performTouchInput {
-            swipeRight(startX = right * 0.12f, endX = right * 0.88f, durationMillis = 400)
+            swipeRight(durationMillis = 350)
         }
         stage("apps swipe right complete")
         compose.waitUntil(12_000) {

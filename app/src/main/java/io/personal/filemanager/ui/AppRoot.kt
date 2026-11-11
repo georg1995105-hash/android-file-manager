@@ -2,6 +2,13 @@ package io.personal.filemanager.ui
 
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -20,6 +27,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -172,7 +184,11 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                 bottomBar = {
                     val tabs = config?.tabs
                     if (showBar && tabs != null) {
-                        BottomTabBar(tabs = tabs, current = currentSection, onSelect = { id -> selectTab(nav, id) })
+                        BottomTabBar(
+                            tabs = tabs, current = currentSection,
+                            onSelect = { id -> selectTab(nav, id) },
+                            onCreateRecent = openCreateDialog,
+                        )
                     }
                 },
             ) { inner ->
@@ -257,11 +273,12 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                     onCreate = { folder, isFolder, name ->
                         withContext(Dispatchers.IO) {
                             if (isFolder) container.fileSystem.createFolder(folder, name)
-                            else container.fileSystem.createFile(folder, name)
+                            else container.fileSystem.prepareFile(folder, name)
                         }
                     },
                     onCreated = { created ->
-                        container.operations.notify(if (created.isDirectory) "Папка создана" else "Файл создан")
+                        if (created.isDirectory) container.operations.notify("Папка создана")
+                        else container.operations.notify("Файл будет создан после сохранения текста")
                         if (!created.isDirectory) pendingEditPath = created.path
                     },
                 )
@@ -293,38 +310,56 @@ private fun SectionScreen(id: SectionId) {
 /** Вкладка «Файлы» — главный экран «Мои файлы»; остальные — разделы. Назад с вкладки ведёт на главную. */
 private fun selectTab(nav: NavHostController, id: SectionId) {
     if (id == SectionId.FILES) {
-        nav.popBackStack(Routes.HOME, inclusive = false)
+        if (nav.currentDestination?.route != Routes.HOME) nav.popBackStack(Routes.HOME, inclusive = false)
         return
     }
+    if (nav.currentDestination?.route == Routes.SECTION &&
+        nav.currentBackStackEntry?.arguments?.getString("id") == id.name) return
     nav.navigate(Routes.section(id)) {
         popUpTo(Routes.HOME)
         launchSingleTop = true
     }
 }
 
+/** Whole Recent tab supports long press to create, not only its overflow menu. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun BottomTabBar(tabs: List<TabConfig>, current: SectionId?, onSelect: (SectionId) -> Unit) {
+internal fun BottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit,
+    onCreateRecent: () -> Unit = {},
+) {
     NavigationBar(containerColor = AppColors.Surface, tonalElevation = 0.dp) {
         tabs.forEach { tab ->
             val id = SectionId.fromKey(tab.id) ?: return@forEach
             val selected = id == current
             val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onSelect(id) },
-                icon = { Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color) },
-                label = {
-                    Text(
-                        id.title,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = color,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Visible,
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent),
-            )
+            val press = if (id == SectionId.RECENT) {
+                Modifier.combinedClickable(
+                    onClick = { onSelect(id) },
+                    onLongClick = onCreateRecent,
+                    onLongClickLabel = "Создать файл или папку",
+                )
+            } else Modifier.clickable { onSelect(id) }
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                    .semantics { role = Role.Tab; this.selected = selected }
+                    .then(press),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color)
+                androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
+                Text(
+                    id.title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

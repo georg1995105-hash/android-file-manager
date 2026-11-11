@@ -40,6 +40,8 @@ import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.EmptyState
 import io.personal.filemanager.ui.components.KindBadge
 import io.personal.filemanager.ui.components.ScreenTopBar
+import io.personal.filemanager.core.formatShortDate
+import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.ui.theme.AppColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -83,6 +85,9 @@ fun FavoritesScreen() {
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
                 items(list, key = { it.id }) { fav ->
                     val available = fav.path in existing
+                    val fileInfo = remember(fav.path, available) {
+                        if (available) File(fav.path) else null
+                    }
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -95,12 +100,21 @@ fun FavoritesScreen() {
                         Column(Modifier.weight(1f)) {
                             Text(fav.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(
-                                if (available) fav.path else "Недоступно: файл удалён, перемещён или носитель отключён",
+                                if (!available) "Недоступно: файл удалён или перемещён"
+                                else listOfNotNull(
+                                    fileInfo?.lastModified()?.takeIf { it > 0 }?.let(::formatShortDate),
+                                    fileInfo?.takeIf { it.isFile }?.length()?.let(::formatSize),
+                                ).joinToString(" · ").ifBlank { "Данные недоступны" },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (available) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                                maxLines = 2,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            if (available) {
+                                Text(fav.path, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                         IconButton(onClick = { scope.launch { container.personal.removeFavorite(fav.id) } }) {
                             Icon(Icons.Filled.Star, contentDescription = "Убрать «${fav.name}» из избранного", tint = AppColors.Accent)

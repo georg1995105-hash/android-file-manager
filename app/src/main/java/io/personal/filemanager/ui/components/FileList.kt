@@ -79,6 +79,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.personal.filemanager.core.FileKind
+import io.personal.filemanager.core.gridStamp
 import io.personal.filemanager.core.formatFullDate
 import io.personal.filemanager.core.formatShortDate
 import io.personal.filemanager.core.formatSize
@@ -315,6 +316,7 @@ fun FileGridPane(
                             entry = entry,
                             selected = entry.path in selection.paths,
                             selectionMode = selection.active,
+                            dateShown = dateShown,
                             onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
                             onLongClick = { selection.toggle(entry.path) },
                         )
@@ -326,6 +328,7 @@ fun FileGridPane(
                         entry = entry,
                         selected = entry.path in selection.paths,
                         selectionMode = selection.active,
+                        dateShown = dateShown,
                         onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
                         onLongClick = { selection.toggle(entry.path) },
                     )
@@ -350,13 +353,66 @@ fun FileGridPane(
 private val GRID_SIDE = 2.dp
 private val GRID_GAP = 3.dp
 
-/** Square gallery thumbnails, no file names or additional cards. */
+/**
+ * Compact, shared metadata across every grid in the app. Date/time always remains visible;
+ * "Новые" uses MediaStore date-added when supplied, other sections use modification time.
+ * Unknown dates are not substituted with the current time.
+ */
+@Composable
+private fun FileGridMetadata(entry: FileEntry, dateShown: DateShown, includeName: Boolean) {
+    val (epoch, fallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
+    val date = remember(epoch, fallback) {
+        gridStamp(epoch)?.oneLine?.let { if (fallback) "изм. $it" else it } ?: "Дата неизвестна"
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.76f))
+            .padding(horizontal = 5.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        if (includeName) {
+            Text(
+                entry.name,
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            date,
+            color = Color.White.copy(alpha = 0.95f),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (!entry.isDirectory) {
+            Text(
+                formatSize(entry.size),
+                color = Color.White.copy(alpha = 0.88f),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                softWrap = false,
+            )
+        } else {
+            entry.childCount?.let {
+                Text("$it объектов", color = Color.White.copy(alpha = 0.88f),
+                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** Square gallery thumbnails with date, time and size, but no filename captions. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GalleryMediaCell(
     entry: FileEntry,
     selected: Boolean,
     selectionMode: Boolean,
+    dateShown: DateShown,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -367,6 +423,9 @@ private fun GalleryMediaCell(
     ) {
         GridThumbnail(entry)
         if (selected) Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.25f)))
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            FileGridMetadata(entry, dateShown, includeName = false)
+        }
         if (selectionMode) {
             Icon(
                 if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
@@ -397,6 +456,7 @@ private fun GridCell(
     entry: FileEntry,
     selected: Boolean,
     selectionMode: Boolean,
+    dateShown: DateShown,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -405,6 +465,7 @@ private fun GridCell(
             entry = entry,
             selected = selected,
             selectionMode = selectionMode,
+            dateShown = dateShown,
             onClick = onClick,
             onLongClick = onLongClick,
         )
@@ -421,36 +482,11 @@ private fun GridCell(
             .then(if (selected) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        // The image/icon takes nearly all of the tile. Labels overlay only
-        // its lowest strip instead of pushing the next row down.
-        Box(Modifier.fillMaxSize().padding(bottom = 29.dp)) {
-            GridThumbnail(entry)
-        }
-        Column(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(AppColors.Surface.copy(alpha = 0.96f))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            Text(
-                entry.name,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                color = AppColors.TextPrimary,
-            )
-            if (!entry.isDirectory) {
-                Text(
-                    formatSize(entry.size),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AppColors.TextSecondary,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+        // All files have a bottom scrim for name, exact date/time and size.
+        // Do not reduce image/icon size by allocating a second vertical block.
+        GridThumbnail(entry)
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            FileGridMetadata(entry, dateShown, includeName = true)
         }
         if (selectionMode) {
             Icon(

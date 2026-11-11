@@ -61,6 +61,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.personal.filemanager.AppContainer
+import io.personal.filemanager.core.formatShortDate
 import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.data.InstalledApp
 import io.personal.filemanager.data.FileEntry
@@ -201,6 +202,12 @@ private fun InstalledAppsList(search: ListSearchState) {
                                 formatSize(app.sizeBytes),
                                 if (app.apkPaths.size > 1) "split: ${app.apkPaths.size} файла" else null,
                             ).joinToString(" • "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                        Text(
+                            if (app.lastUpdateTime > 0) "Обновлено: ${formatShortDate(app.lastUpdateTime)}" else "Дата обновления неизвестна",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

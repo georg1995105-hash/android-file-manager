@@ -13,6 +13,7 @@ data class InstalledApp(
     val versionName: String?,
     val sizeBytes: Long,
     val isSystem: Boolean,
+    val lastUpdateTime: Long = 0L,
     /** base.apk + split-файлы (для экспорта набора .apks). */
     val apkPaths: List<String>,
 )
@@ -51,6 +52,7 @@ class AppsRepository(private val context: Context) {
                     versionName = info.versionName,
                     sizeBytes = paths.sumOf { File(it).length() },
                     isSystem = app.flags and ApplicationInfo.FLAG_SYSTEM != 0,
+                    lastUpdateTime = info.lastUpdateTime,
                     apkPaths = paths,
                 )
             }.getOrNull()

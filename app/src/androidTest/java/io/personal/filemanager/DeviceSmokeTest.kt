@@ -95,21 +95,22 @@ class DeviceSmokeTest {
         waitText("Мои файлы")
         // Не начинаем жест от края Android, чтобы не активировать системную навигацию «Назад».
         compose.onRoot().performTouchInput {
-            swipeLeft(startX = size.width * 0.75f, endX = size.width * 0.25f)
+            swipeLeft(startX = center.x * 2f * 0.75f, endX = center.x * 2f * 0.25f)
         }
         waitText("Мои файлы")
         openTile("Приложения")
         compose.onNodeWithText("Установленные").assertIsSelected()
         compose.onRoot().performTouchInput {
-            swipeLeft(startX = size.width * 0.75f, endX = size.width * 0.25f)
+            swipeLeft(startX = center.x * 2f * 0.75f, endX = center.x * 2f * 0.25f)
         }
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("APK-файлы").fetchSemanticsNodes().any { node ->
-                node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Selected) == true
+                node.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Selected) &&
+                    node.config[androidx.compose.ui.semantics.SemanticsProperties.Selected]
             }
         }
         compose.onRoot().performTouchInput {
-            swipeRight(startX = size.width * 0.25f, endX = size.width * 0.75f)
+            swipeRight(startX = center.x * 2f * 0.25f, endX = center.x * 2f * 0.75f)
         }
         compose.onNodeWithText("Установленные").assertIsSelected()
     }

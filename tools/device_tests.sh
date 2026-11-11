@@ -55,7 +55,7 @@ run_tests() { # $1 — метка, $2 — классы через запятую
   # Instrumentation may block forever after an emulator/app deadlock.
   # Bound each suite and retain the last successful test in the output.
   echo "===== INSTRUMENTATION START: $label ($(date -u +%FT%TZ)) ====="
-  timeout --signal=TERM --kill-after=20s 480s \
+  timeout --signal=TERM --kill-after=20s 180s \
     adb shell am instrument -w -r -e class "$classes" "$RUNNER" 2>&1 | tee "instr-$label.log"
   rc=${PIPESTATUS[0]}
   if [ "$rc" -eq 0 ] && grep -q "OK (" "instr-$label.log"; then
@@ -67,6 +67,15 @@ run_tests() { # $1 — метка, $2 — классы через запятую
   echo "::error::Android instrumentation $label failed or timed out (exit $rc)"
   echo "===== LAST INSTRUMENTATION OUTPUT: $label ====="
   tail -100 "instr-$label.log" || true
+  echo "===== UI TEST STAGES ====="
+  timeout 15s adb logcat -d -s PFM_UI:I '*:S' | tail -80 || true
+  echo "===== APP THREAD DUMP ====="
+  app_pid=$(timeout 5s adb shell pidof "$PKG" | tr -d '\r' || true)
+  if [ -n "$app_pid" ]; then
+    timeout 10s adb shell kill -3 "$app_pid" || true
+    sleep 2
+    timeout 15s adb logcat -d -t 2000 | grep -E -A 18 -B 3 '(DALVIK THREADS|main" |at androidx.compose|main" prio|ANR in|PFM_UI)' | tail -120 || true
+  fi
   echo "===== LAST ANDROID LOGCAT ====="
   timeout 20s adb logcat -d -t 1200 | tail -160 || true
   echo "===== ANDROID ACTIVITY STATE ====="

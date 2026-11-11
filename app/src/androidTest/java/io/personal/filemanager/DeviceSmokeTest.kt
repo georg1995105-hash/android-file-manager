@@ -3,6 +3,7 @@ package io.personal.filemanager
 import android.graphics.Bitmap
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.assertIsSelected
@@ -92,27 +93,38 @@ class DeviceSmokeTest {
     /** Запрет свайпа между главными разделами и разрешение только внутри вкладок приложений. */
     @Test
     fun a1_swipeOnlyInsideApplications() {
+        fun stage(where: String) = Log.i("PFM_UI", "a1_swipe: $where")
+        stage("start")
         waitText("Мои файлы")
-        // Не начинаем жест от края Android, чтобы не активировать системную навигацию «Назад».
+        stage("home visible")
+        // Do not start near Android's back-gesture edge.
         compose.onRoot().performTouchInput {
             swipeLeft(startX = center.x * 2f * 0.75f, endX = center.x * 2f * 0.25f)
         }
+        stage("home swipe complete")
         waitText("Мои файлы")
+        stage("home remained visible")
         openTile("Приложения")
+        stage("apps opened")
         compose.onNodeWithText("Установленные").assertIsSelected()
+        stage("installed selected")
         compose.onRoot().performTouchInput {
             swipeLeft(startX = center.x * 2f * 0.75f, endX = center.x * 2f * 0.25f)
         }
+        stage("apps swipe left complete")
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("APK-файлы").fetchSemanticsNodes().any { node ->
                 node.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Selected) &&
                     node.config[androidx.compose.ui.semantics.SemanticsProperties.Selected]
             }
         }
+        stage("APK selected")
         compose.onRoot().performTouchInput {
             swipeRight(startX = center.x * 2f * 0.25f, endX = center.x * 2f * 0.75f)
         }
+        stage("apps swipe right complete")
         compose.onNodeWithText("Установленные").assertIsSelected()
+        stage("done")
     }
 
     @Test

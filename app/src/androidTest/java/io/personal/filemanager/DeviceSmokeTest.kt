@@ -143,7 +143,7 @@ class DeviceSmokeTest {
             .fetchSemanticsNode().boundsInRoot.height
         org.junit.Assert.assertTrue(
             "Bottom tab covers the screen: tab=$tabHeight, root=$rootHeight",
-            tabHeight > 0f && tabHeight < rootHeight / 3f,
+            tabHeight > 0f && tabHeight < rootHeight / 6f,
         )
         compose.onRoot().printToLog("PFM_HOME_TREE")
         try {

@@ -8,6 +8,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -327,7 +336,7 @@ private fun selectTab(nav: NavHostController, id: SectionId) {
     }
 }
 
-/** Whole Recent tab supports long press to create, not only its overflow menu. */
+/** Compact navigation with a hard-bounded row and Android system-bar spacing. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BottomTabBar(
@@ -336,59 +345,82 @@ internal fun BottomTabBar(
     onSelect: (SectionId) -> Unit = {},
     onCreateRecent: () -> Unit = {},
 ) {
-    // Never let a weighted bottom tab measure its parent at full screen height.
-    // A fixed bar height is essential when NavigationBar is hosted by Scaffold.bottomBar.
-    NavigationBar(
-        modifier = Modifier.height(80.dp),
-        containerColor = AppColors.Surface,
-        tonalElevation = 0.dp,
-        windowInsets = WindowInsets(0, 0, 0, 0),
+    // Do not use weighted Columns as children of Material3 NavigationBar:
+    // its internal measurement may allow them to occupy the entire Scaffold.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppColors.Surface)
+            .navigationBarsPadding(),
     ) {
-        tabs.forEach { tab ->
-            val id = SectionId.fromKey(tab.id) ?: return@forEach
-            val selected = id == current
-            val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
-            var recentCreateMenu by remember(id) { mutableStateOf(false) }
-            val press = if (id == SectionId.RECENT) {
-                Modifier.combinedClickable(
-                    onClick = { onSelect(id) },
-                    onLongClick = { recentCreateMenu = true },
-                    onLongClickLabel = "Открыть меню создания",
-                )
-            } else Modifier.clickable { onSelect(id) }
-            Column(
-                modifier = Modifier.weight(1f).height(72.dp)
-                    .testTag("bottom-tab-${id.name}")
-                    .semantics { role = Role.Tab; this.selected = selected }
-                    .then(press),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                androidx.compose.foundation.layout.Box(
-                    modifier = Modifier
-                        .height(34.dp)
-                        .width(58.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
-                        .background(if (selected) color.copy(alpha = 0.17f) else Color.Transparent),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color)
-                }
-                androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
-                Text(
-                    id.title,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (id == SectionId.RECENT) {
-                    DropdownMenu(expanded = recentCreateMenu, onDismissRequest = { recentCreateMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Создать файл или папку") },
-                            onClick = { recentCreateMenu = false; onCreateRecent() },
+        HorizontalDivider(thickness = 1.dp, color = AppColors.CardBorder.copy(alpha = 0.6f))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            tabs.forEach { tab ->
+                val id = SectionId.fromKey(tab.id) ?: return@forEach
+                val selected = id == current
+                val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
+                var createMenu by remember(id) { mutableStateOf(false) }
+
+                Box(modifier = Modifier.weight(1f).height(70.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("bottom-tab-${id.name}")
+                            .clip(RoundedCornerShape(16.dp))
+                            .combinedClickable(
+                                onClick = { onSelect(id) },
+                                onLongClick = if (id == SectionId.RECENT) {
+                                    { createMenu = true }
+                                } else null,
+                                onLongClickLabel = if (id == SectionId.RECENT) "Создать файл или папку" else null,
+                            )
+                            .semantics { role = Role.Tab; this.selected = selected },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(58.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(17.dp))
+                                .background(if (selected) color.copy(alpha = 0.17f) else Color.Transparent),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                IconCatalog.of(tab.icon),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = color,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            id.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = color,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                    }
+
+                    if (id == SectionId.RECENT) {
+                        DropdownMenu(
+                            expanded = createMenu,
+                            onDismissRequest = { createMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Создать файл или папку") },
+                                onClick = {
+                                    createMenu = false
+                                    onCreateRecent()
+                                },
+                            )
+                        }
                     }
                 }
             }

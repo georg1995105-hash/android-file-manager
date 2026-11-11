@@ -13,6 +13,7 @@ data class AnalyzedFile(val path: String, val bytes: Long) {
     val name: String get() = File(path).name
 }
 data class CategorySize(val kind: FileKind, val bytes: Long, val count: Int)
+data class FolderUsage(val path: String, val bytes: Long, val count: Int)
 data class DuplicateGroup(val files: List<AnalyzedFile>, val bytesPerFile: Long) {
     val reclaimableBytes: Long get() = bytesPerFile * (files.size - 1)
 }
@@ -21,6 +22,8 @@ data class AnalysisResult(
     val incomplete: Boolean, val duplicatesIncomplete: Boolean,
     val categories: List<CategorySize>, val largeFiles: List<AnalyzedFile>,
     val duplicates: List<DuplicateGroup>,
+    val topFolders: List<FolderUsage> = emptyList(),
+    val categoryFiles: Map<FileKind, List<AnalyzedFile>> = emptyMap(),
 )
 
 /** Ограниченный, отменяемый анализ доступных файлов. Ничего не удаляет. */
@@ -36,6 +39,9 @@ class StorageAnalyzer {
         val sizes = mutableMapOf<FileKind, Long>()
         val candidates = HashMap<Long, MutableList<AnalyzedFile>>()
         val top = PriorityQueue<AnalyzedFile>(compareBy { it.bytes })
+        val topByKind = HashMap<FileKind, PriorityQueue<AnalyzedFile>>()
+        val directFolderBytes = HashMap<String, Long>()
+        val directFolderCounts = HashMap<String, Int>()
         val dirs = ArrayDeque<File>()
         dirs.add(root)
         var scanned = 0
@@ -60,6 +66,14 @@ class StorageAnalyzer {
                     counts[kind] = (counts[kind] ?: 0) + 1
                     sizes[kind] = (sizes[kind] ?: 0L) + size
                     val entry = AnalyzedFile(file.absolutePath, size)
+                    val folderPath = dir.absolutePath
+                    directFolderBytes[folderPath] = (directFolderBytes[folderPath] ?: 0L) + size
+                    directFolderCounts[folderPath] = (directFolderCounts[folderPath] ?: 0) + 1
+                    val perKind = topByKind.getOrPut(kind) {
+                        PriorityQueue(compareBy<AnalyzedFile> { it.bytes })
+                    }
+                    if (perKind.size < 25) perKind.add(entry)
+                    else if (size > perKind.peek().bytes) { perKind.poll(); perKind.add(entry) }
                     if (size > 0L) candidates.getOrPut(size) { ArrayList() }.add(entry)
                     if (top.size < 25) top.add(entry)
                     else if (size > top.peek().bytes) { top.poll(); top.add(entry) }
@@ -107,6 +121,24 @@ class StorageAnalyzer {
                 catch (_: Exception) { partialDuplicates = true }
             }
         }
+        // Aggregate direct folder sizes through parent directories once per folder.
+        // This is substantially cheaper than walking ancestors for every file.
+        val folderBytes = HashMap<String, Long>()
+        val folderCounts = HashMap<String, Int>()
+        val rootPath = root.absolutePath
+        for ((dirPath, bytes) in directFolderBytes) {
+            check()
+            var parent: File? = File(dirPath)
+            val count = directFolderCounts[dirPath] ?: 0
+            while (parent != null) {
+                val path = parent.absolutePath
+                if (path != rootPath && !path.startsWith("$rootPath/")) break
+                folderBytes[path] = (folderBytes[path] ?: 0L) + bytes
+                folderCounts[path] = (folderCounts[path] ?: 0) + count
+                if (path == rootPath) break
+                parent = parent.parentFile
+            }
+        }
         return AnalysisResult(
             scanned, total, skipped, incomplete || skipped > 0, partialDuplicates,
             counts.map { (kind, n) -> CategorySize(kind, sizes[kind] ?: 0L, n) }.sortedByDescending { it.bytes },
@@ -114,6 +146,11 @@ class StorageAnalyzer {
             same.entries.mapNotNull { (key, entries) ->
                 if (entries.size < 2) null else DuplicateGroup(entries, key.first)
             }.sortedByDescending { it.reclaimableBytes }.take(30),
+            folderBytes.entries.asSequence()
+                .filter { it.key != rootPath }
+                .map { FolderUsage(it.key, it.value, folderCounts[it.key] ?: 0) }
+                .sortedByDescending { it.bytes }.take(30).toList(),
+            topByKind.mapValues { (_, queue) -> queue.toList().sortedByDescending { it.bytes } },
         )
     }
 }

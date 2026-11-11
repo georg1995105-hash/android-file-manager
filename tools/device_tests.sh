@@ -15,6 +15,19 @@ TEST_APK=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 RUNNER=$PKG.test/androidx.test.runner.AndroidJUnitRunner
 SHOTS=/sdcard/Download/.pfm-test-shots
 
+# Persist UI evidence even if an instrumentation assertion fails before the regular pull step.
+on_failure() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    mkdir -p device-shots
+    timeout 15s adb exec-out screencap -p > "device-shots/${DEVICE}-failure.png" 2>/dev/null || true
+    timeout 20s adb shell uiautomator dump /sdcard/pfm-ui-window.xml >/dev/null 2>&1 || true
+    timeout 15s adb pull /sdcard/pfm-ui-window.xml "device-shots/${DEVICE}-window.xml" >/dev/null 2>&1 || true
+    timeout 15s adb pull "$SHOTS/." device-shots/ >/dev/null 2>&1 || true
+  fi
+}
+trap on_failure EXIT
+
 # Ошибка подписи — ошибка сборки, а не повод удалять приложение или чистить данные.
 SIGNING_APKS=("$APK" "$TEST_APK")
 if [ "$DEVICE" = "phone" ]; then
@@ -116,6 +129,8 @@ sleep 8
 adb logcat -c
 
 rotate 0
+# Fail fast on a missing home UI before starting 17 downstream tests.
+run_tests home "$PKG.DeviceSmokeTest#a_home" || exit 1
 run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest,$PKG.GridViewTest" || exit 1
 # Горизонтальная ориентация: тест сам поворачивает экран через UiAutomation (команды adb на эмуляторе
 # телефона не меняли поворот дисплея).

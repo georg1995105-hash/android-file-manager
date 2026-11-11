@@ -24,6 +24,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -136,7 +137,13 @@ class DeviceSmokeTest {
     @Test
     fun a_home() {
         waitText("Мои файлы")
-        waitText("Внутренняя память")
+        compose.onRoot().printToLog("PFM_HOME_TREE")
+        try {
+            waitText("Внутренняя память")
+        } catch (error: Throwable) {
+            shot("failure-home-memory")
+            throw error
+        }
         shot("d01_home")
     }
 
@@ -201,6 +208,7 @@ class DeviceSmokeTest {
         try {
             waitText("Мои файлы")
             compose.onNodeWithContentDescription("Меню").performClick()
+            compose.onRoot().printToLog("PFM_CREATE_MENU_TREE")
             compose.onNodeWithText("Создать файл или папку").performClick()
             compose.onNodeWithText("JSON").performClick()
             compose.onNodeWithText("Имя файла с расширением").performTextClearance()
@@ -263,6 +271,7 @@ class DeviceSmokeTest {
     @Test
     fun b_recentAndText() {
         openTile("Новые")
+        compose.onRoot().printToLog("PFM_RECENT_TREE")
         waitText("заметка-тест.md", 20_000)
         shot("d02_recent")
         compose.onNodeWithText("заметка-тест.md").performClick()

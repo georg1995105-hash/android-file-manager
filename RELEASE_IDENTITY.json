@@ -1,14 +1,14 @@
 [
   {
     "package": "io.personal.filemanager",
-    "version_code": 33,
-    "version_name": "0.12.18",
+    "version_code": 34,
+    "version_name": "0.12.19",
     "certificate_sha256": "d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7",
-    "sha256": "a697b0797f90483dcecc7892b4694c6951803396b12d5b83e6714cb05e7bd4dd",
+    "sha256": "996f22bb0604933159e2f971f8576d29a2f3a5595422505136495cde20ba72d4",
     "signature_verified": true,
     "debuggable": false,
     "zipalign_16k": true,
-    "file": "personal-file-manager-0.12.18-release-vc33-universal.apk",
+    "file": "personal-file-manager-0.12.19-release-vc34-universal.apk",
     "abi": "universal"
   }
 ]

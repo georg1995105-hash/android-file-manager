@@ -1,7 +1,8 @@
 package io.personal.filemanager.ui
 
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -211,11 +212,11 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                 NavHost(
                     navController = nav,
                     startDestination = Routes.HOME,
-                    // Стандартное проявление навигации длится 0,7 с и ощущается как загрузка — экраны меняются сразу.
-                    enterTransition = { EnterTransition.None },
-                    exitTransition = { ExitTransition.None },
-                    popEnterTransition = { EnterTransition.None },
-                    popExitTransition = { ExitTransition.None },
+                    // Короткий cross-fade: переход остаётся быстрым, но не выглядит резким.
+                    enterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
+                    exitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
+                    popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
                     modifier = Modifier
                         .padding(inner)
                         .consumeWindowInsets(inner),

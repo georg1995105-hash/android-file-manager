@@ -13,6 +13,7 @@ data class InstalledApp(
     val versionName: String?,
     val sizeBytes: Long,
     val isSystem: Boolean,
+    val lastUpdateTime: Long = 0L,
     /** base.apk + split-файлы (для экспорта набора .apks). */
     val apkPaths: List<String>,
 )
@@ -39,7 +40,6 @@ class AppsRepository(private val context: Context) {
         val packages = pm.queryIntentActivities(intent, 0)
             .map { it.activityInfo.packageName }
             .distinct()
-            .filter { it != context.packageName }
         return packages.mapNotNull { pkg ->
             runCatching {
                 val info = pm.getPackageInfo(pkg, 0)
@@ -51,6 +51,7 @@ class AppsRepository(private val context: Context) {
                     versionName = info.versionName,
                     sizeBytes = paths.sumOf { File(it).length() },
                     isSystem = app.flags and ApplicationInfo.FLAG_SYSTEM != 0,
+                    lastUpdateTime = info.lastUpdateTime,
                     apkPaths = paths,
                 )
             }.getOrNull()
@@ -69,7 +70,6 @@ class AppsRepository(private val context: Context) {
         statsCache?.let { (at, stats) -> if (now - at < STATS_TTL_MS) return stats }
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val packages = pm.queryIntentActivities(intent, 0).map { it.activityInfo.packageName }.distinct()
-            .filter { it != context.packageName }
         var total = 0L
         var count = 0
         for (pkg in packages) {

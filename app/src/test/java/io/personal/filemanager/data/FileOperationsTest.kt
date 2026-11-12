@@ -177,6 +177,51 @@ class FileOperationsTest {
         assertEquals("Папка (1)", uniqueTarget(dst.also { File(it, "Папка").mkdir() }, "Папка").name)
     }
 
+    /** Массовое удаление не должно оставлять файлы на диске или ложно сообщать об успехе. */
+    @Test
+    fun move299AudioFilesToTrash() {
+        val audio = tmp.newFolder("audio-bulk")
+        val files = (1..299).map { n -> File(audio, "voice-$n.opus").apply { writeBytes(byteArrayOf(n.toByte())) } }
+        val report = ops.moveToTrash(files)
+        assertTrue(report.failed.toString(), report.ok)
+        assertEquals(299, report.done.size)
+        assertTrue(audio.listFiles().isNullOrEmpty())
+        assertEquals(299, trash.list(listOf(trashRoot)).size)
+    }
+
+    @Test
+    fun massPermanentDelete350AudioFilesWithProgress() {
+        val dir = tmp.newFolder("audio-permanent")
+        val files = (1..350).map { n ->
+            File(dir, "test-$n.opus").apply { writeText("audio$n") }
+        }
+        val progress = mutableListOf<Int>()
+        val report = ops.deletePermanently(files, onProgress = { progress.add(it.doneItems) })
+        assertTrue(report.failed.toString(), report.ok)
+        assertEquals(350, report.done.size)
+        assertEquals(350, progress.last())
+        assertTrue(dir.listFiles().isNullOrEmpty())
+        // Другие файлы не затрагиваются.
+        assertTrue(f(src, "заметка.md").isFile)
+    }
+
+    @Test
+    fun cancelTrashStopsBetweenItemsWithoutLosingRemainingFiles() {
+        val dir = tmp.newFolder("audio-stop")
+        val files = (1..20).map { n -> File(dir, "track-$n.opus").apply { writeText("voice") } }
+        var checked = 0
+        val report = ops.moveToTrash(files, isCancelled = { ++checked > 2 })
+        assertTrue(report.cancelled)
+        assertEquals(2, report.done.size)
+        assertEquals(18, dir.listFiles().orEmpty().size)
+        assertEquals(2, trash.list(listOf(trashRoot)).size)
+    }
+
+    @Test
+    fun audioSectionDoesNotStopAtOld300ItemLimit() {
+        assertTrue(MediaRepository.AUDIO_LIMIT > 10_000)
+    }
+
     @Test
     fun volumeRoots() {
         assertEquals("/storage/emulated/0", FileOperations.defaultVolumeRoot(File("/storage/emulated/0/Download/x")))

@@ -20,7 +20,7 @@ sealed interface TextResult {
 
 /** Безопасное чтение текстовых файлов: ограничение размера, определение кодировки, защита от двоичных данных. */
 object TextLoader {
-    const val DEFAULT_LIMIT_BYTES = 1_000_000
+    const val DEFAULT_LIMIT_BYTES = TextFileEditor.MAX_EDIT_BYTES
 
     private val windows1251: Charset? = runCatching { Charset.forName("windows-1251") }.getOrNull()
 

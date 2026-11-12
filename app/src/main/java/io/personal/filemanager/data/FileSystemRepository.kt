@@ -61,6 +61,38 @@ class FileSystemRepository {
         return if (target.mkdir()) CreateFolderResult.Created(FileEntry.from(target)) else CreateFolderResult.Failed
     }
 
+    /**
+     * Создать пустой файл в доступной папке. createNewFile() атомарно отклоняет
+     * существующее имя: содержимое пользовательского файла никогда не перезаписываем.
+     * Тип определяется расширением имени; автоматически исполняемый файл не создаём.
+     */
+    /** Validate a new document without writing an empty file before the editor is saved. */
+    fun prepareFile(parentPath: String, rawName: String): CreateFolderResult {
+        val name = rawName.trim()
+        validateName(name)?.let { return CreateFolderResult.Invalid(it) }
+        val parent = File(parentPath)
+        if (!parent.isDirectory || !parent.canWrite() || isRestrictedByAndroid(parent)) return CreateFolderResult.Failed
+        val target = File(parent, name)
+        return if (target.exists()) CreateFolderResult.AlreadyExists
+        else CreateFolderResult.Created(FileEntry.from(target))
+    }
+
+    fun createFile(parentPath: String, rawName: String): CreateFolderResult {
+        val name = rawName.trim()
+        validateName(name)?.let { return CreateFolderResult.Invalid(it) }
+        val parent = File(parentPath)
+        if (!parent.isDirectory || isRestrictedByAndroid(parent)) return CreateFolderResult.Failed
+        val target = File(parent, name)
+        return try {
+            if (!target.createNewFile()) CreateFolderResult.AlreadyExists
+            else CreateFolderResult.Created(FileEntry.from(target))
+        } catch (_: java.io.IOException) {
+            CreateFolderResult.Failed
+        } catch (_: SecurityException) {
+            CreateFolderResult.Failed
+        }
+    }
+
     fun parentOf(path: String, root: String): String? {
         val normalizedRoot = File(root).absolutePath
         val current = File(path).absolutePath

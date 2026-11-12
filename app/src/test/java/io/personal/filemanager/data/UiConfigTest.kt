@@ -8,6 +8,25 @@ import org.junit.Test
 
 class UiConfigTest {
     @Test
+    fun trashEnabledAndShortcutAreSeparatePersistentSettings() {
+        val original = UiConfig.defaults().copy(trashEnabled = false, showTrashShortcut = false)
+        val restored = UiConfigCodec.decode(UiConfigCodec.encode(original))
+        assertFalse(restored.trashEnabled)
+        assertFalse(restored.showTrashShortcut)
+        val enabled = UiConfigCodec.decode(UiConfigCodec.encode(restored.copy(trashEnabled = true)))
+        assertTrue(enabled.trashEnabled)
+        assertFalse(enabled.showTrashShortcut)
+    }
+
+    @org.junit.Test
+    fun trashShortcutPreferenceSurvivesSerialization() {
+        val config = io.personal.filemanager.data.settings.UiConfig.defaults().copy(showTrashShortcut = false)
+        val restored = io.personal.filemanager.data.settings.UiConfigCodec.decode(
+            io.personal.filemanager.data.settings.UiConfigCodec.encode(config))
+        org.junit.Assert.assertFalse(restored.showTrashShortcut)
+    }
+
+    @Test
     fun defaultsKeepExistingOrderAndAppendTransfer() {
         val d = UiConfig.defaults()
         assertEquals(SectionId.entries.size, d.tiles.size)

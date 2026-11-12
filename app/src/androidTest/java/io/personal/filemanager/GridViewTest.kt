@@ -30,7 +30,7 @@ import org.junit.runner.RunWith
 
 /**
  * Сетка в «Новых»: дата и время под файлом совпадают с меткой Android (DATE_ADDED), при максимуме колонок
- * дата и время в две строки, выбор удержанием выделяется, удаление показывает список файлов (здесь — отмена).
+ * дата и время в две строки, выбор удержанием выделяется, удаление показывает короткое подтверждение (здесь — отмена).
  */
 @RunWith(AndroidJUnit4::class)
 class GridViewTest {
@@ -96,9 +96,12 @@ class GridViewTest {
         compose.waitText("Выбрано: 1")
         compose.shot("g03_grid_selected")
         compose.onNodeWithContentDescription("Удалить").performClick()
-        compose.waitText("Выбран 1 объект")
-        assertTrue(compose.onAllNodesWithText("• $name").fetchSemanticsNodes().isNotEmpty())
-        compose.shot("g04_delete_list")
+        // Новый диалог удаления компактен: без длинного списка имён и без второго подтверждения.
+        compose.waitText("Удалить файл?")
+        assertTrue(compose.onAllNodesWithText("Удалить навсегда").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("В корзину").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("«$name»", substring = true).fetchSemanticsNodes().isNotEmpty())
+        compose.shot("g04_delete_choices")
         compose.onNodeWithText("Отмена").performClick()
         compose.back()
         compose.waitUntil(5_000) { !compose.textShown("Выбрано:") }

@@ -1,8 +1,5 @@
 package io.personal.filemanager.ui.components
 
-import androidx.compose.ui.platform.LocalDensity
-import java.time.ZoneId
-import io.personal.filemanager.core.gridStamp
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -23,6 +20,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,13 +34,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,6 +78,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -81,7 +87,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.personal.filemanager.core.FileKind
+import io.personal.filemanager.core.gridStamp
 import io.personal.filemanager.core.formatFullDate
 import io.personal.filemanager.core.formatShortDate
 import io.personal.filemanager.core.formatSize
@@ -90,6 +98,13 @@ import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.theme.AppColors
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import kotlin.math.max
+import kotlin.math.min
 
 /** Множественный выбор по пути файла. */
 @Stable
@@ -110,6 +125,25 @@ class SelectionState {
     fun clear() {
         paths = emptySet()
     }
+}
+
+/**
+ * Галерейное выделение диапазона: состояние всегда пересчитывается от снимка,
+ * который был до долгого нажатия. Поэтому движение пальца назад корректно
+ * снимает элементы, которые вышли из текущего диапазона.
+ */
+internal fun dragSelectionResult(
+    allPaths: List<String>,
+    base: Set<String>,
+    anchorIndex: Int,
+    currentIndex: Int,
+    selecting: Boolean,
+): Set<String> {
+    if (anchorIndex !in allPaths.indices || currentIndex !in allPaths.indices) return base
+    val from = min(anchorIndex, currentIndex)
+    val to = max(anchorIndex, currentIndex)
+    val range = allPaths.subList(from, to + 1).toSet()
+    return if (selecting) base + range else base - range
 }
 
 /** Какая дата показывается в строке файла. */
@@ -134,7 +168,7 @@ fun FileRow(
     selected: Boolean,
     selectionMode: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -142,12 +176,15 @@ fun FileRow(
         modifier = modifier
             .fillMaxWidth()
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                else Modifier.clickable(onClick = onClick)
+            )
+            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            FileThumbnail(entry, 52.dp)
+            FileThumbnail(entry, 44.dp)
             if (selectionMode) {
                 Icon(
                     if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
@@ -160,7 +197,7 @@ fun FileRow(
                 )
             }
         }
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 entry.name,
@@ -178,6 +215,182 @@ fun FileRow(
         IconButton(onClick = onMenu, enabled = !selectionMode) {
             Icon(Icons.Filled.MoreVert, contentDescription = "Действия с «${entry.name}»")
         }
+    }
+}
+
+private fun Modifier.dragSelectFilesInList(
+    entries: List<FileEntry>,
+    state: LazyListState,
+    selection: SelectionState,
+): Modifier = pointerInput(entries) {
+    val allPaths = entries.map { it.path }
+    val indexByPath = allPaths.withIndex().associate { it.value to it.index }
+    coroutineScope {
+        var anchorIndex = -1
+        var base = emptySet<String>()
+        var selecting = true
+        var lastIndex = -1
+        var pointer = Offset.Unspecified
+        var autoScrollSpeed = 0f
+        var autoScrollJob: Job? = null
+
+        fun hit(position: Offset): Int? {
+            val y = position.y.toInt()
+            val key = state.layoutInfo.visibleItemsInfo
+                .firstOrNull { y >= it.offset && y < it.offset + it.size }
+                ?.key as? String
+            return key?.let(indexByPath::get)
+        }
+
+        fun update(index: Int) {
+            if (anchorIndex < 0 || index == lastIndex) return
+            selection.set(dragSelectionResult(allPaths, base, anchorIndex, index, selecting))
+            lastIndex = index
+        }
+
+        fun updateEdgeScroll(position: Offset) {
+            pointer = position
+            val edge = 64.dp.toPx()
+            val maxStep = 28.dp.toPx()
+            autoScrollSpeed = when {
+                position.y < edge -> -maxStep * ((edge - position.y) / edge).coerceIn(0.25f, 1f)
+                position.y > size.height - edge ->
+                    maxStep * ((position.y - (size.height - edge)) / edge).coerceIn(0.25f, 1f)
+                else -> 0f
+            }
+            if (autoScrollSpeed == 0f) {
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+            } else if (autoScrollJob == null) {
+                autoScrollJob = launch {
+                    while (isActive && autoScrollSpeed != 0f) {
+                        state.scrollBy(autoScrollSpeed)
+                        if (pointer != Offset.Unspecified) hit(pointer)?.let(::update)
+                        delay(16)
+                    }
+                }
+            }
+        }
+
+        detectDragGesturesAfterLongPress(
+            onDragStart = { position ->
+                val index = hit(position) ?: return@detectDragGesturesAfterLongPress
+                anchorIndex = index
+                base = selection.paths
+                selecting = allPaths[index] !in base
+                lastIndex = -1
+                update(index)
+                updateEdgeScroll(position)
+            },
+            onDragEnd = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDragCancel = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDrag = { change, _ ->
+                if (anchorIndex >= 0) {
+                    change.consume()
+                    hit(change.position)?.let(::update)
+                    updateEdgeScroll(change.position)
+                }
+            },
+        )
+    }
+}
+
+private fun Modifier.dragSelectFilesInGrid(
+    entries: List<FileEntry>,
+    state: LazyGridState,
+    selection: SelectionState,
+): Modifier = pointerInput(entries) {
+    val allPaths = entries.map { it.path }
+    val indexByPath = allPaths.withIndex().associate { it.value to it.index }
+    coroutineScope {
+        var anchorIndex = -1
+        var base = emptySet<String>()
+        var selecting = true
+        var lastIndex = -1
+        var pointer = Offset.Unspecified
+        var autoScrollSpeed = 0f
+        var autoScrollJob: Job? = null
+
+        fun hit(position: Offset): Int? {
+            val x = position.x.toInt()
+            val y = position.y.toInt()
+            val key = state.layoutInfo.visibleItemsInfo.firstOrNull {
+                x >= it.offset.x && x < it.offset.x + it.size.width &&
+                    y >= it.offset.y && y < it.offset.y + it.size.height
+            }?.key as? String
+            return key?.let(indexByPath::get)
+        }
+
+        fun update(index: Int) {
+            if (anchorIndex < 0 || index == lastIndex) return
+            selection.set(dragSelectionResult(allPaths, base, anchorIndex, index, selecting))
+            lastIndex = index
+        }
+
+        fun updateEdgeScroll(position: Offset) {
+            pointer = position
+            val edge = 72.dp.toPx()
+            val maxStep = 30.dp.toPx()
+            autoScrollSpeed = when {
+                position.y < edge -> -maxStep * ((edge - position.y) / edge).coerceIn(0.25f, 1f)
+                position.y > size.height - edge ->
+                    maxStep * ((position.y - (size.height - edge)) / edge).coerceIn(0.25f, 1f)
+                else -> 0f
+            }
+            if (autoScrollSpeed == 0f) {
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+            } else if (autoScrollJob == null) {
+                autoScrollJob = launch {
+                    while (isActive && autoScrollSpeed != 0f) {
+                        state.scrollBy(autoScrollSpeed)
+                        if (pointer != Offset.Unspecified) hit(pointer)?.let(::update)
+                        delay(16)
+                    }
+                }
+            }
+        }
+
+        detectDragGesturesAfterLongPress(
+            onDragStart = { position ->
+                val index = hit(position) ?: return@detectDragGesturesAfterLongPress
+                anchorIndex = index
+                base = selection.paths
+                selecting = allPaths[index] !in base
+                lastIndex = -1
+                update(index)
+                updateEdgeScroll(position)
+            },
+            onDragEnd = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDragCancel = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDrag = { change, _ ->
+                if (anchorIndex >= 0) {
+                    change.consume()
+                    hit(change.position)?.let(::update)
+                    updateEdgeScroll(change.position)
+                }
+            },
+        )
     }
 }
 
@@ -202,6 +415,7 @@ fun FileListPane(
     BackHandler(enabled = selection.active) { selection.clear() }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
+    val listState = rememberLazyListState()
 
     // Выбранные, но исчезнувшие из списка файлы снимаются с выбора.
     LaunchedEffect(entries) {
@@ -210,7 +424,11 @@ fun FileListPane(
     }
 
     Box(modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = contentPadding) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().dragSelectFilesInList(entries, listState, selection),
+            contentPadding = contentPadding,
+        ) {
             header?.invoke(this)
             items(entries, key = { it.path }) { entry ->
                 FileRow(
@@ -219,8 +437,14 @@ fun FileListPane(
                     selected = entry.path in selection.paths,
                     selectionMode = selection.active,
                     onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                    onLongClick = { selection.toggle(entry.path) },
+                    onLongClick = null,
                     onMenu = { menuFor = entry },
+                )
+                // Ненавязчивая граница вместо отдельных тяжёлых карточек для каждой строки.
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 70.dp),
+                    thickness = 0.5.dp,
+                    color = AppColors.Divider,
                 )
             }
         }
@@ -255,6 +479,7 @@ fun FileGridPane(
     modifier: Modifier = Modifier,
     columns: Int = 3,
     dateShown: DateShown = DateShown.MODIFIED,
+    galleryMode: Boolean = false,
     onOpen: ((FileEntry) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 16.dp),
     header: (LazyGridScope.() -> Unit)? = null,
@@ -265,6 +490,7 @@ fun FileGridPane(
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
+    val gridState = rememberLazyGridState()
     BackHandler(enabled = selection.active) { selection.clear() }
     LaunchedEffect(entries) {
         val present = entries.mapTo(HashSet()) { it.path }
@@ -272,38 +498,63 @@ fun FileGridPane(
     }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
-        // Ширина ячейки определяет подписи: узкая — дата и время в две строки, широкая — имя в две строки.
-        val cellWidth = (maxWidth - GRID_SIDE * 2 - GRID_GAP * (columns - 1)) / columns
-        // «25.10 · 16:15» ≈ 84 dp при обычном шрифте; крупный шрифт Android — раньше переход на две строки.
-        val compactStamp = cellWidth - 8.dp < 84.dp * LocalDensity.current.fontScale
-        val nameLines = if (cellWidth >= 120.dp) 2 else 1
-        val zone = remember { ZoneId.systemDefault() }
+        val monthGroups = remember(entries, dateShown, galleryMode) {
+            if (galleryMode) {
+                entries.groupBy { entry ->
+                    val timestamp = entry.stampTime(dateShown).first
+                    if (timestamp != null && timestamp > 0L) {
+                        java.text.SimpleDateFormat("LLLL yyyy", java.util.Locale.forLanguageTag("ru"))
+                            .format(java.util.Date(timestamp))
+                            .replaceFirstChar { it.titlecase(java.util.Locale.forLanguageTag("ru")) }
+                    } else "Без даты"
+                }
+            } else emptyMap()
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
-            modifier = Modifier.fillMaxSize(),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().dragSelectFilesInGrid(entries, gridState, selection),
             contentPadding = PaddingValues(
-                start = GRID_SIDE,
-                end = GRID_SIDE,
+                start = if (galleryMode) 2.dp else GRID_SIDE,
+                end = if (galleryMode) 2.dp else GRID_SIDE,
                 top = 4.dp,
                 bottom = contentPadding.calculateBottomPadding() + if (selection.active) 140.dp else 0.dp,
             ),
-            horizontalArrangement = Arrangement.spacedBy(GRID_GAP),
-            verticalArrangement = Arrangement.spacedBy(GRID_GAP),
+            horizontalArrangement = Arrangement.spacedBy(if (galleryMode) 3.dp else GRID_GAP),
+            verticalArrangement = Arrangement.spacedBy(if (galleryMode) 3.dp else GRID_GAP),
         ) {
             header?.invoke(this)
-            items(entries, key = { it.path }, contentType = { "file" }) { entry ->
-                GridCell(
-                    entry = entry,
-                    selected = entry.path in selection.paths,
-                    selectionMode = selection.active,
-                    dateShown = dateShown,
-                    zone = zone,
-                    compactStamp = compactStamp,
-                    nameLines = nameLines,
-                    onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                    // Удержание включает выбор (как в списке); действия — в панели выбора.
-                    onLongClick = { selection.toggle(entry.path) },
-                )
+            if (galleryMode) {
+                monthGroups.forEach { (month, groupEntries) ->
+                    fullWidthItem {
+                        Text(
+                            month,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    items(groupEntries, key = { it.path }, contentType = { "gallery-media" }) { entry ->
+                        GalleryMediaCell(
+                            entry = entry,
+                            selected = entry.path in selection.paths,
+                            selectionMode = selection.active,
+                            dateShown = dateShown,
+                            onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
+                            onLongClick = null,
+                        )
+                    }
+                }
+            } else {
+                items(entries, key = { it.path }, contentType = { "file" }) { entry ->
+                    GridCell(
+                        entry = entry,
+                        selected = entry.path in selection.paths,
+                        selectionMode = selection.active,
+                        dateShown = dateShown,
+                        onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
+                        onLongClick = null,
+                    )
+                }
             }
         }
         SelectionBar(selection, entries, Modifier.align(Alignment.BottomCenter), onAllActions = { menuFor = it })
@@ -320,8 +571,164 @@ fun FileGridPane(
     detailsFor?.let { entry -> FileDetailsSheet(entry, onDismiss = { detailsFor = null }) }
 }
 
-private val GRID_SIDE = 12.dp
-private val GRID_GAP = 6.dp
+// Almost edge-to-edge, matching a modern gallery; no bulky card margins.
+private val GRID_SIDE = 2.dp
+private val GRID_GAP = 3.dp
+// Mixed grids (for example «Новые») must keep every tile on the same row baseline.
+private val GRID_UNIFORM_FOOTER_HEIGHT = 62.dp
+private val GRID_NAME_SLOT_HEIGHT = 16.dp
+private val GRID_DATE_SLOT_HEIGHT = 24.dp
+private val GRID_META_LAST_LINE_HEIGHT = 14.dp
+
+/**
+ * Compact metadata shown under every square thumbnail, never on top of it;
+ * "Новые" uses MediaStore date-added when supplied, other sections use modification time.
+ * Unknown dates are not substituted with the current time.
+ */
+@Composable
+private fun FileGridMetadata(
+    entry: FileEntry,
+    dateShown: DateShown,
+    includeName: Boolean,
+    uniformHeight: Boolean = false,
+) {
+    val (epoch, fallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
+    val stamp = remember(epoch) { gridStamp(epoch) }
+    val date = remember(stamp, fallback) {
+        stamp?.oneLine?.let { if (fallback) "изм. $it" else it } ?: "Дата неизвестна"
+    }
+
+    // This is a footer BELOW the thumbnail, not a scrim covering its lower edge.
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .then(if (uniformHeight) Modifier.height(GRID_UNIFORM_FOOTER_HEIGHT) else Modifier)
+            .background(AppColors.Card)
+            .padding(horizontal = 5.dp, vertical = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        if (uniformHeight) {
+            // Reserve the filename line even for photo/video: the name stays hidden,
+            // but mixed rows no longer become shorter than APK/document rows.
+            Box(Modifier.fillMaxWidth().height(GRID_NAME_SLOT_HEIGHT)) {
+                if (includeName) {
+                    Text(
+                        entry.name,
+                        color = AppColors.TextPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(GRID_DATE_SLOT_HEIGHT)) {
+                Text(
+                    date,
+                    color = AppColors.TextSecondary,
+                    fontSize = 10.sp,
+                    maxLines = 2,
+                    softWrap = true,
+                    lineHeight = 12.sp,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box(Modifier.fillMaxWidth().height(GRID_META_LAST_LINE_HEIGHT)) {
+                when {
+                    !entry.isDirectory -> Text(
+                        formatSize(entry.size),
+                        color = AppColors.TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    entry.childCount != null -> Text(
+                        "${entry.childCount} объектов",
+                        color = AppColors.TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        } else {
+            if (includeName) {
+                Text(
+                    entry.name,
+                    color = AppColors.TextPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                date,
+                color = AppColors.TextSecondary,
+                fontSize = 10.sp,
+                maxLines = 2,
+                softWrap = true,
+                lineHeight = 12.sp,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!entry.isDirectory) {
+                Text(
+                    formatSize(entry.size),
+                    color = AppColors.TextSecondary,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            } else {
+                entry.childCount?.let { count ->
+                    Text(
+                        "$count объектов",
+                        color = AppColors.TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Square gallery thumbnails with date, time and size, but no filename captions. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GalleryMediaCell(
+    entry: FileEntry,
+    selected: Boolean,
+    selectionMode: Boolean,
+    dateShown: DateShown,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+    uniformFooter: Boolean = false,
+) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                else Modifier.clickable(onClick = onClick)
+            ),
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            GridThumbnail(entry)
+            if (selected) {
+                Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.25f)))
+            }
+            if (selectionMode) {
+                Icon(
+                    if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                    contentDescription = if (selected) "Выбрано" else "Выбрать",
+                    tint = if (selected) AppColors.Accent else Color.White,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50)),
+                )
+            }
+        }
+        FileGridMetadata(entry, dateShown, includeName = false, uniformHeight = uniformFooter)
+    }
+}
 
 /** Время для подписи: в «Новых» по дате появления — дата добавления; если она неизвестна — честно «изм.». */
 private fun FileEntry.stampTime(mode: DateShown): Pair<Long?, Boolean> =
@@ -329,6 +736,10 @@ private fun FileEntry.stampTime(mode: DateShown): Pair<Long?, Boolean> =
     else if (mode == DateShown.ADDED) lastModified.takeIf { it > 0 } to true
     else lastModified.takeIf { it > 0 } to false
 
+/**
+ * Shared compact grid item. Preserve full-size square previews and add a slim
+ * metadata footer outside the preview for ALL types, including APKs and folders.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GridCell(
@@ -336,66 +747,46 @@ private fun GridCell(
     selected: Boolean,
     selectionMode: Boolean,
     dateShown: DateShown,
-    zone: ZoneId,
-    compactStamp: Boolean,
-    nameLines: Int,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    val (time, modifiedFallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
-    val stamp = remember(time, zone) { gridStamp(time, zone) }
+    if (entry.kind == FileKind.IMAGE || entry.kind == FileKind.VIDEO) {
+        GalleryMediaCell(
+            entry = entry,
+            selected = selected,
+            selectionMode = selectionMode,
+            dateShown = dateShown,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            uniformFooter = true,
+        )
+        return
+    }
+
+    val shape = RoundedCornerShape(7.dp)
     Column(
-        Modifier
+        Modifier.fillMaxWidth()
             .clip(shape)
-            .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(4.dp),
+            .background(if (selected) AppColors.AccentContainer else AppColors.Card)
+            .then(if (selected) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                else Modifier.clickable(onClick = onClick)
+            ),
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(10.dp))
-                .then(if (selected) Modifier.border(3.dp, AppColors.Accent, RoundedCornerShape(10.dp)) else Modifier),
-        ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
             GridThumbnail(entry)
-            if (selected) Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.22f)))
             if (selectionMode) {
                 Icon(
                     if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                    contentDescription = if (selected) "Выбрано" else "Не выбрано",
+                    contentDescription = if (selected) "Выбрано" else "Выбрать",
                     tint = if (selected) AppColors.Accent else Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(5.dp)
-                        .size(24.dp)
-                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(50)),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(26.dp)
+                        .background(Color.Black.copy(alpha = 0.48f), RoundedCornerShape(50)),
                 )
             }
         }
-        Spacer(Modifier.size(4.dp))
-        Text(
-            entry.name,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = nameLines,
-            minLines = nameLines,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val prefix = if (modifiedFallback) "изм. " else ""
-        val stampStyle = MaterialTheme.typography.labelSmall
-        val stampColor = MaterialTheme.colorScheme.onSurfaceVariant
-        when {
-            stamp == null -> Text("время неизвестно", style = stampStyle, color = stampColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            compactStamp -> {
-                Text(prefix + stamp.day, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-                Text(stamp.time, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-            }
-            else -> Text(prefix + stamp.oneLine, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-        }
-        if (!entry.isDirectory) {
-            Text(formatSize(entry.size), style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-        }
+        FileGridMetadata(entry, dateShown, includeName = true, uniformHeight = true)
     }
 }
 
@@ -618,7 +1009,7 @@ private fun GridThumbnail(entry: FileEntry) {
             }
         } else {
             // Папки, документы, архивы, APK (иконка приложения) — понятный значок типа.
-            FileThumbnail(entry, 56.dp)
+            FileThumbnail(entry, 74.dp)
         }
     }
 }

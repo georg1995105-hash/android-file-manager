@@ -117,6 +117,29 @@ class FileSystemRepositoryTest {
     }
 
     @Test
+    fun createFileSupportsCommonAndCustomExtensions() {
+        for (name in listOf("README.md", "note.txt", "config.json", "test.xml", "settings.yaml", "service.conf", "plain.custom")) {
+            assertTrue(repo.createFile(root.path, name) is CreateFolderResult.Created)
+            assertTrue(File(root, name).isFile)
+            assertEquals(0L, File(root, name).length())
+        }
+    }
+
+    @Test
+    fun createFileNeverOverwritesAndRejectsInvalidNames() {
+        val existing = File(root, "одинаковое.txt")
+        val original = existing.readBytes()
+        assertEquals(CreateFolderResult.AlreadyExists, repo.createFile(root.path, existing.name))
+        assertTrue(original.contentEquals(existing.readBytes()))
+        assertEquals(CreateFolderResult.AlreadyExists, repo.createFile(root.path, "Документы"))
+        assertTrue(repo.createFile(root.path, "../outside.md") is CreateFolderResult.Invalid)
+        assertTrue(repo.createFile(root.path, "a/b.md") is CreateFolderResult.Invalid)
+        assertTrue(repo.createFile(root.path, " ") is CreateFolderResult.Invalid)
+        assertEquals(CreateFolderResult.Failed, repo.createFile(File(root, "нет такой папки").path, "a.md"))
+        assertFalse(File(root.parentFile, "outside.md").exists())
+    }
+
+    @Test
     fun hiddenSegments() {
         assertTrue(FileSystemRepository.hasHiddenSegment("/storage/emulated/0/DCIM/.thumbnails/1.jpg"))
         assertFalse(FileSystemRepository.hasHiddenSegment("/storage/emulated/0/Download/a.b.c.txt"))

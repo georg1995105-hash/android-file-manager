@@ -55,6 +55,17 @@ class TextLoaderTest {
     }
 
     @Test
+    fun defaultViewerLoadsTextLargerThanOldOneMegabyteLimit() {
+        val file = tmp.newFile("long.md")
+        val text = "Строка документа\\n".repeat(80_000)
+        file.writeText(text, Charsets.UTF_8)
+        val r = TextLoader.load(file) as TextResult.Ok
+        assertFalse(r.truncated)
+        assertEquals(text, r.text)
+        assertTrue(TextFileEditor.snapshot(file, r.charsetName) != null)
+    }
+
+    @Test
     fun emptyAndMissing() {
         val empty = tmp.newFile("empty.txt")
         assertEquals("", (TextLoader.load(empty) as TextResult.Ok).text)

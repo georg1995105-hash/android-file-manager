@@ -1,29 +1,16 @@
-name: release signing preflight
+name: release signing preflight (manual)
 
 on:
-  push:
-    paths: ['.github/workflows/release-preflight.yml']
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  checks:
+  info:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Prepare standard owner-backup encryption
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
-      - name: Signing guards and independent backup recovery on disposable fixtures
+      - name: Publication architecture
         run: |
-          python3 tools/test_release_signing.py -v
-          python3 tools/test_release_upgrade.py -v
-          python3 tools/test_ci_signing.py -v
-          python3 -m py_compile tools/release_signing.py tools/create_release_identity.py tools/release_upgrade.py
-          bash -n tools/build_signed_release.sh tools/build_release_update_pair.sh
+          echo "Signed RELEASE build, identity verification and direct APK publication are handled by .github/workflows/android.yml."
+          echo "This workflow is intentionally manual and does not publish or mutate repository content."

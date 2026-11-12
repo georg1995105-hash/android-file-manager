@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,7 @@ import io.personal.filemanager.data.settings.TileConfig
 import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.LocalCreateDialog
 import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
@@ -112,7 +114,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
     val columns = TileLayout.columns(config?.tilesPerRow ?: 0, maxWidth.value.toInt(), tiles.size)
     val compactHeight = maxHeight < 480.dp
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("home-content-list"),
         contentPadding = PaddingValues(bottom = 16.dp),
     ) {
         item { HomeHeader() }
@@ -138,8 +140,8 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 row.forEach { tile ->
                     val id = SectionId.fromKey(tile.id) ?: return@forEach
@@ -148,7 +150,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
                         title = id.title,
                         subtitle = state.stats[id],
                         onClick = { navigator.openSection(id) },
-                        minHeight = if (compactHeight) 108.dp else 128.dp,
+                        minHeight = if (compactHeight) 94.dp else 104.dp,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -158,7 +160,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
         if (config != null && tiles.isEmpty()) {
             item {
                 Text(
-                    "Все разделы скрыты. Нажмите «Настроить», чтобы вернуть нужные.",
+                    "Все разделы скрыты. Нажмите значок карандаша, чтобы вернуть нужные.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
@@ -220,6 +222,8 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
 @Composable
 private fun HomeHeader() {
     val navigator = LocalNavigator.current
+    val createFile = LocalCreateDialog.current
+    val config by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
@@ -238,17 +242,23 @@ private fun HomeHeader() {
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text("Настроить разделы") },
-                    onClick = { menuOpen = false; navigator.openTileSettings() },
+                    text = { Text("Создать файл или папку") },
+                    onClick = { menuOpen = false; createFile() },
                 )
                 DropdownMenuItem(
-                    text = { Text("Настроить нижнюю панель") },
-                    onClick = { menuOpen = false; navigator.openTabSettings() },
+                    text = { Text("Анализ памяти") },
+                    onClick = { menuOpen = false; navigator.open(Routes.ANALYZER) },
                 )
                 DropdownMenuItem(
-                    text = { Text("Корзина") },
-                    onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
+                    text = { Text("Настройки") },
+                    onClick = { menuOpen = false; navigator.open(Routes.SETTINGS) },
                 )
+                if (config?.showTrashShortcut != false) {
+                    DropdownMenuItem(
+                        text = { Text("Корзина") },
+                        onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Резервные копии") },
                     onClick = { menuOpen = false; navigator.open(Routes.BACKUP) },
@@ -267,18 +277,18 @@ private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifie
             .clip(RoundedCornerShape(20.dp))
             .card(RoundedCornerShape(20.dp))
             .tapClickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
-                .size(64.dp)
+                .size(48.dp)
                 .background(AppColors.Surface, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(38.dp))
+            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(30.dp))
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Внутренняя память", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -338,18 +348,20 @@ private fun AccessBanner(modifier: Modifier = Modifier) {
 
 @Composable
 private fun ConfigureButton(onClick: () -> Unit) {
-    Row(
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .border(1.dp, AppColors.CardBorder, RoundedCornerShape(50))
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, AppColors.CardBorder, RoundedCornerShape(12.dp))
             .background(AppColors.Card)
-            .tapClickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .tapClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("Настроить", style = MaterialTheme.typography.labelLarge)
+        Icon(
+            Icons.Filled.Edit,
+            contentDescription = "Настроить разделы",
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -360,7 +372,7 @@ private fun SectionTile(
     subtitle: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    minHeight: Dp = 128.dp,
+    minHeight: Dp = 104.dp,
 ) {
     Column(
         modifier = modifier
@@ -368,12 +380,12 @@ private fun SectionTile(
             .clip(RoundedCornerShape(18.dp))
             .card()
             .tapClickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 14.dp),
+            .padding(horizontal = 6.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        SectionIcon(tile.icon, tile.color, 44.dp)
-        Spacer(Modifier.height(10.dp))
+        SectionIcon(tile.icon, tile.color, 34.dp)
+        Spacer(Modifier.height(6.dp))
         // Название в одну строку: в узкой плитке шрифт уменьшается, а не рвёт слово по слогам.
         val titleStyle = MaterialTheme.typography.bodyMedium.copy(
             fontWeight = FontWeight.Medium,

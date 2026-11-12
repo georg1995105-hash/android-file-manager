@@ -95,6 +95,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
+import io.personal.filemanager.core.formatShortDate
+import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.data.settings.ViewerControl
@@ -140,6 +142,7 @@ fun MediaViewerScreen(path: String) {
     val pagerState = rememberPagerState(initialPage = items.indexOf(path).coerceAtLeast(0)) { items.size }
     val currentIndex = pagerState.currentPage.coerceIn(0, items.lastIndex)
     val currentPath = items[currentIndex]
+    val currentFileInfo = remember(currentPath) { FileEntry.from(File(currentPath)) }
     val settledPath = items[pagerState.settledPage.coerceIn(0, items.lastIndex)]
     val currentIsVideo = MediaViewerViewModel.isVideo(currentPath)
     val videoActive = currentIsVideo && video.path == currentPath
@@ -334,11 +337,18 @@ fun MediaViewerScreen(path: String) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Text(
+                        "Изменён: ${formatShortDate(currentFileInfo.lastModified)} · ${formatSize(currentFileInfo.size)}",
+                        color = Color.White.copy(alpha = 0.78f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     if (items.size > 1) {
                         Text(
                             "${currentIndex + 1} из ${items.size}",
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.62f),
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
                 }

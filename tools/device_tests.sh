@@ -15,22 +15,37 @@ TEST_APK=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 RUNNER=$PKG.test/androidx.test.runner.AndroidJUnitRunner
 SHOTS=/sdcard/Download/.pfm-test-shots
 
+# Persist UI evidence even if an instrumentation assertion fails before the regular pull step.
+on_failure() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    mkdir -p device-shots
+    timeout 15s adb exec-out screencap -p > "device-shots/${DEVICE}-failure.png" 2>/dev/null || true
+    timeout 20s adb shell uiautomator dump /sdcard/pfm-ui-window.xml >/dev/null 2>&1 || true
+    timeout 15s adb pull /sdcard/pfm-ui-window.xml "device-shots/${DEVICE}-window.xml" >/dev/null 2>&1 || true
+    timeout 15s adb pull "$SHOTS/." device-shots/ >/dev/null 2>&1 || true
+  fi
+}
+trap on_failure EXIT
+
 # Ошибка подписи — ошибка сборки, а не повод удалять приложение или чистить данные.
 SIGNING_APKS=("$APK" "$TEST_APK")
 if [ "$DEVICE" = "phone" ]; then
   CUR=$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
-  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 30 --json tagName -q '.[].tagName' | grep -- '-debug-' | grep -v "^v${CUR}-" | head -1) || exit 1
+  # Берём только опубликованный DEBUG/TEST APK; некоторые подписанные RELEASE
+  # выпуски исторически имели «debug» в имени тега, но другой сертификат.
+  PREV_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' | grep -E '(^v.*-debug-build[0-9]+$|^v.*-build[0-9]+$)' | grep -v "^v${CUR}-" | head -1) || exit 1
   if [ -z "$PREV_TAG" ]; then
     echo "Предыдущий пререлиз не найден — проверка обновления невозможна" >&2
     exit 1
   fi
-  gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*universal*.apk' --dir prev-apk --clobber || exit 1
+  gh release download "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*debug*universal*.apk' --dir prev-apk --clobber || exit 1
   PREV_APKS=(prev-apk/*.apk)
   [ "${#PREV_APKS[@]}" -eq 1 ] && [ -f "${PREV_APKS[0]}" ] || exit 1
   SIGNING_APKS+=("${PREV_APKS[0]}")
 fi
 bash tools/check_debug_signatures.sh "${SIGNING_APKS[@]}" || exit 1
-adb wait-for-device
+timeout 90s adb wait-for-device || { echo "::error::Emulator never became available through adb"; exit 1; }
 
 # «Доступ ко всем файлам» — режим appop по uid (как переключатель в настройках).
 grant_files() {
@@ -49,8 +64,37 @@ rotate() {
 
 RESULTS=()
 run_tests() { # $1 — метка, $2 — классы через запятую
-  adb shell am instrument -w -r -e class "$2" $RUNNER | tee "instr-$1.log"
-  if grep -q "OK (" "instr-$1.log"; then RESULTS+=("$1: OK"); else RESULTS+=("$1: FAIL"); fi
+  local label="$1" classes="$2" rc
+  # Instrumentation may block forever after an emulator/app deadlock.
+  # Bound each suite and retain the last successful test in the output.
+  echo "===== INSTRUMENTATION START: $label ($(date -u +%FT%TZ)) ====="
+  timeout --signal=TERM --kill-after=20s 180s \
+    adb shell am instrument -w -r -e class "$classes" "$RUNNER" 2>&1 | tee "instr-$label.log"
+  rc=${PIPESTATUS[0]}
+  if [ "$rc" -eq 0 ] && grep -q "OK (" "instr-$label.log"; then
+    RESULTS+=("$label: OK")
+    echo "===== INSTRUMENTATION OK: $label ====="
+    return 0
+  fi
+  RESULTS+=("$label: FAIL (exit $rc)")
+  echo "::error::Android instrumentation $label failed or timed out (exit $rc)"
+  echo "===== LAST INSTRUMENTATION OUTPUT: $label ====="
+  tail -100 "instr-$label.log" || true
+  echo "===== UI TEST STAGES ====="
+  timeout 15s adb logcat -d -s PFM_UI:I '*:S' | tail -80 || true
+  echo "===== APP THREAD DUMP ====="
+  app_pid=$(timeout 5s adb shell pidof "$PKG" | tr -d '\r' || true)
+  if [ -n "$app_pid" ]; then
+    timeout 10s adb shell kill -3 "$app_pid" || true
+    sleep 2
+    timeout 15s adb logcat -d -t 2000 | grep -E -A 18 -B 3 '(DALVIK THREADS|main" |at androidx.compose|main" prio|ANR in|PFM_UI)' | tail -120 || true
+  fi
+  echo "===== LAST ANDROID LOGCAT ====="
+  timeout 20s adb logcat -d -t 1200 | tail -160 || true
+  echo "===== ANDROID ACTIVITY STATE ====="
+  timeout 20s adb shell dumpsys activity activities | tail -100 || true
+  timeout 15s adb shell am force-stop "$PKG" || true
+  return 1
 }
 
 # «Обновление поверх» (приёмочный сценарий ТЗ): предыдущий опубликованный APK -> заметка ->
@@ -85,10 +129,12 @@ sleep 8
 adb logcat -c
 
 rotate 0
-run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest,$PKG.GridViewTest"
+# Fail fast on a missing home UI before starting 17 downstream tests.
+run_tests home "$PKG.DeviceSmokeTest#a_home" || exit 1
+run_tests main "$PKG.DeviceSmokeTest,$PKG.ViewerSelectionTest,$PKG.GridViewTest" || exit 1
 # Горизонтальная ориентация: тест сам поворачивает экран через UiAutomation (команды adb на эмуляторе
 # телефона не меняли поворот дисплея).
-run_tests landscape "$PKG.OrientationTest"
+run_tests landscape "$PKG.OrientationTest" || exit 1
 
 mkdir -p device-shots
 adb pull "$SHOTS/." device-shots/ >/dev/null 2>&1 || true

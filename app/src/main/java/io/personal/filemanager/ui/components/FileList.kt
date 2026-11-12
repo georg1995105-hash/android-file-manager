@@ -20,6 +20,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,10 +38,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -72,6 +78,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -90,6 +98,13 @@ import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.ui.FileActions
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.theme.AppColors
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import kotlin.math.max
+import kotlin.math.min
 
 /** Множественный выбор по пути файла. */
 @Stable
@@ -110,6 +125,25 @@ class SelectionState {
     fun clear() {
         paths = emptySet()
     }
+}
+
+/**
+ * Галерейное выделение диапазона: состояние всегда пересчитывается от снимка,
+ * который был до долгого нажатия. Поэтому движение пальца назад корректно
+ * снимает элементы, которые вышли из текущего диапазона.
+ */
+internal fun dragSelectionResult(
+    allPaths: List<String>,
+    base: Set<String>,
+    anchorIndex: Int,
+    currentIndex: Int,
+    selecting: Boolean,
+): Set<String> {
+    if (anchorIndex !in allPaths.indices || currentIndex !in allPaths.indices) return base
+    val from = min(anchorIndex, currentIndex)
+    val to = max(anchorIndex, currentIndex)
+    val range = allPaths.subList(from, to + 1).toSet()
+    return if (selecting) base + range else base - range
 }
 
 /** Какая дата показывается в строке файла. */
@@ -134,7 +168,7 @@ fun FileRow(
     selected: Boolean,
     selectionMode: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -142,7 +176,10 @@ fun FileRow(
         modifier = modifier
             .fillMaxWidth()
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                else Modifier.clickable(onClick = onClick)
+            )
             .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -181,6 +218,182 @@ fun FileRow(
     }
 }
 
+private fun Modifier.dragSelectFilesInList(
+    entries: List<FileEntry>,
+    state: LazyListState,
+    selection: SelectionState,
+): Modifier = pointerInput(entries) {
+    val allPaths = entries.map { it.path }
+    val indexByPath = allPaths.withIndex().associate { it.value to it.index }
+    coroutineScope {
+        var anchorIndex = -1
+        var base = emptySet<String>()
+        var selecting = true
+        var lastIndex = -1
+        var pointer = Offset.Unspecified
+        var autoScrollSpeed = 0f
+        var autoScrollJob: Job? = null
+
+        fun hit(position: Offset): Int? {
+            val y = position.y.toInt()
+            val key = state.layoutInfo.visibleItemsInfo
+                .firstOrNull { y >= it.offset && y < it.offset + it.size }
+                ?.key as? String
+            return key?.let(indexByPath::get)
+        }
+
+        fun update(index: Int) {
+            if (anchorIndex < 0 || index == lastIndex) return
+            selection.set(dragSelectionResult(allPaths, base, anchorIndex, index, selecting))
+            lastIndex = index
+        }
+
+        fun updateEdgeScroll(position: Offset) {
+            pointer = position
+            val edge = 64.dp.toPx()
+            val maxStep = 28.dp.toPx()
+            autoScrollSpeed = when {
+                position.y < edge -> -maxStep * ((edge - position.y) / edge).coerceIn(0.25f, 1f)
+                position.y > size.height - edge ->
+                    maxStep * ((position.y - (size.height - edge)) / edge).coerceIn(0.25f, 1f)
+                else -> 0f
+            }
+            if (autoScrollSpeed == 0f) {
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+            } else if (autoScrollJob == null) {
+                autoScrollJob = launch {
+                    while (isActive && autoScrollSpeed != 0f) {
+                        state.scrollBy(autoScrollSpeed)
+                        if (pointer != Offset.Unspecified) hit(pointer)?.let(::update)
+                        delay(16)
+                    }
+                }
+            }
+        }
+
+        detectDragGesturesAfterLongPress(
+            onDragStart = { position ->
+                val index = hit(position) ?: return@detectDragGesturesAfterLongPress
+                anchorIndex = index
+                base = selection.paths
+                selecting = allPaths[index] !in base
+                lastIndex = -1
+                update(index)
+                updateEdgeScroll(position)
+            },
+            onDragEnd = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDragCancel = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDrag = { change, _ ->
+                if (anchorIndex >= 0) {
+                    change.consume()
+                    hit(change.position)?.let(::update)
+                    updateEdgeScroll(change.position)
+                }
+            },
+        )
+    }
+}
+
+private fun Modifier.dragSelectFilesInGrid(
+    entries: List<FileEntry>,
+    state: LazyGridState,
+    selection: SelectionState,
+): Modifier = pointerInput(entries) {
+    val allPaths = entries.map { it.path }
+    val indexByPath = allPaths.withIndex().associate { it.value to it.index }
+    coroutineScope {
+        var anchorIndex = -1
+        var base = emptySet<String>()
+        var selecting = true
+        var lastIndex = -1
+        var pointer = Offset.Unspecified
+        var autoScrollSpeed = 0f
+        var autoScrollJob: Job? = null
+
+        fun hit(position: Offset): Int? {
+            val x = position.x.toInt()
+            val y = position.y.toInt()
+            val key = state.layoutInfo.visibleItemsInfo.firstOrNull {
+                x >= it.offset.x && x < it.offset.x + it.size.width &&
+                    y >= it.offset.y && y < it.offset.y + it.size.height
+            }?.key as? String
+            return key?.let(indexByPath::get)
+        }
+
+        fun update(index: Int) {
+            if (anchorIndex < 0 || index == lastIndex) return
+            selection.set(dragSelectionResult(allPaths, base, anchorIndex, index, selecting))
+            lastIndex = index
+        }
+
+        fun updateEdgeScroll(position: Offset) {
+            pointer = position
+            val edge = 72.dp.toPx()
+            val maxStep = 30.dp.toPx()
+            autoScrollSpeed = when {
+                position.y < edge -> -maxStep * ((edge - position.y) / edge).coerceIn(0.25f, 1f)
+                position.y > size.height - edge ->
+                    maxStep * ((position.y - (size.height - edge)) / edge).coerceIn(0.25f, 1f)
+                else -> 0f
+            }
+            if (autoScrollSpeed == 0f) {
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+            } else if (autoScrollJob == null) {
+                autoScrollJob = launch {
+                    while (isActive && autoScrollSpeed != 0f) {
+                        state.scrollBy(autoScrollSpeed)
+                        if (pointer != Offset.Unspecified) hit(pointer)?.let(::update)
+                        delay(16)
+                    }
+                }
+            }
+        }
+
+        detectDragGesturesAfterLongPress(
+            onDragStart = { position ->
+                val index = hit(position) ?: return@detectDragGesturesAfterLongPress
+                anchorIndex = index
+                base = selection.paths
+                selecting = allPaths[index] !in base
+                lastIndex = -1
+                update(index)
+                updateEdgeScroll(position)
+            },
+            onDragEnd = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDragCancel = {
+                autoScrollSpeed = 0f
+                autoScrollJob?.cancel()
+                autoScrollJob = null
+                anchorIndex = -1
+            },
+            onDrag = { change, _ ->
+                if (anchorIndex >= 0) {
+                    change.consume()
+                    hit(change.position)?.let(::update)
+                    updateEdgeScroll(change.position)
+                }
+            },
+        )
+    }
+}
+
 /**
  * Полноценный список файлов: открытие, долгое нажатие — выбор, меню действий, сведения,
  * панель выбора внизу (зона большого пальца) с «Поделиться».
@@ -202,6 +415,7 @@ fun FileListPane(
     BackHandler(enabled = selection.active) { selection.clear() }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
+    val listState = rememberLazyListState()
 
     // Выбранные, но исчезнувшие из списка файлы снимаются с выбора.
     LaunchedEffect(entries) {
@@ -210,7 +424,11 @@ fun FileListPane(
     }
 
     Box(modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = contentPadding) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().dragSelectFilesInList(entries, listState, selection),
+            contentPadding = contentPadding,
+        ) {
             header?.invoke(this)
             items(entries, key = { it.path }) { entry ->
                 FileRow(
@@ -219,7 +437,7 @@ fun FileListPane(
                     selected = entry.path in selection.paths,
                     selectionMode = selection.active,
                     onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                    onLongClick = { selection.toggle(entry.path) },
+                    onLongClick = null,
                     onMenu = { menuFor = entry },
                 )
                 // Ненавязчивая граница вместо отдельных тяжёлых карточек для каждой строки.
@@ -272,6 +490,7 @@ fun FileGridPane(
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
+    val gridState = rememberLazyGridState()
     BackHandler(enabled = selection.active) { selection.clear() }
     LaunchedEffect(entries) {
         val present = entries.mapTo(HashSet()) { it.path }
@@ -293,7 +512,8 @@ fun FileGridPane(
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
-            modifier = Modifier.fillMaxSize(),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().dragSelectFilesInGrid(entries, gridState, selection),
             contentPadding = PaddingValues(
                 start = if (galleryMode) 2.dp else GRID_SIDE,
                 end = if (galleryMode) 2.dp else GRID_SIDE,
@@ -320,7 +540,7 @@ fun FileGridPane(
                             selectionMode = selection.active,
                             dateShown = dateShown,
                             onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                            onLongClick = { selection.toggle(entry.path) },
+                            onLongClick = null,
                         )
                     }
                 }
@@ -480,13 +700,16 @@ private fun GalleryMediaCell(
     selectionMode: Boolean,
     dateShown: DateShown,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
     uniformFooter: Boolean = false,
 ) {
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                else Modifier.clickable(onClick = onClick)
+            ),
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
             GridThumbnail(entry)
@@ -525,7 +748,7 @@ private fun GridCell(
     selectionMode: Boolean,
     dateShown: DateShown,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
 ) {
     if (entry.kind == FileKind.IMAGE || entry.kind == FileKind.VIDEO) {
         GalleryMediaCell(
@@ -546,7 +769,10 @@ private fun GridCell(
             .clip(shape)
             .background(if (selected) AppColors.AccentContainer else AppColors.Card)
             .then(if (selected) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                else Modifier.clickable(onClick = onClick)
+            ),
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
             GridThumbnail(entry)

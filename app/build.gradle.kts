@@ -7,8 +7,8 @@ plugins {
 }
 
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
-val appVersionCode = 36
-val appVersionName = "0.12.21"
+val appVersionCode = 37
+val appVersionName = "0.12.22"
 
 // Подпись release: keystore.properties (локально, вне Git) или переменные окружения CI.
 // Ключ и пароли никогда не коммитятся.

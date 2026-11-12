@@ -1,100 +1,16 @@
-name: release signing preflight
+name: release signing preflight (manual)
 
 on:
-  push:
-    paths: ['.github/workflows/release-preflight.yml']
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  checks:
+  info:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Prepare standard owner-backup encryption
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
-      - name: Signing guards and independent backup recovery on disposable fixtures
+      - name: Publication architecture
         run: |
-          python3 tools/test_release_signing.py -v
-          python3 tools/test_release_upgrade.py -v
-          python3 tools/test_ci_signing.py -v
-          python3 -m py_compile tools/release_signing.py tools/create_release_identity.py tools/release_upgrade.py
-          bash -n tools/build_signed_release.sh tools/build_release_update_pair.sh
-
-  # One-time publication of an already signed, validated APK from the successful CI run.
-  # The public GitHub Release asset avoids broken ChatGPT Library-file download links.
-  publish-downloadable-0-12-21:
-    if: github.ref == 'refs/heads/feature/compact-create-files-20261110'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Restore signed APK from successful CI
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          gh run download 43203501138 \
-            --repo "$GITHUB_REPOSITORY" \
-            --name personal-file-manager-0.12.21-vc36-f822f46 \
-            --dir dist
-          cd dist
-          sha256sum -c SHA256SUMS.txt
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          r=json.loads(Path('RELEASE_IDENTITY.json').read_text())[0]
-          assert r['package']=='io.personal.filemanager'
-          assert r['version_code']==36 and r['version_name']=='0.12.21'
-          assert r['signature_verified'] and not r['debuggable']
-          assert r['certificate_sha256']=='d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7'
-          assert Path(r['file']).is_file()
-          print('Validated owner-signed 0.12.21 for existing-app updates')
-          PY
-      - name: Publish publicly downloadable APK
-        run: |
-          set -euo pipefail
-          TAG="v0.12.21-release-vc36-f822f46"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Verified release already exists, not overwriting."
-            exit 0
-          fi
-          if gh release create "$TAG" \
-            dist/personal-file-manager-0.12.21-release-vc36-universal.apk \
-            dist/SHA256SUMS.txt dist/RELEASE_IDENTITY.json \
-            --repo "$GITHUB_REPOSITORY" \
-            --target f822f46b73164b89ca58c982c8282b94396bacaf \
-            --title "Мои файлы 0.12.21 — APK для обновления" \
-            --notes "Подписанная 0.12.21 (versionCode 36). Обновление поверх 0.12.20 без удаления данных. SHA-256 и сертификат подтверждены."; then
-            exit 0
-          fi
-
-          echo "::warning::GitHub Release API is unavailable to this workflow token; publishing the same validated APK to a direct-download branch."
-          WORK="$RUNNER_TEMP/apk-downloads"
-          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$WORK"
-          cd "$WORK"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code origin refs/heads/apk-downloads >/dev/null 2>&1; then
-            git fetch --quiet origin apk-downloads
-            git checkout --quiet -B apk-downloads origin/apk-downloads
-          else
-            git checkout --quiet --orphan apk-downloads
-            git rm -rf . >/dev/null 2>&1 || true
-          fi
-          cp "$GITHUB_WORKSPACE/dist/personal-file-manager-0.12.21-release-vc36-universal.apk" .
-          cp "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt" .
-          cp "$GITHUB_WORKSPACE/dist/RELEASE_IDENTITY.json" .
-          git add personal-file-manager-0.12.21-release-vc36-universal.apk SHA256SUMS.txt RELEASE_IDENTITY.json
-          git commit -m "Publish signed 0.12.21 APK"
-          git push --quiet origin apk-downloads
+          echo "Signed RELEASE build, identity verification and direct APK publication are handled by .github/workflows/android.yml."
+          echo "This workflow is intentionally manual and does not publish or mutate repository content."

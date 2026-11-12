@@ -2,7 +2,12 @@ name: android
 
 on:
   push:
-    branches: ['**']
+    branches:
+      - '**'
+      - '!apk-downloads'
+      - '!ci-screenshots'
+      - '!ci-device-shots'
+      - '!ci-device-shots-tablet'
     paths-ignore:
       - '.github/workflows/release-preflight.yml'
       - '.github/workflows/release-key-setup.yml'
@@ -155,27 +160,54 @@ jobs:
           path: dist/
           retention-days: 30
 
-      # GitHub Actions artifact quota is separate from GitHub Releases storage.
-      # Do not lose a validated, owner-signed release just because artifact storage is full.
-      - name: Publish release APK when artifact storage is full
-        if: steps.upload_signed_apk.outcome == 'failure' && env.HAS_RELEASE_KEY == 'true'
+      # The signed RELEASE is also published to a plain Git branch.
+      # This avoids GitHub Release API permission failures and gives Android a stable direct APK URL.
+      - name: Publish verified signed APK to direct-download branch
+        if: env.HAS_RELEASE_KEY == 'true' && github.ref == 'refs/heads/feature/compact-create-files-20261110'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          APK_FILES=(dist/*.apk)
-          if [ "${#APK_FILES[@]}" -eq 0 ]; then
-            echo "::error::No signed APK in dist/"
-            exit 1
+          cd dist
+          sha256sum -c SHA256SUMS.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          records=json.loads(Path('RELEASE_IDENTITY.json').read_text())
+          assert len(records) == 1
+          r=records[0]
+          assert r['package']=='io.personal.filemanager'
+          assert r['signature_verified'] and not r['debuggable']
+          assert r['certificate_sha256']=='d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7'
+          assert Path(r['file']).is_file()
+          print(f"Validated signed {r['version_name']} vc{r['version_code']}: {r['file']}")
+          PY
+          cd ..
+
+          WORK="$RUNNER_TEMP/apk-downloads"
+          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$WORK"
+          cd "$WORK"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin refs/heads/apk-downloads >/dev/null 2>&1; then
+            git fetch --quiet origin apk-downloads
+            git checkout --quiet -B apk-downloads origin/apk-downloads
+          else
+            git checkout --quiet --orphan apk-downloads
+            git rm -rf . >/dev/null 2>&1 || true
           fi
-          TAG="v${{ steps.apk.outputs.version_name }}-vc${{ steps.apk.outputs.version_code }}-${GITHUB_SHA::7}"
-          gh release create "$TAG" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Мои файлы ${{ steps.apk.outputs.version_name }} — подписанный APK" \
-            --notes "Подписанная release-сборка, versionCode ${{ steps.apk.outputs.version_code }}. Можно обновлять предыдущий APK, подписанный тем же release-ключом. Создано как резервный канал, поскольку GitHub Actions artifact storage переполнен."
+
+          cp "$GITHUB_WORKSPACE"/dist/*.apk .
+          cp "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt" .
+          cp "$GITHUB_WORKSPACE/dist/RELEASE_IDENTITY.json" .
+          git add *.apk SHA256SUMS.txt RELEASE_IDENTITY.json
+          if git diff --cached --quiet; then
+            echo "Direct-download branch already contains this signed APK."
+            exit 0
+          fi
+          git commit -m "Publish signed APK for ${GITHUB_SHA::7}"
+          git push --quiet origin apk-downloads
 
       - name: Test reports
         if: failure()
@@ -184,22 +216,6 @@ jobs:
           name: test-reports
           path: app/build/reports/tests/
           retention-days: 7
-
-      # Приватный пререлиз со скачиваемым APK — только для коммитов с меткой [apk].
-      - name: Private prerelease
-        if: contains(github.event.head_commit.message, '[apk]')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          TAG="v${{ steps.apk.outputs.version_name }}-build${{ github.run_number }}"
-          gh release create "$TAG" \
-            debug-dist/*.apk debug-dist/SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "$TAG (DEBUG/TEST)" \
-            --notes "DEBUG/TEST APK, не постоянная release-сборка. versionCode ${{ steps.apk.outputs.version_code }}. Для vivo X300 Pro — файл *-arm64-*.apk; *-universal-* — для любых устройств. SHA-256 — в SHA256SUMS.txt. Коммит $GITHUB_SHA. Подписан тестовым debug-ключом CI: release-версию поверх установить нельзя без удаления."
 
   # Full device suites run only when explicitly requested. Normal commits build, unit-test and sign APK.
   # Avoid 2 large emulator runs for each tiny UI correction; keep regressions available on demand.

@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
@@ -49,6 +51,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableStateOf
@@ -172,7 +177,7 @@ private fun InstalledAppsList(search: ListSearchState) {
         else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
                 Text(
-                    "Приложения с иконкой на рабочем столе: ${list.size}. Нажмите, чтобы открыть.",
+                    "Приложения с иконкой на рабочем столе: ${list.size}. Нажмите на приложение для действий.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -183,10 +188,7 @@ private fun InstalledAppsList(search: ListSearchState) {
                     Modifier
                         .fillMaxWidth()
                         .combinedClickable(
-                            onClick = {
-                                if (appLaunch(context, app.packageName) == null)
-                                    FileActions.toast(context, "Приложение нельзя запустить")
-                            },
+                            onClick = { actionsFor = app },
                             onLongClick = { actionsFor = app },
                         )
                         .padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
@@ -243,7 +245,7 @@ private fun AppIcon(packageName: String) {
     }
 }
 
-/** Контекстное меню по удержанию приложения, без `⋮` в каждом ряду. */
+/** Элегантное меню действий по обычному касанию приложения; запуск — отдельным действием. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun AppMenu(app: InstalledApp, onDismiss: () -> Unit) {
@@ -265,27 +267,56 @@ private fun AppMenu(app: InstalledApp, onDismiss: () -> Unit) {
                 }
             }
             Spacer(Modifier.padding(8.dp))
-            TextButton(onClick = {
-                onDismiss()
-                if (appLaunch(context, app.packageName) == null)
-                    FileActions.toast(context, "Приложение нельзя запустить")
-            }, modifier = Modifier.fillMaxWidth()) { Text("Запустить") }
-            TextButton(onClick = {
-                onDismiss()
-                val dest = File(container.storage.downloadsPath, EXPORT_DIR)
-                container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest)
-            }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (app.apkPaths.size > 1) "Экспортировать набор .apks" else "Экспортировать APK")
-            }
-            TextButton(onClick = {
-                onDismiss()
-                val dest = File(context.cacheDir, "shared-apk").apply { deleteRecursively(); mkdirs() }
-                container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest) { file ->
-                    FileActions.share(context, listOf(FileEntry.from(file)))
-                }
-            }, modifier = Modifier.fillMaxWidth()) { Text("Поделиться APK") }
-            TextButton(onClick = { onDismiss(); FileActions.openAppDetails(context, app.packageName) },
-                modifier = Modifier.fillMaxWidth()) { Text("Сведения о приложении") }
+            val actionColors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+            ListItem(
+                headlineContent = { Text("Запустить") },
+                leadingContent = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        if (appLaunch(context, app.packageName) == null)
+                            FileActions.toast(context, "Приложение нельзя запустить")
+                    },
+            )
+            ListItem(
+                headlineContent = { Text(if (app.apkPaths.size > 1) "Экспортировать набор .apks" else "Экспортировать APK") },
+                leadingContent = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        val dest = File(container.storage.downloadsPath, EXPORT_DIR)
+                        container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest)
+                    },
+            )
+            ListItem(
+                headlineContent = { Text("Поделиться APK") },
+                leadingContent = { Icon(Icons.Filled.Share, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        val dest = File(context.cacheDir, "shared-apk").apply { deleteRecursively(); mkdirs() }
+                        container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest) { file ->
+                            FileActions.share(context, listOf(FileEntry.from(file)))
+                        }
+                    },
+            )
+            ListItem(
+                headlineContent = { Text("Сведения о приложении") },
+                leadingContent = { Icon(Icons.Filled.Info, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        FileActions.openAppDetails(context, app.packageName)
+                    },
+            )
         }
     }
 }

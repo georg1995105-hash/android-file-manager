@@ -1,1 +1,1 @@
-83aeffaed54e4a20e2ada32eb8de9a4a1696b38a0d65fe3ed540a6e36a41b4a3  personal-file-manager-0.12.21-release-vc36-universal.apk
+f725a1fe51081e16127b6cb06bd04e3fe13dc283ebbe51352aa7c038f8f7fe0c  personal-file-manager-0.12.22-release-vc37-universal.apk

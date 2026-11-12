@@ -552,7 +552,7 @@ fun FileGridPane(
                         selectionMode = selection.active,
                         dateShown = dateShown,
                         onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                        onLongClick = { selection.toggle(entry.path) },
+                        onLongClick = null,
                     )
                 }
             }

@@ -30,7 +30,7 @@ jobs:
 
   # One-time publication of an already signed, validated APK from the successful CI run.
   # The public GitHub Release asset avoids broken ChatGPT Library-file download links.
-  publish-downloadable-0-12-19:
+  publish-downloadable-0-12-20:
     if: github.ref == 'refs/heads/feature/compact-create-files-20261110'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -44,9 +44,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          gh run download 43124755286 \
+          gh run download 43201770404 \
             --repo "$GITHUB_REPOSITORY" \
-            --name personal-file-manager-0.12.19-vc34-aa041f9 \
+            --name personal-file-manager-0.12.20-vc35-aeb6d2e \
             --dir dist
           cd dist
           sha256sum -c SHA256SUMS.txt
@@ -55,27 +55,27 @@ jobs:
           from pathlib import Path
           r=json.loads(Path('RELEASE_IDENTITY.json').read_text())[0]
           assert r['package']=='io.personal.filemanager'
-          assert r['version_code']==34 and r['version_name']=='0.12.19'
+          assert r['version_code']==35 and r['version_name']=='0.12.20'
           assert r['signature_verified'] and not r['debuggable']
           assert r['certificate_sha256']=='d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7'
           assert Path(r['file']).is_file()
-          print('Validated owner-signed 0.12.19 for existing-app updates')
+          print('Validated owner-signed 0.12.20 for existing-app updates')
           PY
       - name: Publish publicly downloadable APK
         run: |
           set -euo pipefail
-          TAG="v0.12.19-release-vc34-aa041f9"
+          TAG="v0.12.20-release-vc35-aeb6d2e"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Verified release already exists, not overwriting."
             exit 0
           fi
           if gh release create "$TAG" \
-            dist/personal-file-manager-0.12.19-release-vc34-universal.apk \
+            dist/personal-file-manager-0.12.20-release-vc35-universal.apk \
             dist/SHA256SUMS.txt dist/RELEASE_IDENTITY.json \
             --repo "$GITHUB_REPOSITORY" \
-            --target aa041f9a8f0f6320ad90a1bbd8487b0b6bd6c77a \
-            --title "Мои файлы 0.12.19 — APK для обновления" \
-            --notes "Подписанная 0.12.19 (versionCode 34). Обновление поверх 0.12.18 без удаления данных. SHA-256 и сертификат подтверждены."; then
+            --target aeb6d2e17df763818440e2f4413c71b7ba1fe4e3 \
+            --title "Мои файлы 0.12.20 — APK для обновления" \
+            --notes "Подписанная 0.12.20 (versionCode 35). Обновление поверх 0.12.19 без удаления данных. SHA-256 и сертификат подтверждены."; then
             exit 0
           fi
 
@@ -92,9 +92,9 @@ jobs:
             git checkout --quiet --orphan apk-downloads
             git rm -rf . >/dev/null 2>&1 || true
           fi
-          cp "$GITHUB_WORKSPACE/dist/personal-file-manager-0.12.19-release-vc34-universal.apk" .
+          cp "$GITHUB_WORKSPACE/dist/personal-file-manager-0.12.20-release-vc35-universal.apk" .
           cp "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt" .
           cp "$GITHUB_WORKSPACE/dist/RELEASE_IDENTITY.json" .
-          git add personal-file-manager-0.12.19-release-vc34-universal.apk SHA256SUMS.txt RELEASE_IDENTITY.json
-          git commit -m "Publish signed 0.12.19 APK"
+          git add personal-file-manager-0.12.20-release-vc35-universal.apk SHA256SUMS.txt RELEASE_IDENTITY.json
+          git commit -m "Publish signed 0.12.20 APK"
           git push --quiet origin apk-downloads

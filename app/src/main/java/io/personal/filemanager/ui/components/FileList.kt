@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -353,6 +354,11 @@ fun FileGridPane(
 // Almost edge-to-edge, matching a modern gallery; no bulky card margins.
 private val GRID_SIDE = 2.dp
 private val GRID_GAP = 3.dp
+// Mixed grids (for example «Новые») must keep every tile on the same row baseline.
+private val GRID_UNIFORM_FOOTER_HEIGHT = 62.dp
+private val GRID_NAME_SLOT_HEIGHT = 16.dp
+private val GRID_DATE_SLOT_HEIGHT = 24.dp
+private val GRID_META_LAST_LINE_HEIGHT = 14.dp
 
 /**
  * Compact metadata shown under every square thumbnail, never on top of it;
@@ -360,7 +366,12 @@ private val GRID_GAP = 3.dp
  * Unknown dates are not substituted with the current time.
  */
 @Composable
-private fun FileGridMetadata(entry: FileEntry, dateShown: DateShown, includeName: Boolean) {
+private fun FileGridMetadata(
+    entry: FileEntry,
+    dateShown: DateShown,
+    includeName: Boolean,
+    uniformHeight: Boolean = false,
+) {
     val (epoch, fallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
     val stamp = remember(epoch) { gridStamp(epoch) }
     val date = remember(stamp, fallback) {
@@ -370,45 +381,91 @@ private fun FileGridMetadata(entry: FileEntry, dateShown: DateShown, includeName
     // This is a footer BELOW the thumbnail, not a scrim covering its lower edge.
     Column(
         modifier = Modifier.fillMaxWidth()
+            .then(if (uniformHeight) Modifier.height(GRID_UNIFORM_FOOTER_HEIGHT) else Modifier)
             .background(AppColors.Card)
             .padding(horizontal = 5.dp, vertical = 3.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        if (includeName) {
+        if (uniformHeight) {
+            // Reserve the filename line even for photo/video: the name stays hidden,
+            // but mixed rows no longer become shorter than APK/document rows.
+            Box(Modifier.fillMaxWidth().height(GRID_NAME_SLOT_HEIGHT)) {
+                if (includeName) {
+                    Text(
+                        entry.name,
+                        color = AppColors.TextPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(GRID_DATE_SLOT_HEIGHT)) {
+                Text(
+                    date,
+                    color = AppColors.TextSecondary,
+                    fontSize = 10.sp,
+                    maxLines = 2,
+                    softWrap = true,
+                    lineHeight = 12.sp,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box(Modifier.fillMaxWidth().height(GRID_META_LAST_LINE_HEIGHT)) {
+                when {
+                    !entry.isDirectory -> Text(
+                        formatSize(entry.size),
+                        color = AppColors.TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    entry.childCount != null -> Text(
+                        "${entry.childCount} объектов",
+                        color = AppColors.TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        } else {
+            if (includeName) {
+                Text(
+                    entry.name,
+                    color = AppColors.TextPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
-                entry.name,
-                color = AppColors.TextPrimary,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Text(
-            date,
-            color = AppColors.TextSecondary,
-            fontSize = 10.sp,
-            maxLines = 2,
-            softWrap = true,
-            lineHeight = 12.sp,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (!entry.isDirectory) {
-            Text(
-                formatSize(entry.size),
+                date,
                 color = AppColors.TextSecondary,
                 fontSize = 10.sp,
-                maxLines = 1,
-                softWrap = false,
+                maxLines = 2,
+                softWrap = true,
+                lineHeight = 12.sp,
+                overflow = TextOverflow.Ellipsis,
             )
-        } else {
-            entry.childCount?.let { count ->
+            if (!entry.isDirectory) {
                 Text(
-                    "$count объектов",
+                    formatSize(entry.size),
                     color = AppColors.TextSecondary,
                     fontSize = 10.sp,
                     maxLines = 1,
+                    softWrap = false,
                 )
+            } else {
+                entry.childCount?.let { count ->
+                    Text(
+                        "$count объектов",
+                        color = AppColors.TextSecondary,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
@@ -424,6 +481,7 @@ private fun GalleryMediaCell(
     dateShown: DateShown,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    uniformFooter: Boolean = false,
 ) {
     Column(
         Modifier.fillMaxWidth()
@@ -445,7 +503,7 @@ private fun GalleryMediaCell(
                 )
             }
         }
-        FileGridMetadata(entry, dateShown, includeName = false)
+        FileGridMetadata(entry, dateShown, includeName = false, uniformHeight = uniformFooter)
     }
 }
 
@@ -477,6 +535,7 @@ private fun GridCell(
             dateShown = dateShown,
             onClick = onClick,
             onLongClick = onLongClick,
+            uniformFooter = true,
         )
         return
     }
@@ -501,7 +560,7 @@ private fun GridCell(
                 )
             }
         }
-        FileGridMetadata(entry, dateShown, includeName = true)
+        FileGridMetadata(entry, dateShown, includeName = true, uniformHeight = true)
     }
 }
 

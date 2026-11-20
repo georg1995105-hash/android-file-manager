@@ -9,3 +9,10 @@ Use `PROJECT_STATUS.md` and the relevant part of `PROJECT_SPEC.md` as the source
 - Keep owner release keys and credentials out of Git. Do not rotate debug signing casually: changing signing identity can prevent updates over installed APKs. Publishing to app stores is separate work and requires an explicit request.
 - Respect concurrent work: use an appropriate task branch; no force pushes, resets or overwriting someone else's changes. Existing working code is more important than refactoring.
 - Report succinctly: what changed, commit/branch, what actually passed, artifact link when applicable, and exact remaining device test/blocker. Solve routine environment problems yourself if possible; otherwise preserve verified progress rather than loop on identical retries.
+
+
+## Состояние задачи и передача другому агенту
+
+- Для новых задач используй [docs/agent/README.md](docs/agent/README.md): Issue → PR → текущий head SHA → GitHub Actions → непроверенное и следующий шаг. Исторический `PROJECT_STATUS.md` нельзя принимать за актуальный статус ветки без проверки.
+- После каждого этапа обновляй живой handoff в PR; не объявляй сборку подтверждением реального устройства и не переносить успешный CI со старого SHA на новый коммит.
+- Используй только очищенные данные для поиска и индексов; не передавай в облачный граф знаний ключи подписи, личные файлы, токены, приватные пути и содержимое устройств.

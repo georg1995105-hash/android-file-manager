@@ -163,7 +163,8 @@ jobs:
       # The signed RELEASE is also published to a plain Git branch.
       # This avoids GitHub Release API permission failures and gives Android a stable direct APK URL.
       - name: Publish verified signed APK to direct-download branch
-        if: env.HAS_RELEASE_KEY == 'true' && github.ref == 'refs/heads/feature/compact-create-files-20261110'
+        # Manual regression runs must never republish the same signed version.
+        if: env.HAS_RELEASE_KEY == 'true' && github.ref == 'refs/heads/feature/compact-create-files-20261110' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

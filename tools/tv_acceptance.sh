@@ -21,9 +21,10 @@ if [[ "$rc" != 0 ]] || ! grep -q 'OK (' tv-test.log || grep -q 'FAILURES' tv-tes
   echo "::error::Android TV D-pad instrumentation failed"
   exit 1
 fi
-# Launch via the TV intent, then capture the APP, not the emulator home screen.
-adb shell am start -W -a android.intent.action.MAIN \
-  -c android.intent.category.LEANBACK_LAUNCHER -p "$PKG"
+# The instrumentation test already checks the LEANBACK intent filter. ActivityManager's
+# implicit -p resolution is unreliable on some Android TV system images: use the verified
+# exported launch component for the actual launch and check that it stays resumed.
+adb shell am start -W -n "$PKG/.MainActivity"
 sleep 2
 adb shell dumpsys activity activities > tv-activity.txt || true
 adb exec-out screencap -p > tv-screen.png || true

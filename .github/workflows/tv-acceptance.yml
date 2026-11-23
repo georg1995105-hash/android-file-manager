@@ -66,6 +66,7 @@ jobs:
           name: tv-api-${{ matrix.api }}-results
           path: |
             tv-test.log
+            tv-activity.txt
             tv-screen.png
             tv-logcat.txt
           retention-days: 7

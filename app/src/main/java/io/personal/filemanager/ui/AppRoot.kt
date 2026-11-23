@@ -252,10 +252,10 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                     navController = nav,
                     startDestination = Routes.HOME,
                     // Короткий cross-fade: переход остаётся быстрым, но не выглядит резким.
-                    enterTransition = { if (tvUi) fadeIn(animationSpec = tween(durationMillis = 120)) else EnterTransition.None },
-                    exitTransition = { if (tvUi) fadeOut(animationSpec = tween(durationMillis = 80)) else ExitTransition.None },
-                    popEnterTransition = { if (tvUi) fadeIn(animationSpec = tween(durationMillis = 120)) else EnterTransition.None },
-                    popExitTransition = { if (tvUi) fadeOut(animationSpec = tween(durationMillis = 80)) else ExitTransition.None },
+                    enterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
+                    exitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
+                    popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
                     modifier = Modifier
                         .padding(inner)
                         .consumeWindowInsets(inner),
@@ -389,40 +389,99 @@ internal fun BottomTabBar(
     onCreateRecent: () -> Unit = {},
 ) {
     if (!isTelevisionUi()) {
-        OriginalTouchBottomTabBar(tabs, current, onSelect)
+        OriginalTouchBottomTabBar(tabs, current, onSelect, onCreateRecent)
         return
     }
     TvBottomTabBar(tabs, current, onSelect, onCreateRecent)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OriginalTouchBottomTabBar(
     tabs: List<TabConfig>,
     current: SectionId?,
-    onSelect: (SectionId) -> Unit,
+    onSelect: (SectionId) -> Unit = {},
+    onCreateRecent: () -> Unit = {},
 ) {
-    NavigationBar(containerColor = AppColors.Surface, tonalElevation = 0.dp) {
-        tabs.forEach { tab ->
-            val id = SectionId.fromKey(tab.id) ?: return@forEach
-            val selected = id == current
-            val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
-            NavigationBarItem(
-                modifier = Modifier.testTag("bottom-tab-${id.name}"),
-                selected = selected,
-                onClick = { onSelect(id) },
-                icon = { Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color) },
-                label = {
-                    Text(
-                        id.title,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = color,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Visible,
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent),
-            )
+    // Do not use weighted Columns as children of Material3 NavigationBar:
+    // its internal measurement may allow them to occupy the entire Scaffold.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppColors.Surface)
+            .navigationBarsPadding(),
+    ) {
+        HorizontalDivider(thickness = 1.dp, color = AppColors.CardBorder.copy(alpha = 0.6f))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            tabs.forEach { tab ->
+                val id = SectionId.fromKey(tab.id) ?: return@forEach
+                val selected = id == current
+                val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
+                var createMenu by remember(id) { mutableStateOf(false) }
+
+                Box(modifier = Modifier.weight(1f).height(70.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("bottom-tab-${id.name}")
+                            .clip(RoundedCornerShape(16.dp))
+                            .combinedClickable(
+                                onClick = { onSelect(id) },
+                                onLongClick = if (id == SectionId.RECENT) {
+                                    { createMenu = true }
+                                } else null,
+                                onLongClickLabel = if (id == SectionId.RECENT) "Создать файл или папку" else null,
+                            )
+                            .semantics { role = Role.Tab; this.selected = selected },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(58.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(17.dp))
+                                .background(if (selected) color.copy(alpha = 0.17f) else Color.Transparent),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                IconCatalog.of(tab.icon),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = color,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            id.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = color,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    if (id == SectionId.RECENT) {
+                        DropdownMenu(
+                            expanded = createMenu,
+                            onDismissRequest = { createMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Создать файл или папку") },
+                                onClick = {
+                                    createMenu = false
+                                    onCreateRecent()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

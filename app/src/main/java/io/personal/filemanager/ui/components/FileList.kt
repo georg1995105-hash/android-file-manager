@@ -1,5 +1,8 @@
 package io.personal.filemanager.ui.components
 
+import androidx.compose.ui.focus.onFocusChanged
+import io.personal.filemanager.ui.isTelevisionUi
+
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -80,11 +83,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import java.time.ZoneId
-import io.personal.filemanager.ui.isTelevisionUi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -181,20 +180,19 @@ fun FileRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused }
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
+            .onFocusChanged { focused = it.isFocused }
             .then(if (tvUi) Modifier.border(if (focused) 2.dp else 0.dp,
                 AppColors.Accent, RoundedCornerShape(8.dp)) else Modifier)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)
             )
-            .padding(start = if (tvUi) 16.dp else 20.dp, end = 4.dp,
-                top = if (tvUi) 6.dp else 10.dp, bottom = if (tvUi) 6.dp else 10.dp),
+            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            FileThumbnail(entry, if (tvUi) 44.dp else 52.dp)
+            FileThumbnail(entry, 44.dp)
             if (selectionMode) {
                 Icon(
                     if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
@@ -207,7 +205,7 @@ fun FileRow(
                 )
             }
         }
-        Spacer(Modifier.width(if (tvUi) 10.dp else 14.dp))
+        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 entry.name,
@@ -287,7 +285,7 @@ private fun Modifier.dragSelectFilesInList(
                 val index = hit(position) ?: return@detectDragGesturesAfterLongPress
                 anchorIndex = index
                 base = selection.paths
-                selecting = true
+                selecting = allPaths[index] !in base
                 lastIndex = -1
                 update(index)
                 updateEdgeScroll(position)
@@ -376,7 +374,7 @@ private fun Modifier.dragSelectFilesInGrid(
                 val index = hit(position) ?: return@detectDragGesturesAfterLongPress
                 anchorIndex = index
                 base = selection.paths
-                selecting = true
+                selecting = allPaths[index] !in base
                 lastIndex = -1
                 update(index)
                 updateEdgeScroll(position)
@@ -418,8 +416,8 @@ fun FileListPane(
     header: (LazyListScope.() -> Unit)? = null,
     selection: SelectionState = remember { SelectionState() },
 ) {
-    val tvUi = isTelevisionUi()
     val navigator = LocalNavigator.current
+    val tvUi = isTelevisionUi()
     val files = remember(entries) { entries.filter { !it.isDirectory } }
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     // «Назад» в режиме выбора снимает выбор, а не уходит с экрана.
@@ -448,16 +446,15 @@ fun FileListPane(
                     selected = entry.path in selection.paths,
                     selectionMode = selection.active,
                     onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                    onLongClick = { selection.set(selection.paths + entry.path) },
+                    onLongClick = if (tvUi) { { selection.set(selection.paths + entry.path) } } else null,
                     onMenu = { menuFor = entry },
                 )
-                if (tvUi) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 70.dp),
-                        thickness = 0.5.dp,
-                        color = AppColors.Divider,
-                    )
-                }
+                // Ненавязчивая граница вместо отдельных тяжёлых карточек для каждой строки.
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 70.dp),
+                    thickness = 0.5.dp,
+                    color = AppColors.Divider,
+                )
             }
         }
         SelectionBar(
@@ -497,8 +494,8 @@ fun FileGridPane(
     header: (LazyGridScope.() -> Unit)? = null,
     selection: SelectionState = remember { SelectionState() },
 ) {
-    val tvUi = isTelevisionUi()
     val navigator = LocalNavigator.current
+    val tvUi = isTelevisionUi()
     val files = remember(entries) { entries.filter { !it.isDirectory } }
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
@@ -511,16 +508,8 @@ fun FileGridPane(
     }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
-        // Gallery grouping predates the TV changes and must remain on touch devices.
-        val tvGallery = galleryMode
-        val side = if (tvUi) GRID_SIDE else 12.dp
-        val gap = if (tvUi) GRID_GAP else 6.dp
-        val cellWidth = (maxWidth - side * 2 - gap * (columns - 1)) / columns
-        val compactStamp = cellWidth - 8.dp < 84.dp * LocalDensity.current.fontScale
-        val nameLines = if (cellWidth >= 120.dp) 2 else 1
-        val zone = remember { ZoneId.systemDefault() }
-        val monthGroups = remember(entries, dateShown, tvGallery) {
-            if (tvGallery) {
+        val monthGroups = remember(entries, dateShown, galleryMode) {
+            if (galleryMode) {
                 entries.groupBy { entry ->
                     val timestamp = entry.stampTime(dateShown).first
                     if (timestamp != null && timestamp > 0L) {
@@ -536,16 +525,16 @@ fun FileGridPane(
             state = gridState,
             modifier = Modifier.fillMaxSize().dragSelectFilesInGrid(entries, gridState, selection),
             contentPadding = PaddingValues(
-                start = if (tvGallery) 2.dp else side,
-                end = if (tvGallery) 2.dp else side,
+                start = if (galleryMode) 2.dp else GRID_SIDE,
+                end = if (galleryMode) 2.dp else GRID_SIDE,
                 top = 4.dp,
                 bottom = contentPadding.calculateBottomPadding() + if (selection.active) 140.dp else 0.dp,
             ),
-            horizontalArrangement = Arrangement.spacedBy(if (tvGallery) 3.dp else gap),
-            verticalArrangement = Arrangement.spacedBy(if (tvGallery) 3.dp else gap),
+            horizontalArrangement = Arrangement.spacedBy(if (galleryMode) 3.dp else GRID_GAP),
+            verticalArrangement = Arrangement.spacedBy(if (galleryMode) 3.dp else GRID_GAP),
         ) {
             header?.invoke(this)
-            if (tvGallery) {
+            if (galleryMode) {
                 monthGroups.forEach { (month, groupEntries) ->
                     fullWidthItem {
                         Text(
@@ -561,34 +550,20 @@ fun FileGridPane(
                             selectionMode = selection.active,
                             dateShown = dateShown,
                             onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                            onLongClick = { selection.set(selection.paths + entry.path) },
+                            onLongClick = if (tvUi) { { selection.set(selection.paths + entry.path) } } else null,
                         )
                     }
                 }
             } else {
                 items(entries, key = { it.path }, contentType = { "file" }) { entry ->
-                    if (tvUi) {
-                        GridCell(
-                            entry = entry,
-                            selected = entry.path in selection.paths,
-                            selectionMode = selection.active,
-                            dateShown = dateShown,
-                            onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                            onLongClick = { selection.set(selection.paths + entry.path) },
-                        )
-                    } else {
-                        TouchGridCell(
-                            entry = entry,
-                            selected = entry.path in selection.paths,
-                            selectionMode = selection.active,
-                            dateShown = dateShown,
-                            zone = zone,
-                            compactStamp = compactStamp,
-                            nameLines = nameLines,
-                            onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                            onLongClick = { selection.set(selection.paths + entry.path) },
-                        )
-                    }
+                    GridCell(
+                        entry = entry,
+                        selected = entry.path in selection.paths,
+                        selectionMode = selection.active,
+                        dateShown = dateShown,
+                        onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
+                        onLongClick = if (tvUi) { { selection.set(selection.paths + entry.path) } } else null,
+                    )
                 }
             }
         }
@@ -804,13 +779,14 @@ private fun GridCell(
     }
 
     val shape = RoundedCornerShape(7.dp)
+    val tvUi = isTelevisionUi()
     var focused by remember(entry.path) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(shape)
             .background(if (selected) AppColors.AccentContainer else AppColors.Card)
-            .then(if (selected || focused) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
+            .then(if (selected || (tvUi && focused)) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)
@@ -831,78 +807,6 @@ private fun GridCell(
         FileGridMetadata(entry, dateShown, includeName = true, uniformHeight = true)
     }
 }
-
-/** Original touch file-grid design, TV-only grid stays unchanged. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun TouchGridCell(
-    entry: FileEntry,
-    selected: Boolean,
-    selectionMode: Boolean,
-    dateShown: DateShown,
-    zone: ZoneId,
-    compactStamp: Boolean,
-    nameLines: Int,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    val shape = RoundedCornerShape(12.dp)
-    val (time, modifiedFallback) = remember(entry, dateShown) { entry.stampTime(dateShown) }
-    val stamp = remember(time, zone) { gridStamp(time, zone) }
-    Column(
-        Modifier
-            .clip(shape)
-            .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(4.dp),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(10.dp))
-                .then(if (selected) Modifier.border(3.dp, AppColors.Accent, RoundedCornerShape(10.dp)) else Modifier),
-        ) {
-            GridThumbnail(entry)
-            if (selected) Box(Modifier.fillMaxSize().background(AppColors.Accent.copy(alpha = 0.22f)))
-            if (selectionMode) {
-                Icon(
-                    if (selected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                    contentDescription = if (selected) "Выбрано" else "Не выбрано",
-                    tint = if (selected) AppColors.Accent else Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(5.dp)
-                        .size(24.dp)
-                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(50)),
-                )
-            }
-        }
-        Spacer(Modifier.size(4.dp))
-        Text(
-            entry.name,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = nameLines,
-            minLines = nameLines,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val prefix = if (modifiedFallback) "изм. " else ""
-        val stampStyle = MaterialTheme.typography.labelSmall
-        val stampColor = MaterialTheme.colorScheme.onSurfaceVariant
-        when {
-            stamp == null -> Text("время неизвестно", style = stampStyle, color = stampColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            compactStamp -> {
-                Text(prefix + stamp.day, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-                Text(stamp.time, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-            }
-            else -> Text(prefix + stamp.oneLine, style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-        }
-        if (!entry.isDirectory) {
-            Text(formatSize(entry.size), style = stampStyle, color = stampColor, maxLines = 1, softWrap = false)
-        }
-    }
-}
-
 
 /** Действие панели выбора: значок с подписью, чтобы было видно, что делает кнопка. */
 @Composable

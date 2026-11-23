@@ -35,9 +35,53 @@ class OtaUpdater(private val context: Context) {
         const val MAX_APK = 200L * 1024L * 1024L
     }
 
+    // CI signs and publishes APKs to apk-downloads even if GitHub Release publishing fails.
+    // Prefer that channel, with GitHub Releases as a backwards-compatible fallback.
     suspend fun latest(): OtaRelease? = withContext(Dispatchers.IO) {
+        val direct = runCatching { latestFromDirectBranch() }
+        direct.getOrNull()?.let { return@withContext it }
+        val releases = runCatching { latestFromReleases() }
+        if (releases.isSuccess) return@withContext releases.getOrNull()
+        if (direct.isSuccess) return@withContext null
+        throw IllegalStateException("Не удалось проверить обновления в GitHub", releases.exceptionOrNull())
+    }
+
+    private fun latestFromDirectBranch(): OtaRelease? {
+        val base = "https://raw.githubusercontent.com/georg1995105-hash/android-file-manager/apk-downloads/"
+        val entries = org.json.JSONArray(read(base + "RELEASE_IDENTITY.json", 64 * 1024))
+        val record = (0 until entries.length()).map { entries.getJSONObject(it) }
+            .filter {
+                it.optString("package") == context.packageName &&
+                    it.optString("certificate_sha256").lowercase() == CERT &&
+                    it.optBoolean("signature_verified") && !it.optBoolean("debuggable") &&
+                    it.optString("abi") == "universal"
+            }
+            .maxByOrNull { it.optLong("version_code", -1L) } ?: return null
+        val version = record.optLong("version_code", -1L)
+        if (version <= BuildConfig.VERSION_CODE.toLong()) return null
+        val name = record.optString("file")
+        if (!Regex("personal-file-manager-[0-9A-Za-z.]+-release-vc\\d+-universal\\.apk").matches(name))
+            throw SecurityException("Неверное имя опубликованного APK")
+        if (!name.contains("-vc$version-universal.apk"))
+            throw SecurityException("Версия APK в метаданных не совпадает")
+        val sha = record.optString("sha256").lowercase()
+        if (!sha.matches(Regex("[a-f0-9]{64}"))) throw SecurityException("Неверный SHA-256 APK")
+        val published = read(base + "SHA256SUMS.txt", 65536).lineSequence().any {
+            it.trim() == "$sha  $name"
+        }
+        if (!published) throw SecurityException("SHA-256 APK не подтверждён публикацией")
+        return OtaRelease(
+            version = record.optString("version_name"),
+            versionCode = version,
+            apkUrl = base + name,
+            sha256 = sha,
+            size = -1L, // published identity does not carry asset size; bounded by MAX_APK
+        )
+    }
+
+    private fun latestFromReleases(): OtaRelease? {
         val json = JSONObject(read(API, 512 * 1024))
-        if (json.optBoolean("draft") || json.optBoolean("prerelease")) return@withContext null
+        if (json.optBoolean("draft") || json.optBoolean("prerelease")) return null
         val assets = json.getJSONArray("assets")
         var apkName = ""
         var apkLink = ""
@@ -57,7 +101,7 @@ class OtaUpdater(private val context: Context) {
                 versionCode = code
             }
         }
-        if (versionCode <= BuildConfig.VERSION_CODE.toLong()) return@withContext null
+        if (versionCode <= BuildConfig.VERSION_CODE.toLong()) return null
         if (apkName.isBlank() || checksumLink.isBlank() || size <= 0 || size > MAX_APK)
             throw IllegalStateException("В релизе нет универсального APK и контрольной суммы")
         checkUrl(apkLink)
@@ -94,11 +138,11 @@ class OtaUpdater(private val context: Context) {
                             val n = input.read(buffer)
                             if (n == -1) break
                             bytes += n
-                            if (bytes > MAX_APK || bytes > release.size) throw SecurityException("Неверный размер APK")
+                            if (bytes > MAX_APK || (release.size > 0 && bytes > release.size)) throw SecurityException("Неверный размер APK")
                             sha.update(buffer, 0, n)
                             output.write(buffer, 0, n)
-                            val percent = ((100 * bytes) / release.size).toInt()
-                            if (percent != last) {
+                            val percent = if (release.size > 0) ((100 * bytes) / release.size).toInt() else -1
+                            if (percent >= 0 && percent != last) {
                                 last = percent
                                 withContext(Dispatchers.Main) { onProgress(percent) }
                             }
@@ -106,7 +150,8 @@ class OtaUpdater(private val context: Context) {
                         output.fd.sync()
                     }
                 }
-                if (bytes != release.size) throw SecurityException("APK загружен не полностью")
+                if (bytes < 1024L || (release.size > 0 && bytes != release.size))
+                    throw SecurityException("APK загружен не полностью")
                 val hash = sha.digest().joinToString("") { "%02x".format(it) }
                 if (hash != release.sha256) throw SecurityException("SHA-256 APK не совпадает")
                 verify(tmp, release.versionCode)
@@ -170,7 +215,7 @@ class OtaUpdater(private val context: Context) {
 
     private fun checkUrl(s: String) {
         val url = URL(s)
-        if (url.protocol != "https" || url.host !in setOf("api.github.com", "github.com"))
+        if (url.protocol != "https" || url.host !in setOf("api.github.com", "github.com", "raw.githubusercontent.com"))
             throw SecurityException("Недоверенный адрес обновления")
     }
 

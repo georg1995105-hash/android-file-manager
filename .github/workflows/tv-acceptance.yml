@@ -59,20 +59,7 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            set -euo pipefail
-            PKG=io.personal.filemanager
-            adb install -g app/build/outputs/apk/debug/app-universal-debug.apk
-            adb install app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            if [ "${{ matrix.api }}" -ge 30 ]; then
-              adb shell appops set --uid "$PKG" MANAGE_EXTERNAL_STORAGE allow
-            fi
-            adb shell am instrument -w -r -e class "$PKG.TvNavigationTest" \
-              "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee tv-test.log
-            grep -q 'OK (' tv-test.log
-            adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LEANBACK_LAUNCHER -p "$PKG"
-            adb exec-out screencap -p > tv-screen.png
-            adb logcat -d -t 3000 > tv-logcat.txt
+          script: API_LEVEL=${{ matrix.api }} bash tools/tv_acceptance.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

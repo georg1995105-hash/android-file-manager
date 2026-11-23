@@ -76,7 +76,11 @@ class ScreenshotTest {
     private fun shot(name: String, content: @Composable () -> Unit) {
         compose.setContent {
             FileManagerTheme {
-                CompositionLocalProvider(LocalNavigator provides NoopNavigator, LocalFileOps provides NoopFileOps) {
+                CompositionLocalProvider(
+                    LocalNavigator provides NoopNavigator,
+                    LocalFileOps provides NoopFileOps,
+                    LocalCreateDialog provides {},
+                ) {
                     // Как в приложении: экраны живут внутри Scaffold, задающего цвет текста.
                     Surface(Modifier.fillMaxSize(), color = AppColors.Background, contentColor = AppColors.TextPrimary) {
                         content()

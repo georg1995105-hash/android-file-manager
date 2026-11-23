@@ -1,0 +1,84 @@
+name: Android TV acceptance
+
+on:
+  push:
+    branches:
+      - feature/compact-create-files-20261110
+    paths:
+      - 'app/**'
+      - 'tools/**'
+      - '.github/workflows/tv-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tv-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 28
+            arch: x86
+          - api: 30
+            arch: x86
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore known debug signing key
+        env:
+          PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
+        run: bash tools/restore_debug_keystore.sh
+      - name: Build universal APK and instrumentation
+        run: ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest
+      - name: Free disk and enable KVM
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/boost /opt/hostedtoolcache/CodeQL || true
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Real D-pad UI tests on Android TV
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.arch }}
+          target: android-tv
+          profile: tv_1080p
+          disk-size: 4096M
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            PKG=io.personal.filemanager
+            adb install -g app/build/outputs/apk/debug/app-universal-debug.apk
+            adb install app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            if [ "${{ matrix.api }}" -ge 30 ]; then
+              adb shell appops set --uid "$PKG" MANAGE_EXTERNAL_STORAGE allow
+            fi
+            adb shell am instrument -w -r -e class "$PKG.TvNavigationTest" \
+              "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee tv-test.log
+            grep -q 'OK (' tv-test.log
+            adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LEANBACK_LAUNCHER -p "$PKG"
+            adb exec-out screencap -p > tv-screen.png
+            adb logcat -d -t 3000 > tv-logcat.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tv-api-${{ matrix.api }}-results
+          path: |
+            tv-test.log
+            tv-screen.png
+            tv-logcat.txt
+          retention-days: 7

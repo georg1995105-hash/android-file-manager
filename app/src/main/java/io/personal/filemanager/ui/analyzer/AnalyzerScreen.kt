@@ -186,7 +186,7 @@ fun AnalyzerScreen() {
                         Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(11.dp),
                     ) {
-                        Text("Память телефона", style = MaterialTheme.typography.titleMedium)
+                        Text("Память устройства", style = MaterialTheme.typography.titleMedium)
                         Text(
                             "${formatSize(info.usedBytes)} / ${formatSize(info.totalBytes)}",
                             fontSize = 29.sp, fontWeight = FontWeight.SemiBold,

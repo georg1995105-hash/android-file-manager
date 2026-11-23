@@ -281,7 +281,7 @@ private fun Modifier.dragSelectFilesInList(
                 val index = hit(position) ?: return@detectDragGesturesAfterLongPress
                 anchorIndex = index
                 base = selection.paths
-                selecting = allPaths[index] !in base
+                selecting = true
                 lastIndex = -1
                 update(index)
                 updateEdgeScroll(position)
@@ -370,7 +370,7 @@ private fun Modifier.dragSelectFilesInGrid(
                 val index = hit(position) ?: return@detectDragGesturesAfterLongPress
                 anchorIndex = index
                 base = selection.paths
-                selecting = allPaths[index] !in base
+                selecting = true
                 lastIndex = -1
                 update(index)
                 updateEdgeScroll(position)
@@ -441,7 +441,7 @@ fun FileListPane(
                     selected = entry.path in selection.paths,
                     selectionMode = selection.active,
                     onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                    onLongClick = null,
+                    onLongClick = { selection.set(selection.paths + entry.path) },
                     onMenu = { menuFor = entry },
                 )
                 // Ненавязчивая граница вместо отдельных тяжёлых карточек для каждой строки.
@@ -544,7 +544,7 @@ fun FileGridPane(
                             selectionMode = selection.active,
                             dateShown = dateShown,
                             onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                            onLongClick = null,
+                            onLongClick = { selection.set(selection.paths + entry.path) },
                         )
                     }
                 }
@@ -556,7 +556,7 @@ fun FileGridPane(
                         selectionMode = selection.active,
                         dateShown = dateShown,
                         onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                        onLongClick = null,
+                        onLongClick = { selection.set(selection.paths + entry.path) },
                     )
                 }
             }

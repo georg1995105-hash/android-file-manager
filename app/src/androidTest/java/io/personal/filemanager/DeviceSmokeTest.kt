@@ -262,12 +262,16 @@ class DeviceSmokeTest {
             }
             compose.onNodeWithText("Вставить").performClick()
             compose.onNodeWithText("Копировать всё").performClick()
-            var copied: String? = null
-            compose.activityRule.scenario.onActivity { activity ->
-                copied = activity.getSystemService(ClipboardManager::class.java)
-                    .primaryClip?.getItemAt(0)?.text?.toString()
+            // Clipboard can briefly become inaccessible when Android's IME changes focus.
+            // Retry the actual platform clipboard rather than treating a transient null as success.
+            compose.waitUntil(10_000) {
+                var copied: String? = null
+                compose.activityRule.scenario.onActivity { activity ->
+                    copied = activity.getSystemService(ClipboardManager::class.java)
+                        .primaryClip?.getItemAt(0)?.text?.toString()
+                }
+                copied == body
             }
-            org.junit.Assert.assertEquals(body, copied)
             compose.onNodeWithText("Сохранить").performClick()
             compose.waitUntil(15_000) { file.exists() && file.readText() == body }
         } finally {
@@ -343,12 +347,14 @@ class DeviceSmokeTest {
         compose.onNodeWithText("Заголовок").performTextInput("Проверка CI")
         compose.onNodeWithText("Текст заметки").performTextInput("Текст заметки из теста")
         compose.onNodeWithText("Копировать всё").performClick()
-        var copiedNote: String? = null
-        compose.activityRule.scenario.onActivity { activity ->
-            copiedNote = activity.getSystemService(ClipboardManager::class.java)
-                .primaryClip?.getItemAt(0)?.text?.toString()
+        compose.waitUntil(10_000) {
+            var copiedNote: String? = null
+            compose.activityRule.scenario.onActivity { activity ->
+                copiedNote = activity.getSystemService(ClipboardManager::class.java)
+                    .primaryClip?.getItemAt(0)?.text?.toString()
+            }
+            copiedNote == "# Проверка CI\n\nТекст заметки из теста"
         }
-        org.junit.Assert.assertEquals("# Проверка CI\n\nТекст заметки из теста", copiedNote)
         Thread.sleep(1_500) // автосохранение
         shot("d08_note_editor")
         back()

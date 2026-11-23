@@ -15,11 +15,21 @@ adb shell am instrument -w -r -e class "$PKG.TvNavigationTest" \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee tv-test.log
 rc=${PIPESTATUS[0]}
 set -e
-adb exec-out screencap -p > tv-screen.png || true
-adb logcat -d -t 3000 > tv-logcat.txt || true
 if [[ "$rc" != 0 ]] || ! grep -q 'OK (' tv-test.log || grep -q 'FAILURES' tv-test.log; then
+  adb exec-out screencap -p > tv-screen.png || true
+  adb logcat -d -t 3000 > tv-logcat.txt || true
   echo "::error::Android TV D-pad instrumentation failed"
   exit 1
 fi
+# Launch via the TV intent, then capture the APP, not the emulator home screen.
 adb shell am start -W -a android.intent.action.MAIN \
   -c android.intent.category.LEANBACK_LAUNCHER -p "$PKG"
+sleep 2
+adb shell dumpsys activity activities > tv-activity.txt || true
+adb exec-out screencap -p > tv-screen.png || true
+adb logcat -d -t 3000 > tv-logcat.txt || true
+if ! grep -Eq 'mResumedActivity:.*io\.personal\.filemanager/\.MainActivity|topResumedActivity=ActivityRecord.*io\.personal\.filemanager/\.MainActivity|ResumedActivity: ActivityRecord.*io\.personal\.filemanager/\.MainActivity' tv-activity.txt; then
+  echo "::error::Android TV launcher did not leave MainActivity resumed"
+  tail -60 tv-activity.txt || true
+  exit 1
+fi

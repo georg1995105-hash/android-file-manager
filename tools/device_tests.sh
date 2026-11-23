@@ -46,6 +46,14 @@ fi
 bash tools/check_debug_signatures.sh "${SIGNING_APKS[@]}" || exit 1
 timeout 90s adb wait-for-device || { echo "::error::Emulator never became available through adb"; exit 1; }
 
+# Headless Pixel Tablet emulators can trigger a system launcher ANR at 2560x1600.
+# Keep a tablet-sized layout while reducing software GPU load; only on disposable CI AVDs.
+if [ "$DEVICE" = tablet ]; then
+  adb shell wm size 1920x1200
+  adb shell wm density 240
+  adb shell am force-stop com.google.android.apps.nexuslauncher || true
+fi
+
 # «Доступ ко всем файлам» — режим appop по uid (как переключатель в настройках).
 grant_files() {
   adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow

@@ -102,6 +102,8 @@ import io.personal.filemanager.ui.settings.UpdateScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
 import io.personal.filemanager.ui.theme.AppColors
+import io.personal.filemanager.ui.DeviceClass
+import io.personal.filemanager.ui.currentDeviceClass
 import io.personal.filemanager.ui.viewer.AudioPlayerScreen
 import io.personal.filemanager.ui.viewer.MediaViewerScreen
 import io.personal.filemanager.ui.viewer.TextViewerScreen
@@ -384,6 +386,22 @@ internal fun BottomTabBar(
     onSelect: (SectionId) -> Unit = {},
     onCreateRecent: () -> Unit = {},
 ) {
+    when (currentDeviceClass()) {
+        DeviceClass.PHONE -> TouchBottomTabBar(tabs, current, onSelect, onCreateRecent, phone = true)
+        DeviceClass.TABLET -> TouchBottomTabBar(tabs, current, onSelect, onCreateRecent, phone = false)
+        DeviceClass.TV -> TvBottomTabBar(tabs, current, onSelect, onCreateRecent)
+    }
+}
+
+/** TV navigation remains unchanged and retains its D-pad focus rings. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TvBottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit,
+    onCreateRecent: () -> Unit,
+) {
     // Do not use weighted Columns as children of Material3 NavigationBar:
     // its internal measurement may allow them to occupy the entire Scaffold.
     Column(
@@ -459,6 +477,87 @@ internal fun BottomTabBar(
                                 text = { Text("Создать файл или папку") },
                                 onClick = {
                                     createMenu = false
+                                    onCreateRecent()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Touch navigation: no TV-style boxed cards; the phone bar is deliberately shorter. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TouchBottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit,
+    onCreateRecent: () -> Unit,
+    phone: Boolean,
+) {
+    val height = if (phone) 58.dp else 64.dp
+    Column(
+        Modifier.fillMaxWidth().background(AppColors.Surface).navigationBarsPadding(),
+    ) {
+        HorizontalDivider(thickness = 1.dp, color = AppColors.CardBorder.copy(alpha = 0.5f))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(height).testTag("touch-bottom-tab-bar")
+                .padding(horizontal = if (phone) 4.dp else 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tabs.forEach { tab ->
+                val id = SectionId.fromKey(tab.id) ?: return@forEach
+                val selected = current == id
+                val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
+                var menuOpen by remember(id) { mutableStateOf(false) }
+                Box(Modifier.weight(1f).height(height)) {
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                            .testTag("bottom-tab-${id.name}")
+                            .combinedClickable(
+                                onClick = { onSelect(id) },
+                                onLongClick = if (id == SectionId.RECENT) {
+                                    { menuOpen = true }
+                                } else null,
+                            )
+                            .semantics { role = Role.Tab; this.selected = selected },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Box(
+                            Modifier.width(if (phone) 50.dp else 58.dp)
+                                .height(if (phone) 26.dp else 30.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (selected) color.copy(alpha = 0.15f) else Color.Transparent),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                IconCatalog.of(tab.icon),
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(if (phone) 21.dp else 24.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            id.title,
+                            color = color,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (id == SectionId.RECENT) {
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Создать файл или папку") },
+                                onClick = {
+                                    menuOpen = false
                                     onCreateRecent()
                                 },
                             )

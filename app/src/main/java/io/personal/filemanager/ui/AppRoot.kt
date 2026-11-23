@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
@@ -112,6 +114,7 @@ import io.personal.filemanager.ui.viewer.findActivity
 fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
     val nav = rememberNavController()
     val context = LocalContext.current
+    val tvUi = isTelevisionUi()
     val container = appContainer()
     val config by container.settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
     val backStack by nav.currentBackStackEntryAsState()
@@ -201,7 +204,8 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
 
     // Only a stable signed OTA release can trigger a quiet daily update reminder.
     var pendingUpdate by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(tvUi) {
+        if (!tvUi) return@LaunchedEffect
         val prefs = context.getSharedPreferences("pfm-ota", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         val day = 24L * 60L * 60L * 1000L
@@ -211,7 +215,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
             if (available != null) pendingUpdate = available.version
         }
     }
-    if (pendingUpdate != null) {
+    if (tvUi && pendingUpdate != null) {
         AlertDialog(
             onDismissRequest = { pendingUpdate = null },
             title = { Text("Обновление «Мои файлы»") },
@@ -248,10 +252,10 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                     navController = nav,
                     startDestination = Routes.HOME,
                     // Короткий cross-fade: переход остаётся быстрым, но не выглядит резким.
-                    enterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
-                    exitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
-                    popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
-                    popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
+                    enterTransition = { if (tvUi) fadeIn(animationSpec = tween(durationMillis = 120)) else EnterTransition.None },
+                    exitTransition = { if (tvUi) fadeOut(animationSpec = tween(durationMillis = 80)) else ExitTransition.None },
+                    popEnterTransition = { if (tvUi) fadeIn(animationSpec = tween(durationMillis = 120)) else EnterTransition.None },
+                    popExitTransition = { if (tvUi) fadeOut(animationSpec = tween(durationMillis = 80)) else ExitTransition.None },
                     modifier = Modifier
                         .padding(inner)
                         .consumeWindowInsets(inner),
@@ -384,8 +388,54 @@ internal fun BottomTabBar(
     onSelect: (SectionId) -> Unit = {},
     onCreateRecent: () -> Unit = {},
 ) {
-    // Do not use weighted Columns as children of Material3 NavigationBar:
-    // its internal measurement may allow them to occupy the entire Scaffold.
+    if (!isTelevisionUi()) {
+        OriginalTouchBottomTabBar(tabs, current, onSelect)
+        return
+    }
+    TvBottomTabBar(tabs, current, onSelect, onCreateRecent)
+}
+
+@Composable
+private fun OriginalTouchBottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit,
+) {
+    NavigationBar(containerColor = AppColors.Surface, tonalElevation = 0.dp) {
+        tabs.forEach { tab ->
+            val id = SectionId.fromKey(tab.id) ?: return@forEach
+            val selected = id == current
+            val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
+            NavigationBarItem(
+                modifier = Modifier.testTag("bottom-tab-${id.name}"),
+                selected = selected,
+                onClick = { onSelect(id) },
+                icon = { Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color) },
+                label = {
+                    Text(
+                        id.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = color,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Visible,
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent),
+            )
+        }
+    }
+}
+
+/** Remote-only navigation remains precisely as in the verified TV build. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TvBottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit,
+    onCreateRecent: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()

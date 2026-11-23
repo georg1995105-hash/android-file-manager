@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.Routes
+import io.personal.filemanager.ui.isTelevisionUi
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.ScreenTopBar
 import kotlinx.coroutines.launch
@@ -44,6 +45,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AppSettingsScreen() {
     val navigator = LocalNavigator.current
+    val tvUi = isTelevisionUi()
     val settings = appContainer().settings
     val config by settings.uiConfig.collectAsStateWithLifecycle(initialValue = UiConfig.defaults())
     val scope = rememberCoroutineScope()
@@ -127,10 +129,12 @@ fun AppSettingsScreen() {
             TextButton(onClick = { navigator.open(Routes.BACKUP) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Резервные копии")
             }
-            HorizontalDivider()
-            Text("Приложение", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = { navigator.open(Routes.UPDATES) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Версия и обновления")
+            if (tvUi) {
+                HorizontalDivider()
+                Text("Приложение", style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = { navigator.open(Routes.UPDATES) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Версия и обновления")
+                }
             }
             Spacer(Modifier.padding(bottom = 12.dp))
         }

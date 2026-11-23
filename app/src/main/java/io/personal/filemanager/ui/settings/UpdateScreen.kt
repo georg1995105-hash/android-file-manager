@@ -42,7 +42,7 @@ fun UpdateScreen() {
     var release by remember { mutableStateOf<OtaRelease?>(null) }
     var downloaded by remember { mutableStateOf<File?>(null) }
     var progress by remember { mutableStateOf(-1) }
-    val check = {
+    val check: () -> Unit = {
         scope.launch {
             loading = true
             message = "Проверка обновлений…"

@@ -69,8 +69,6 @@ import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.settings.TileConfig
 import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.FileActions
-import io.personal.filemanager.ui.DeviceClass
-import io.personal.filemanager.ui.currentDeviceClass
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.LocalCreateDialog
 import io.personal.filemanager.ui.Routes
@@ -112,7 +110,6 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-    val phone = currentDeviceClass() == DeviceClass.PHONE
     val tiles = config?.tiles?.filter { it.visible }.orEmpty()
     // Колонки по ширине (телефон/планшет, вертикально/горизонтально) и настройке «Плиток в ряду».
     val columns = TileLayout.columns(config?.tilesPerRow ?: 0, maxWidth.value.toInt(), tiles.size)
@@ -121,13 +118,12 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
         modifier = Modifier.fillMaxSize().testTag("home-content-list"),
         contentPadding = PaddingValues(bottom = 16.dp),
     ) {
-        item { HomeHeader(compact = phone) }
+        item { HomeHeader() }
         item {
             StorageCard(
                 state = state,
                 onClick = { navigator.openSection(SectionId.FILES) },
-                modifier = Modifier.padding(horizontal = if (phone) 12.dp else 16.dp),
-                compact = phone,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
         if (!state.hasAccess) {
@@ -136,22 +132,17 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
         item {
             SectionHeader(
                 "Разделы",
-                modifier = Modifier.padding(
-                    start = if (phone) 16.dp else 20.dp,
-                    end = if (phone) 12.dp else 16.dp,
-                    top = if (phone) 10.dp else 22.dp,
-                    bottom = if (phone) 4.dp else 10.dp,
-                ),
+                modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 22.dp, bottom = 10.dp),
             ) {
-                ConfigureButton(compact = phone, onClick = { navigator.openTileSettings() })
+                ConfigureButton(onClick = { navigator.openTileSettings() })
             }
         }
         items(tiles.chunked(columns), contentType = { "tiles" }) { row ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = if (phone) 12.dp else 16.dp, vertical = if (phone) 3.dp else 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(if (phone) 7.dp else 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 row.forEach { tile ->
                     val id = SectionId.fromKey(tile.id) ?: return@forEach
@@ -160,8 +151,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
                         title = id.title,
                         subtitle = state.stats[id],
                         onClick = { navigator.openSection(id) },
-                        minHeight = if (phone) 84.dp else if (compactHeight) 94.dp else 104.dp,
-                        compact = phone,
+                        minHeight = if (compactHeight) 94.dp else 104.dp,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -180,12 +170,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
         item {
             SectionHeader(
                 "Недавние",
-                modifier = Modifier.padding(
-                    start = if (phone) 16.dp else 20.dp,
-                    end = 8.dp,
-                    top = if (phone) 10.dp else 18.dp,
-                    bottom = 2.dp,
-                ),
+                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 18.dp, bottom = 2.dp),
             ) {
                 TextButton(onClick = { navigator.openSection(SectionId.RECENT) }) {
                     Text("Все")
@@ -236,7 +221,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
 }
 
 @Composable
-private fun HomeHeader(compact: Boolean) {
+private fun HomeHeader() {
     val navigator = LocalNavigator.current
     val createFile = LocalCreateDialog.current
     val config by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
@@ -245,17 +230,10 @@ private fun HomeHeader(compact: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(start = if (compact) 16.dp else 20.dp, end = 8.dp,
-                top = if (compact) 4.dp else 12.dp,
-                bottom = if (compact) 4.dp else 14.dp),
+            .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "Мои файлы",
-            style = if (compact) MaterialTheme.typography.headlineMedium.copy(fontSize = 25.sp, lineHeight = 30.sp)
-                else MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.weight(1f),
-        )
+        Text("Мои файлы", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
         IconButton(onClick = { navigator.openSearch() }) {
             Icon(Icons.Filled.Search, contentDescription = "Поиск")
         }
@@ -292,60 +270,55 @@ private fun HomeHeader(compact: Boolean) {
 }
 
 @Composable
-private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
+private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val storage = state.storage
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(if (compact) 15.dp else 20.dp)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
-            .clip(shape)
-            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, shape)
-            .card(shape)
+            .clip(RoundedCornerShape(20.dp))
+            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(20.dp))
+            .card(RoundedCornerShape(20.dp))
             .tapClickable(onClick = onClick)
-            .padding(if (compact) 9.dp else 12.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
-                .size(if (compact) 38.dp else 48.dp)
-                .background(AppColors.Surface, RoundedCornerShape(if (compact) 10.dp else 14.dp)),
+                .size(48.dp)
+                .background(AppColors.Surface, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary,
-                modifier = Modifier.size(if (compact) 23.dp else 30.dp))
+            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(30.dp))
         }
-        Spacer(Modifier.width(if (compact) 9.dp else 12.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Внутренняя память",
-                    style = if (compact) MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                        else MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f))
+                Text("Внутренняя память", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AppColors.TextSecondary)
             }
             if (storage != null) {
                 val percent = usedPercent(storage.usedBytes, storage.totalBytes)
                 Text(
                     "${formatSize(storage.usedBytes)} из ${formatSize(storage.totalBytes)}",
-                    style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
+                Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LinearProgressIndicator(
                         progress = { percent / 100f },
                         modifier = Modifier
                             .weight(1f)
-                            .height(if (compact) 5.dp else 8.dp)
+                            .height(8.dp)
                             .clip(RoundedCornerShape(50)),
                         color = AppColors.Accent,
                         trackColor = AppColors.CardBorder,
                         drawStopIndicator = {},
                         gapSize = 0.dp,
                     )
-                    Spacer(Modifier.width(if (compact) 8.dp else 12.dp))
+                    Spacer(Modifier.width(12.dp))
                     Text("$percent%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
@@ -378,10 +351,10 @@ private fun AccessBanner(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ConfigureButton(compact: Boolean, onClick: () -> Unit) {
+private fun ConfigureButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(if (compact) 34.dp else 40.dp)
+            .size(40.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, AppColors.CardBorder, RoundedCornerShape(12.dp))
             .background(AppColors.Card)
@@ -391,7 +364,7 @@ private fun ConfigureButton(compact: Boolean, onClick: () -> Unit) {
         Icon(
             Icons.Filled.Edit,
             contentDescription = "Настроить разделы",
-            modifier = Modifier.size(if (compact) 18.dp else 20.dp),
+            modifier = Modifier.size(20.dp),
         )
     }
 }
@@ -404,27 +377,25 @@ private fun SectionTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     minHeight: Dp = 104.dp,
-    compact: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(if (compact) 14.dp else 18.dp)
     Column(
         modifier = modifier
             .heightIn(min = minHeight)
             .onFocusChanged { focused = it.isFocused }
-            .clip(shape)
-            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, shape)
-            .card(shape)
+            .clip(RoundedCornerShape(18.dp))
+            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(18.dp))
+            .card()
             .tapClickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = if (compact) 6.dp else 10.dp),
+            .padding(horizontal = 6.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        SectionIcon(tile.icon, tile.color, if (compact) 26.dp else 34.dp)
-        Spacer(Modifier.height(if (compact) 4.dp else 6.dp))
+        SectionIcon(tile.icon, tile.color, 34.dp)
+        Spacer(Modifier.height(6.dp))
         // Название в одну строку: в узкой плитке шрифт уменьшается, а не рвёт слово по слогам.
-        val titleStyle = (if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium).copy(
-            fontWeight = FontWeight.SemiBold,
+        val titleStyle = MaterialTheme.typography.bodyMedium.copy(
+            fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
             color = LocalContentColor.current,
         )
@@ -436,11 +407,10 @@ private fun SectionTile(
             autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = titleStyle.fontSize, stepSize = 0.5.sp),
         )
         if (subtitle != null) {
-            Spacer(Modifier.height(if (compact) 1.dp else 2.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
                 subtitle,
-                style = if (compact) MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 14.sp)
-                    else MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 2,

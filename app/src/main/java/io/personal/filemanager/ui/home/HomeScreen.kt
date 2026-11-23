@@ -143,8 +143,8 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = if (tvUi) 4.dp else 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(if (tvUi) 8.dp else 10.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 row.forEach { tile ->
                     val id = SectionId.fromKey(tile.id) ?: return@forEach
@@ -153,11 +153,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
                         title = id.title,
                         subtitle = state.stats[id],
                         onClick = { navigator.openSection(id) },
-                        minHeight = if (tvUi) {
-                            if (compactHeight) 94.dp else 104.dp
-                        } else {
-                            if (compactHeight) 108.dp else 128.dp
-                        },
+                        minHeight = if (compactHeight) 94.dp else 104.dp,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -167,8 +163,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
         if (config != null && tiles.isEmpty()) {
             item {
                 Text(
-                    if (tvUi) "Все разделы скрыты. Нажмите значок карандаша, чтобы вернуть нужные."
-                    else "Все разделы скрыты. Нажмите «Настроить», чтобы вернуть нужные.",
+                    "Все разделы скрыты. Нажмите значок карандаша, чтобы вернуть нужные.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
@@ -230,7 +225,6 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
 @Composable
 private fun HomeHeader() {
     val navigator = LocalNavigator.current
-    val tvUi = isTelevisionUi()
     val createFile = LocalCreateDialog.current
     val config by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
     var menuOpen by remember { mutableStateOf(false) }
@@ -250,20 +244,6 @@ private fun HomeHeader() {
                 Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                if (!tvUi) {
-                    DropdownMenuItem(
-                        text = { Text("Настроить разделы") },
-                        onClick = { menuOpen = false; navigator.openTileSettings() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Настроить нижнюю панель") },
-                        onClick = { menuOpen = false; navigator.openTabSettings() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Корзина") },
-                        onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
-                    )
-                } else {
                 DropdownMenuItem(
                     text = { Text("Создать файл или папку") },
                     onClick = { menuOpen = false; createFile() },
@@ -282,22 +262,10 @@ private fun HomeHeader() {
                         onClick = { menuOpen = false; navigator.open(Routes.TRASH) },
                     )
                 }
-                }
                 DropdownMenuItem(
                     text = { Text("Резервные копии") },
                     onClick = { menuOpen = false; navigator.open(Routes.BACKUP) },
                 )
-                if (!tvUi) {
-                    // Pre-TV functions remain reachable; original menu items stay first.
-                    DropdownMenuItem(
-                        text = { Text("Создать файл или папку") },
-                        onClick = { menuOpen = false; createFile() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Настройки") },
-                        onClick = { menuOpen = false; navigator.open(Routes.SETTINGS) },
-                    )
-                }
             }
         }
     }
@@ -317,18 +285,18 @@ private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifie
                 AppColors.Accent, RoundedCornerShape(20.dp)) else Modifier)
             .card(RoundedCornerShape(20.dp))
             .tapClickable(onClick = onClick)
-            .padding(if (tvUi) 12.dp else 16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
-                .size(if (tvUi) 48.dp else 64.dp)
+                .size(48.dp)
                 .background(AppColors.Surface, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(if (tvUi) 30.dp else 38.dp))
+            Icon(Icons.Filled.SdStorage, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(30.dp))
         }
-        Spacer(Modifier.width(if (tvUi) 12.dp else 16.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Внутренняя память", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -376,7 +344,7 @@ private fun AccessBanner(modifier: Modifier = Modifier) {
         Text("Нужен доступ к файлам", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Без разрешения на файлы приложение не видит документы, загрузки и архивы. " +
+            "Без разрешения «Доступ ко всем файлам» приложение не видит документы, загрузки и архивы. " +
                 "Это не root, а данные не покидают телефон.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -388,22 +356,6 @@ private fun AccessBanner(modifier: Modifier = Modifier) {
 
 @Composable
 private fun ConfigureButton(onClick: () -> Unit) {
-    if (!isTelevisionUi()) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .border(1.dp, AppColors.CardBorder, RoundedCornerShape(50))
-                .background(AppColors.Card)
-                .tapClickable(onClick = onClick)
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Настроить", style = MaterialTheme.typography.labelLarge)
-        }
-        return
-    }
     Box(
         modifier = Modifier
             .size(40.dp)
@@ -441,12 +393,12 @@ private fun SectionTile(
                 AppColors.Accent, RoundedCornerShape(18.dp)) else Modifier)
             .card()
             .tapClickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = if (tvUi) 10.dp else 14.dp),
+            .padding(horizontal = 6.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        SectionIcon(tile.icon, tile.color, if (tvUi) 34.dp else 44.dp)
-        Spacer(Modifier.height(if (tvUi) 6.dp else 10.dp))
+        SectionIcon(tile.icon, tile.color, 34.dp)
+        Spacer(Modifier.height(6.dp))
         // Название в одну строку: в узкой плитке шрифт уменьшается, а не рвёт слово по слогам.
         val titleStyle = MaterialTheme.typography.bodyMedium.copy(
             fontWeight = FontWeight.Medium,

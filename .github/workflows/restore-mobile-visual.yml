@@ -1,6 +1,9 @@
 name: Original touch UI screenshot acceptance
 
 on:
+  push:
+    branches: [restore/original-touch-tv-only-20261123]
+    paths: ['.github/workflows/restore-mobile-visual.yml']
   workflow_dispatch:
 
 permissions:

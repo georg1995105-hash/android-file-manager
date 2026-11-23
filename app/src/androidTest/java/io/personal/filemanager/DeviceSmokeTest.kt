@@ -391,10 +391,9 @@ class DeviceSmokeTest {
         waitText("Показывать корзину в меню")
         waitText("Открыть корзину")
         shot("d12a_settings")
-        back()
-        compose.onNodeWithContentDescription("Меню").performClick()
-        compose.onNodeWithText("Анализ памяти").performClick()
-        waitText("Память устройства")
+        // Original touch menu: analyzer is reached from Settings, not directly from ⋮.
+        compose.onNodeWithText("Анализ памяти").performScrollTo().performClick()
+        waitText("Память телефона")
         // Полный анализ доступного хранилища на эмуляторе может занимать больше 40 с.
         // UI проверяем отдельно от длительного вычисления (результаты проверяют unit-тесты).
         compose.waitUntil(12_000) {

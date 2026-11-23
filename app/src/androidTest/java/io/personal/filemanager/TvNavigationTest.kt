@@ -67,6 +67,23 @@ class TvNavigationTest {
         rule.onNodeWithTag("bottom-tab-FILES").assertIsSelected()
     }
 
+    /** Verify actual spatial D-pad focus traversal; direct RequestFocus would hide broken TV navigation. */
+    @Test fun tvDpadRightMovesFocusBetweenTabs() {
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+        rule.waitUntil(20_000) {
+            rule.onAllNodesWithTag("bottom-tab-RECENT").fetchSemanticsNodes().isNotEmpty()
+        }
+        val first = rule.onNodeWithTag("bottom-tab-RECENT")
+        first.performSemanticsAction(SemanticsActions.RequestFocus)
+        first.assertIsFocused()
+        first.performKeyInput { pressKey(Key.DirectionRight) }
+        rule.onNodeWithTag("bottom-tab-FILES").assertIsFocused()
+        rule.onNodeWithTag("bottom-tab-FILES").performKeyInput {
+            pressKey(Key.DirectionCenter)
+        }
+        rule.onNodeWithTag("bottom-tab-FILES").assertIsSelected()
+    }
+
     @Test fun tvSettingsAndUpdateControlsRespondToRemote() {
         InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         rule.waitUntil(20_000) {

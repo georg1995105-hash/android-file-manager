@@ -1,0 +1,37 @@
+name: Compact mobile UI screenshot validation
+
+on:
+  push:
+    branches:
+      - fix/separate-phone-tv-layout-20261123
+    paths:
+      - app/src/test/java/io/personal/filemanager/ui/ScreenshotTest.kt
+      - .github/workflows/visual-phone-qa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore debug signing identity
+        env:
+          PFM_DEBUG_KEYSTORE_B64: ${{ secrets.PFM_DEBUG_KEYSTORE_B64 }}
+        run: bash tools/restore_debug_keystore.sh
+      - name: Render all phone screenshots
+        run: ./gradlew --no-daemon testDebugUnitTest -Pscreenshots --tests '*ScreenshotTest'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-phone-screenshots
+          path: app/build/screenshots/*.png
+          retention-days: 7

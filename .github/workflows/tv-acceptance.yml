@@ -9,6 +9,12 @@ on:
       - 'tools/**'
       - '.github/workflows/tv-acceptance.yml'
   workflow_dispatch:
+    inputs:
+      signed_release_test:
+        description: 'Validate installation of signed universal APK and vc39→vc40 update, without uninstall'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -19,6 +25,7 @@ concurrency:
 
 jobs:
   tv:
+    if: ${{ !inputs.signed_release_test }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -69,4 +76,47 @@ jobs:
             tv-activity.txt
             tv-screen.png
             tv-logcat.txt
+          retention-days: 7
+
+  signed-tv-upgrade:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.signed_release_test }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 30]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Enable KVM and free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/boost /opt/hostedtoolcache/CodeQL || true
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Signed universal APK install and in-place upgrade
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86
+          target: android-tv
+          profile: tv_1080p
+          disk-size: 4096M
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: API_LEVEL=${{ matrix.api }} bash tools/production_tv_upgrade.sh
+      - name: Preserve signed APK installation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-tv-upgrade-api-${{ matrix.api }}
+          path: |
+            signed-tv-*.log
+            signed-tv-*.txt
+            signed-tv-release.png
           retention-days: 7

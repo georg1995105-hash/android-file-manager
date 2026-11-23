@@ -198,6 +198,44 @@ jobs:
             git rm -rf . >/dev/null 2>&1 || true
           fi
 
+          # Release APK names and versionCodes are immutable. Never replace bytes of a
+          # previously published version: clients may have pinned its SHA-256, and
+          # replacing it silently can break OTA and compromise reproducibility.
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          src = Path(__import__("os").environ["GITHUB_WORKSPACE"]) / "dist"
+          incoming = json.loads((src / "RELEASE_IDENTITY.json").read_text())
+          assert len(incoming) == 1
+          incoming = incoming[0]
+          code = int(incoming["version_code"])
+          name = incoming["file"]
+          existing = Path(name)
+          if Path("RELEASE_IDENTITY.json").exists():
+              current = json.loads(Path("RELEASE_IDENTITY.json").read_text())
+              assert len(current) == 1
+              current = current[0]
+              last_code = int(current["version_code"])
+              if code < last_code:
+                  raise SystemExit(f"Refusing old versionCode {code}; latest published is {last_code}")
+              if code == last_code and name != current["file"]:
+                  raise SystemExit(f"VersionCode {code} already reserved by {current['file']}")
+          if existing.exists():
+              new_hash = hashlib.sha256((src / name).read_bytes()).hexdigest()
+              previous_hash = hashlib.sha256(existing.read_bytes()).hexdigest()
+              if new_hash != previous_hash:
+                  raise SystemExit(
+                      f"Refusing to overwrite immutable {name}: existing SHA-256 "
+                      f"{previous_hash}, new {new_hash}. Increase versionCode before publishing."
+                  )
+              print(f"Idempotent existing signed APK: {name} ({previous_hash})")
+          else:
+              if Path("RELEASE_IDENTITY.json").exists() and code <= last_code:
+                  raise SystemExit(f"VersionCode {code} already exists; refusing a second APK filename")
+              print(f"New signed APK version {code} will be published: {name}")
+          PY
+
           cp "$GITHUB_WORKSPACE"/dist/*.apk .
           cp "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt" .
           cp "$GITHUB_WORKSPACE/dist/RELEASE_IDENTITY.json" .

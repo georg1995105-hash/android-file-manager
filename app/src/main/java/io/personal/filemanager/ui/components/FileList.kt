@@ -80,6 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -172,10 +173,13 @@ fun FileRow(
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var focused by remember(entry.path) { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
+            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(8.dp))
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)
@@ -703,9 +707,12 @@ private fun GalleryMediaCell(
     onLongClick: (() -> Unit)?,
     uniformFooter: Boolean = false,
 ) {
+    var focused by remember(entry.path) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(4.dp))
+            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(4.dp))
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)
@@ -764,11 +771,13 @@ private fun GridCell(
     }
 
     val shape = RoundedCornerShape(7.dp)
+    var focused by remember(entry.path) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
             .clip(shape)
             .background(if (selected) AppColors.AccentContainer else AppColors.Card)
-            .then(if (selected) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
+            .then(if (selected || focused) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)

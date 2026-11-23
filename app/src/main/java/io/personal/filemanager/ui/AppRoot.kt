@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.width
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
@@ -369,13 +371,16 @@ internal fun BottomTabBar(
                 val selected = id == current
                 val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
                 var createMenu by remember(id) { mutableStateOf(false) }
+                var focused by remember(id) { mutableStateOf(false) }
 
                 Box(modifier = Modifier.weight(1f).height(70.dp)) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .testTag("bottom-tab-${id.name}")
+                            .onFocusChanged { focused = it.isFocused }
                             .clip(RoundedCornerShape(16.dp))
+                            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(16.dp))
                             .combinedClickable(
                                 onClick = { onSelect(id) },
                                 onLongClick = if (id == SectionId.RECENT) {

@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -271,10 +272,13 @@ private fun HomeHeader() {
 @Composable
 private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val storage = state.storage
+    var focused by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(20.dp))
+            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(20.dp))
             .card(RoundedCornerShape(20.dp))
             .tapClickable(onClick = onClick)
             .padding(12.dp),
@@ -374,10 +378,13 @@ private fun SectionTile(
     modifier: Modifier = Modifier,
     minHeight: Dp = 104.dp,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .heightIn(min = minHeight)
+            .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(18.dp))
+            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(18.dp))
             .card()
             .tapClickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 10.dp),

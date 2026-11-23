@@ -4,7 +4,7 @@
     "version_code": 40,
     "version_name": "0.12.25",
     "certificate_sha256": "d282ae0bb49c30bd848fcae3ae02533ff446a12ef7e3691863af53c4aa0ecda7",
-    "sha256": "9ebeb3a4346dd51724ac241469a25b119d4c8e81ba4e5bad9688bee053d862df",
+    "sha256": "911c7d970596e8d26b8a27d93a76fc46c10806157ab2265593f44d0f75fb1f08",
     "signature_verified": true,
     "debuggable": false,
     "zipalign_16k": true,

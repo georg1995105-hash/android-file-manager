@@ -287,6 +287,17 @@ private fun HomeHeader() {
                     text = { Text("Резервные копии") },
                     onClick = { menuOpen = false; navigator.open(Routes.BACKUP) },
                 )
+                if (!tvUi) {
+                    // Pre-TV functions remain reachable; original menu items stay first.
+                    DropdownMenuItem(
+                        text = { Text("Создать файл или папку") },
+                        onClick = { menuOpen = false; createFile() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Настройки") },
+                        onClick = { menuOpen = false; navigator.open(Routes.SETTINGS) },
+                    )
+                }
             }
         }
     }

@@ -511,7 +511,8 @@ fun FileGridPane(
     }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
-        val tvGallery = galleryMode && tvUi
+        // Gallery grouping predates the TV changes and must remain on touch devices.
+        val tvGallery = galleryMode
         val side = if (tvUi) GRID_SIDE else 12.dp
         val gap = if (tvUi) GRID_GAP else 6.dp
         val cellWidth = (maxWidth - side * 2 - gap * (columns - 1)) / columns
@@ -737,12 +738,14 @@ private fun GalleryMediaCell(
     onLongClick: (() -> Unit)?,
     uniformFooter: Boolean = false,
 ) {
+    val tvUi = isTelevisionUi()
     var focused by remember(entry.path) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(4.dp))
-            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(4.dp))
+            .then(if (tvUi) Modifier.border(if (focused) 2.dp else 0.dp,
+                AppColors.Accent, RoundedCornerShape(4.dp)) else Modifier)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)

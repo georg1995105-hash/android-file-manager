@@ -59,6 +59,7 @@ import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.analyzer.AnalysisResult
 import io.personal.filemanager.data.analyzer.AnalyzedFile
 import io.personal.filemanager.data.analyzer.StorageAnalyzer
+import io.personal.filemanager.ui.isTelevisionUi
 import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
@@ -186,7 +187,8 @@ fun AnalyzerScreen() {
                         Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
                         verticalArrangement = Arrangement.spacedBy(11.dp),
                     ) {
-                        Text("Память устройства", style = MaterialTheme.typography.titleMedium)
+                        Text(if (isTelevisionUi()) "Память устройства" else "Память телефона",
+                            style = MaterialTheme.typography.titleMedium)
                         Text(
                             "${formatSize(info.usedBytes)} / ${formatSize(info.totalBytes)}",
                             fontSize = 29.sp, fontWeight = FontWeight.SemiBold,

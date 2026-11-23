@@ -336,7 +336,7 @@ private fun AccessBanner(modifier: Modifier = Modifier) {
         Text("Нужен доступ к файлам", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Без разрешения «Доступ ко всем файлам» приложение не видит документы, загрузки и архивы. " +
+            "Без разрешения на файлы приложение не видит документы, загрузки и архивы. " +
                 "Это не root, а данные не покидают телефон.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -92,6 +92,7 @@ import io.personal.filemanager.ui.archive.ArchiveScreen
 import io.personal.filemanager.data.archive.ArchiveFormats
 import io.personal.filemanager.ui.settings.TabSettingsScreen
 import io.personal.filemanager.ui.settings.AppSettingsScreen
+import io.personal.filemanager.ui.settings.UpdateScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
 import io.personal.filemanager.ui.theme.AppColors
@@ -251,6 +252,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> AudioPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
                     composable(Routes.SETTINGS) { AppSettingsScreen() }
+                    composable(Routes.UPDATES) { UpdateScreen() }
                     composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
                     composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
                     composable(Routes.TRASH) { TrashScreen() }

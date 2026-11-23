@@ -11,6 +11,7 @@
     <cache-path name="archive_preview" path="archive-preview/" />
     <cache-path name="archive_shared" path="archive-shared/" />
     <cache-path name="imported_files" path="imported-files/" />
+    <cache-path name="verified_update" path="ota/" />
     <!-- Экспортированные для отправки APK -->
     <cache-path name="shared_apk" path="shared-apk/" />
 </paths>

@@ -127,6 +127,11 @@ fun AppSettingsScreen() {
             TextButton(onClick = { navigator.open(Routes.BACKUP) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Резервные копии")
             }
+            HorizontalDivider()
+            Text("Приложение", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = { navigator.open(Routes.UPDATES) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Версия и обновления")
+            }
             Spacer(Modifier.padding(bottom = 12.dp))
         }
     }

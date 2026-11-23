@@ -6,6 +6,9 @@
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    <!-- Android TV 8-10 uses runtime legacy storage permissions; Android 11+ uses MANAGE_EXTERNAL_STORAGE. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <!-- Открытие локальных APK в штатном системном установщике (только с подтверждением пользователя). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Восстановление расписания автокопий после перезагрузки (JobScheduler, setPersisted). -->
@@ -35,6 +38,7 @@
 
     <application
         android:name=".FileManagerApp"
+        android:requestLegacyExternalStorage="true"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"

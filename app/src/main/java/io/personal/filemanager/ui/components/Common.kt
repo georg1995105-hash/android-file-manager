@@ -161,8 +161,8 @@ fun AllFilesAccessRequired(modifier: Modifier = Modifier) {
         icon = Icons.Filled.FolderOff,
         title = "Нужен доступ к файлам",
         text = "Чтобы показывать документы, загрузки, архивы и папки, разрешите приложению " +
-            "«Доступ ко всем файлам». Это не root: Android по-прежнему закрывает папки " +
-            "Android/data и Android/obb. Данные никуда не отправляются — у приложения нет доступа в интернет.",
+            "«Доступ ко всем файлам». Это не root: Android может ограничивать доступ к папкам " +
+            "Android/data и Android/obb. Личные файлы не отправляются в облако.",
         modifier = modifier,
         action = {
             Button(onClick = { FileActions.openAllFilesAccessSettings(context) }) {

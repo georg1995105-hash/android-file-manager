@@ -7,8 +7,8 @@ plugins {
 }
 
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
-val appVersionCode = 38
-val appVersionName = "0.12.23"
+val appVersionCode = 39
+val appVersionName = "0.12.24"
 
 // Подпись release: keystore.properties (локально, вне Git) или переменные окружения CI.
 // Ключ и пароли никогда не коммитятся.
@@ -29,7 +29,7 @@ android {
     defaultConfig {
         // НЕИЗМЕННЫЙ идентификатор приложения: не менять после первой установки.
         applicationId = "io.personal.filemanager"
-        minSdk = 30
+        minSdk = 26
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName

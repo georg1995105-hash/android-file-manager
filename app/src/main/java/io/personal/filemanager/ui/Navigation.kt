@@ -15,6 +15,7 @@ object Routes {
     const val VIDEO = "video?path={path}"
     const val AUDIO = "audio?path={path}"
     const val SETTINGS = "settings"
+    const val UPDATES = "settings/updates"
     const val SETTINGS_TILES = "settings/tiles"
     const val SETTINGS_TABS = "settings/tabs"
     const val TRASH = "trash"

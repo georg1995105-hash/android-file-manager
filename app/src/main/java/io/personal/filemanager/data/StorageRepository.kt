@@ -1,7 +1,11 @@
 package io.personal.filemanager.data
 
 import android.app.usage.StorageStatsManager
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import android.os.Environment
 import android.os.StatFs
 import android.os.storage.StorageManager
@@ -17,8 +21,13 @@ class StorageRepository(private val context: Context) {
     val downloadsPath: String
         get() = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
 
-    /** Доступ ко всем файлам (MANAGE_EXTERNAL_STORAGE). */
-    fun hasAllFilesAccess(): Boolean = Environment.isExternalStorageManager()
+    /** Android 11+: all files; Android 8-10: ask for legacy storage access. */
+    fun hasAllFilesAccess(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
+        else ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
 
     /**
      * Реальные цифры памяти устройства. StorageStatsManager не требует разрешений и

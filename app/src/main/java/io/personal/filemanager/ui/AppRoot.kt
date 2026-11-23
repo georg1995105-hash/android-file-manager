@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -43,6 +45,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.onFocusChanged
+import android.content.Context
+import io.personal.filemanager.data.updates.OtaUpdater
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
@@ -195,6 +199,34 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
         navigator.openFile(FileEntry.from(File(path)))
     }
 
+    // Only a stable signed OTA release can trigger a quiet daily update reminder.
+    var pendingUpdate by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("pfm-ota", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val day = 24L * 60L * 60L * 1000L
+        if (now - prefs.getLong("lastChecked", 0L) > day) {
+            val available = runCatching { OtaUpdater(context.applicationContext).latest() }.getOrNull()
+            prefs.edit().putLong("lastChecked", now).apply()
+            if (available != null) pendingUpdate = available.version
+        }
+    }
+    if (pendingUpdate != null) {
+        AlertDialog(
+            onDismissRequest = { pendingUpdate = null },
+            title = { Text("Обновление «Мои файлы»") },
+            text = { Text("Доступна новая версия: ${pendingUpdate}") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingUpdate = null
+                    nav.navigate(Routes.UPDATES) { launchSingleTop = true }
+                }) { Text("Обновить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUpdate = null }) { Text("Позже") }
+            },
+        )
+    }
     CompositionLocalProvider(LocalNavigator provides navigator, LocalCreateDialog provides openCreateDialog) {
         io.personal.filemanager.ui.transfer.TransferApprovalDialog()
         FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {

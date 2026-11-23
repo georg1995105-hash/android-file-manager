@@ -111,7 +111,7 @@ class OtaUpdater(private val context: Context) {
             ?: throw SecurityException("Нет опубликованного SHA-256 для APK")
         val hash = line.take(64).lowercase()
         if (!hash.matches(Regex("[0-9a-f]{64}"))) throw SecurityException("Неверный SHA-256")
-        OtaRelease(
+        return OtaRelease(
             json.optString("name").ifBlank { json.optString("tag_name") },
             versionCode, apkLink, hash, size,
         )
@@ -129,6 +129,7 @@ class OtaUpdater(private val context: Context) {
             try {
                 if (conn.responseCode !in 200..299) error("Скачивание: HTTP ${conn.responseCode}")
                 val sha = MessageDigest.getInstance("SHA-256")
+                val reportedSize = if (release.size > 0) release.size else conn.contentLengthLong
                 var bytes = 0L
                 var last = -1
                 conn.inputStream.use { input ->
@@ -141,7 +142,7 @@ class OtaUpdater(private val context: Context) {
                             if (bytes > MAX_APK || (release.size > 0 && bytes > release.size)) throw SecurityException("Неверный размер APK")
                             sha.update(buffer, 0, n)
                             output.write(buffer, 0, n)
-                            val percent = if (release.size > 0) ((100 * bytes) / release.size).toInt() else -1
+                            val percent = if (reportedSize > 0) ((100 * bytes) / reportedSize).toInt().coerceAtMost(100) else -1
                             if (percent >= 0 && percent != last) {
                                 last = percent
                                 withContext(Dispatchers.Main) { onProgress(percent) }

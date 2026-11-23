@@ -1,6 +1,7 @@
 package io.personal.filemanager
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,7 +49,15 @@ class TvNavigationTest {
         val intent = Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
             .setPackage(rule.activity.packageName)
-        assertNotNull(rule.activity.packageManager.resolveActivity(intent, 0))
+        val pm = rule.activity.packageManager
+        assertNotNull(pm.resolveActivity(intent, 0))
+        assertTrue(
+            "Missing implicit Android TV launch resolution",
+            pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY).any {
+                it.activityInfo.packageName == rule.activity.packageName &&
+                    it.activityInfo.name == MainActivity::class.java.name
+            },
+        )
         rule.waitUntil(20_000) {
             rule.onAllNodesWithTag("bottom-tab-RECENT").fetchSemanticsNodes().isNotEmpty()
         }

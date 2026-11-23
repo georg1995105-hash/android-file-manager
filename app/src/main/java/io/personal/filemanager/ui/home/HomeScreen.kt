@@ -302,7 +302,8 @@ private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifie
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(20.dp))
-            .border(if (tvUi && focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(20.dp))
+            .then(if (tvUi) Modifier.border(if (focused) 2.dp else 0.dp,
+                AppColors.Accent, RoundedCornerShape(20.dp)) else Modifier)
             .card(RoundedCornerShape(20.dp))
             .tapClickable(onClick = onClick)
             .padding(if (tvUi) 12.dp else 16.dp),
@@ -425,7 +426,8 @@ private fun SectionTile(
             .heightIn(min = minHeight)
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(18.dp))
-            .border(if (tvUi && focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(18.dp))
+            .then(if (tvUi) Modifier.border(if (focused) 2.dp else 0.dp,
+                AppColors.Accent, RoundedCornerShape(18.dp)) else Modifier)
             .card()
             .tapClickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = if (tvUi) 10.dp else 14.dp),

@@ -183,7 +183,8 @@ fun FileRow(
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
-            .border(if (tvUi && focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(8.dp))
+            .then(if (tvUi) Modifier.border(if (focused) 2.dp else 0.dp,
+                AppColors.Accent, RoundedCornerShape(8.dp)) else Modifier)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)

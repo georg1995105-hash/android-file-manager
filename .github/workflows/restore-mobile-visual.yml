@@ -3,7 +3,10 @@ name: Original touch UI screenshot acceptance
 on:
   push:
     branches: [restore/original-touch-tv-only-20261123]
-    paths: ['.github/workflows/restore-mobile-visual.yml']
+    paths:
+      - '.github/workflows/restore-mobile-visual.yml'
+      - 'app/src/main/java/io/personal/filemanager/ui/home/HomeScreen.kt'
+      - 'app/src/main/java/io/personal/filemanager/ui/components/FileList.kt'
   workflow_dispatch:
 
 permissions:

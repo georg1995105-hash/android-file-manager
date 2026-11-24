@@ -25,6 +25,8 @@ import io.personal.filemanager.core.FileKind
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import io.personal.filemanager.ui.personal.SiteIcon
+import io.personal.filemanager.ui.personal.openUrl
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
@@ -99,6 +101,8 @@ private fun HubNavItem(tab: HubTab, selected: Boolean, side: Boolean, modifier: 
 internal fun HubHome() {
     val container = appContainer()
     val nav = LocalNavigator.current
+    val context = LocalContext.current
+    val iconsOn by container.settings.linkIcons.collectAsStateWithLifecycle(initialValue=true)
     val tv = isTelevisionUi()
     val wide = tv || LocalConfiguration.current.screenWidthDp >= 700
     val transfer by container.transfer.state.collectAsStateWithLifecycle()
@@ -184,8 +188,8 @@ internal fun HubHome() {
                         shortcuts.chunked(2).forEach { pair ->
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 pair.forEach { link ->
-                                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(AppColors.Surface).clickable { nav.openSection(SectionId.LINKS) }.padding(8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                        SiteIcon(link.url,true,true)
+                                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(AppColors.Surface).clickable { openUrl(context,link.url) }.padding(8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                        SiteIcon(link.url,iconsOn,true)
                                         Text(link.title.ifBlank { link.url },maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall)
                                     }
                                 }

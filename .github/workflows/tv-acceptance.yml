@@ -67,7 +67,7 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: API_LEVEL=${{ matrix.api }} bash tools/tv_acceptance.sh && bash tools/storage_device_test.sh
+          script: API_LEVEL=${{ matrix.api }} bash tools/tv_acceptance.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

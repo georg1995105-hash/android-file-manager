@@ -60,7 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import io.personal.filemanager.ui.hub.HubHome
-import io.personal.filemanager.ui.hub.VaultScreen
+import io.personal.filemanager.ui.hub.DriveScreen
 import android.net.Uri
 import io.personal.filemanager.ui.hub.HubSettings
 import io.personal.filemanager.ui.hub.HubNavigation
@@ -274,7 +274,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, i
                 ) {
                     composable(Routes.HOME) { HubHome() }
                     composable(Routes.LOCAL_FILES) { HomeScreen() }
-                    composable(Routes.CLOUD) { VaultScreen(incomingShared, onSharedConsumed) }
+                    composable(Routes.CLOUD) { DriveScreen(incomingShared, onSharedConsumed) }
                     composable(Routes.HUB_SETTINGS) { HubSettings() }
                     composable(
                         Routes.SECTION,

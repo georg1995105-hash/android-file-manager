@@ -33,7 +33,9 @@ jobs:
     env:
       # Release-подпись включается, только когда владелец добавил секреты (см. docs/SIGNING.md).
       HAS_RELEASE_KEY: ${{ secrets.PFM_KEYSTORE_B64 != '' }}
-      PFM_STORAGE_URL: ${{ vars.PFM_STORAGE_URL }}
+      PFM_DRIVE_ENABLED: ${{ vars.PFM_DRIVE_ENABLED || 'false' }}
+      PFM_DRIVE_TV_CLIENT_ID: ${{ vars.PFM_DRIVE_TV_CLIENT_ID }}
+      PFM_DRIVE_TV_CLIENT_SECRET: ${{ secrets.PFM_DRIVE_TV_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -177,8 +179,7 @@ jobs:
           import json
           from pathlib import Path
           records=json.loads(Path('RELEASE_IDENTITY.json').read_text())
-          if any(int(r.get('version_code', 0)) >= 48 for r in records) and not __import__('os').environ.get('PFM_STORAGE_URL'):
-              raise SystemExit('Storage-first release requires a provisioned HTTPS origin; OTA blocked')
+          # Local-only builds are valid; optional cloud requires registered OAuth clients.
           assert len(records) == 1
           r=records[0]
           assert r['package']=='io.personal.filemanager'

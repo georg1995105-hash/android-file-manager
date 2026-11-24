@@ -255,7 +255,7 @@ private fun LinkMenu(link: Link, onEdit: () -> Unit, onDelete: () -> Unit) {
     }
 }
 
-private fun openUrl(context: android.content.Context, url: String) {
+internal fun openUrl(context: android.content.Context, url: String) {
     val safe = LinkRules.normalize(url) ?: return FileActions.toast(context, "Некорректный адрес")
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(safe)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

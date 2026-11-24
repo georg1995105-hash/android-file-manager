@@ -1,11 +1,8 @@
-# Storage-first evolution — 0.13.0 development
-
-The original package io.personal.filemanager, release signing, SQLite data, link IDs, existing received directory and OTA stay unchanged. No destructive migration. The legacy file browser and utilities remain secondary while the four primary sections become Storage, Transfer, Links, Settings. The current implementation is deliberately local: do not label local files as uploaded or available when the TV is off.
-
-## Next milestone: asynchronous personal storage
-- A small independent HTTPS backend with authenticated device identities; no shared secret embedded in the APK and no production VPN node dependency.
-- Pair once by scanning a short-lived single-use QR invitation (or entering a code); store device credentials in Android Keystore, revoke individually. Changing local IP must not invalidate pairing.
-- Persist upload jobs and file IDs, support retries/resume, atomic completion, quotas, integrity check and explicit delete. A TV that is off has no live connection; files must be durably held by an online service until accessed. Clearly distinguish local-only, uploading, stored remotely and downloaded.
-- Encrypt content on the sending device, keep decryption keys on paired devices, never publish unencrypted private content to GitHub or public URLs. Use a reviewed standard authenticated encryption protocol; do not invent crypto. No credentials in repository, CI or logs.
-- Test cold start, offline sender/receiver, interruption, duplicate name, corrupt payload, revoked device, expiry, low storage, upgrade from signed 0.12.32 without uninstall, and actual TV D-pad navigation.
-- Backend endpoint, hosting/quota policy and real credentials are not provisioned in this branch. Do not release an unverified cloud UI to OTA.
+# Storage-first 0.13.1
+Owner rejected hosting a private relay. Previous prototype was never published and is retained in Git history only.
+- Existing local transfer is primary: QR/browser and native peer discovery, no internet or Google account.
+- Optional personal Drive: scope drive.file, app-created files only, same Google account across user's devices; separate accounts are isolated. No public sharing, no owner server.
+- Register an Android OAuth client for io.personal.filemanager and official APK SHA-1, and TV/limited-input client in the same Google Cloud project. Enable Drive API; configure consent screen and production publication before enabling PFM_DRIVE_ENABLED=true. Set repository variables PFM_DRIVE_TV_CLIENT_ID and secret PFM_DRIVE_TV_CLIENT_SECRET; TV native client cannot keep a confidential secret. Verify Google authorization on phone and TV with actual account and upload/download. No passwords or tokens in source.
+- If not configured, cloud screen explicitly reports unavailable. Local features remain operational and can receive signed OTA; do not label cloud as tested.
+- TLS and Google account access protect cloud data; not end-to-end encrypted against Google. Resumable upload retries during active operation; persistence across process death is not implemented.
+- Preserve official package and release certificate; versionCode monotonically increases, publish only from established release branch after tests. User confirms Android installer update; no uninstall.

@@ -68,6 +68,9 @@ import io.personal.filemanager.ui.hub.HubTab
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import io.personal.filemanager.BuildConfig
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -212,7 +215,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, i
     }
 
     LaunchedEffect(incomingShared) {
-        if (incomingShared.isNotEmpty()) nav.navigate(Routes.CLOUD) { launchSingleTop = true }
+        if (incomingShared.isNotEmpty()) nav.navigate(Routes.section(SectionId.TRANSFER)) { launchSingleTop = true }
     }
     LaunchedEffect(incomingPath) {
         val path = incomingPath ?: return@LaunchedEffect
@@ -220,21 +223,25 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, i
         navigator.openFile(FileEntry.from(File(path)))
     }
 
-    // Only a stable signed OTA release can trigger a quiet daily update reminder.
+    // All device types use the same signed OTA channel; quiet foreground checks, no debug prompts.
     var pendingUpdate by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(tvUi) {
-        if (!tvUi) return@LaunchedEffect
+    var updateResume by remember { mutableStateOf(0) }
+    var lastAttempt by remember { mutableStateOf(0L) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { updateResume++ }
+    LaunchedEffect(updateResume,route) {
+        if (BuildConfig.DEBUG || route != Routes.HOME) return@LaunchedEffect
         val prefs = context.getSharedPreferences("pfm-ota", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        val day = 24L * 60L * 60L * 1000L
-        if (now - prefs.getLong("lastChecked", 0L) > day) {
+        val hour = 60L * 60L * 1000L
+        if (now - prefs.getLong("lastChecked", 0L) >= hour && now - lastAttempt >= 60_000L) {
+            lastAttempt = now
             runCatching { OtaUpdater(context.applicationContext).latest() }.onSuccess { available ->
                 prefs.edit().putLong("lastChecked", now).apply()
                 if (available != null) pendingUpdate = available.version
             }
         }
     }
-    if (tvUi && pendingUpdate != null) {
+    if (route == Routes.HOME && pendingUpdate != null) {
         AlertDialog(
             onDismissRequest = { pendingUpdate = null },
             title = { Text("Обновление «Мои файлы»") },
@@ -281,7 +288,8 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, i
                         arguments = listOf(navArgument("id") { type = NavType.StringType }),
                     ) { entry ->
                         val id = entry.arguments?.getString("id")?.let(SectionId::fromKey) ?: SectionId.FILES
-                        SectionScreen(id)
+                        if (id == SectionId.TRANSFER) io.personal.filemanager.ui.transfer.TransferScreen(incomingShared, onSharedConsumed)
+                        else SectionScreen(id)
                     }
                     composable(Routes.SEARCH) { SearchScreen() }
                     composable(

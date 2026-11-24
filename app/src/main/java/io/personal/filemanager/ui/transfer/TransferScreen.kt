@@ -1,6 +1,11 @@
 package io.personal.filemanager.ui.transfer
 
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import io.personal.filemanager.data.transfer.LocalShareFiles
+import kotlinx.coroutines.*
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,13 +27,29 @@ import io.personal.filemanager.data.transfer.TransferService
 import io.personal.filemanager.ui.*
 
 @Composable
-fun TransferScreen() {
+fun TransferScreen(incomingShared:List<Uri> = emptyList(), onSharedConsumed:()->Unit = {}) {
     val manager = appContainer().transfer
     val state by manager.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val nav = LocalNavigator.current
     val isTv = isTelevisionUi()
     var details by rememberSaveable { mutableStateOf(false) }
+    val scope=rememberCoroutineScope()
+    var preparing by remember { mutableStateOf(false) }
+    var shareChoice by remember(incomingShared) { mutableStateOf(incomingShared.isNotEmpty()) }
+    fun choose(uris:List<Uri>) {
+        if(uris.isEmpty() || preparing)return
+        preparing=true
+        scope.launch {
+            try {
+                val files=withContext(Dispatchers.IO){LocalShareFiles.stage(context,uris.take(100))}
+                manager.share(files)
+            }catch(e:CancellationException){throw e}
+            catch(e:Exception){manager.message(e.message?:"Не удалось прочитать файлы")}
+            finally { preparing=false }
+        }
+    }
+    val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()){choose(it)}
     val start = {
         runCatching { context.startForegroundService(Intent(context, TransferService::class.java)) }
             .onFailure { manager.message(it.message ?: "Ошибка запуска") }
@@ -43,6 +64,7 @@ fun TransferScreen() {
         Text("Передача", style = MaterialTheme.typography.headlineMedium)
         OutlinedButton(onClick = { nav.open(Routes.CLOUD) }, modifier = Modifier.fillMaxWidth()) { Text("Через личный Google Диск") }
         Text("Напрямую по Wi-Fi", style = MaterialTheme.typography.titleMedium)
+        if(!isTv) Button(enabled=!preparing,onClick={runCatching{picker.launch(arrayOf("*/*"))}.onFailure{manager.message("Нет приложения для выбора файлов")}},modifier=Modifier.fillMaxWidth()){Text(if(preparing) "Подготовка…" else "Выбрать файлы") }
         if (isTv) {
             if (state.running) {
                 TransferQr(state.browserAddresses.firstOrNull(), true)
@@ -106,6 +128,15 @@ fun TransferScreen() {
         }
         TextButton(onClick = nav::back) { Text("Назад") }
     }
+    if(shareChoice && incomingShared.isNotEmpty()) AlertDialog(
+        onDismissRequest={shareChoice=false;onSharedConsumed()},
+        title={Text("Как отправить файлы?")},text={Text("Файлов: ${incomingShared.size}")},
+        confirmButton={TextButton(onClick={shareChoice=false;choose(incomingShared);onSharedConsumed()}){Text("По Wi-Fi")}},
+        dismissButton={Row {
+            if(io.personal.filemanager.BuildConfig.PFM_DRIVE_ENABLED) TextButton(onClick={shareChoice=false;nav.open(Routes.CLOUD)}){Text("Google Диск")}
+            TextButton(onClick={shareChoice=false;onSharedConsumed()}){Text("Отмена")}
+        }}
+    )
 }
 
 @Composable

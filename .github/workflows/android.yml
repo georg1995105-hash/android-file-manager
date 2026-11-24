@@ -163,6 +163,26 @@ jobs:
           path: dist/
           retention-days: 30
 
+      - name: Prepare signed OTA upgrade acceptance
+        if: env.HAS_RELEASE_KEY == 'true' && github.ref == 'refs/heads/feature/compact-create-files-20261110' && github.event_name == 'push'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/boost /opt/hostedtoolcache/CodeQL || true
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify signed in-place upgrade before OTA publication
+        if: env.HAS_RELEASE_KEY == 'true' && github.ref == 'refs/heads/feature/compact-create-files-20261110' && github.event_name == 'push'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86
+          target: android-tv
+          profile: tv_1080p
+          disk-size: 4096M
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash tools/verify_ota_candidate.sh
       # The signed RELEASE is also published to a plain Git branch.
       # This avoids GitHub Release API permission failures and gives Android a stable direct APK URL.
       - name: Publish verified signed APK to direct-download branch

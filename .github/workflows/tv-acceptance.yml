@@ -50,6 +50,13 @@ jobs:
         run: bash tools/restore_debug_keystore.sh
       - name: Build universal APK and instrumentation
         run: ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest
+      - name: Install media fixture encoder
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -o Acquire::Retries=3
+            sudo apt-get install -y -o Acquire::Retries=3 ffmpeg
+          fi
+          ffmpeg -version
       - name: Free disk and enable KVM
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/boost /opt/hostedtoolcache/CodeQL || true

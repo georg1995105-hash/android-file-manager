@@ -126,16 +126,39 @@ internal class VaultFiles(private val context: Context, private val session: Vau
         }
         dir.deleteRecursively()
     }
+    fun discard(job: PendingFile) {
+        require(job.device == session.device && job.endpoint == session.endpoint)
+        val url = path(job.id)
+        try {
+            val state = api.json("GET",url)
+            if (!state.optBoolean("done")) api.json("DELETE",url)
+        } catch (e: VaultHttpError) { if (e.status != 404) throw e }
+        check(File(root,job.id).deleteRecursively()) { "Не удалось очистить очередь" }
+    }
     suspend fun download(file: RemoteFile, directory: File, progress: (Long,Long)->Unit): File {
         safeName(file.name)
         check(directory.isDirectory || directory.mkdirs()) { "Нет доступа к папке" }
         require(directory.usableSpace >= file.size + 16 * 1024 * 1024) { "Недостаточно места" }
-        val temp = File.createTempFile(".storage-", ".part", directory)
+        // Persist only authenticated whole chunks in app-private staging, then publish a verified copy.
+        val downloadRoot = File(context.filesDir, "storage-download-queue").apply { check(isDirectory || mkdirs()) }
+        val staging = File(downloadRoot, VaultCrypto.hash((session.endpoint + "/" + session.device + "/" + file.id + "/" + file.hash).toByteArray()))
         val sha = MessageDigest.getInstance("SHA-256")
-        var done = 0L
+        var verified = false
         try {
-            temp.outputStream().use { out ->
-                var index = 0L
+            RandomAccessFile(staging,"rw").use { partial ->
+                var done = partial.length().coerceAtMost(file.size)
+                if (done != file.size) done -= done % VaultClient.CHUNK
+                partial.setLength(done)
+                partial.seek(0)
+                var left = done
+                val buffer = ByteArray(256 * 1024)
+                while (left > 0) {
+                    currentCoroutineContext().ensureActive()
+                    val n = minOf(left,buffer.size.toLong()).toInt()
+                    partial.readFully(buffer,0,n); sha.update(buffer,0,n); left -= n
+                }
+                progress(done,file.size)
+                var index = done / VaultClient.CHUNK
                 while (done < file.size) {
                     currentCoroutineContext().ensureActive()
                     val expected = minOf(VaultClient.CHUNK.toLong(), file.size - done).toInt()
@@ -143,18 +166,28 @@ internal class VaultFiles(private val context: Context, private val session: Vau
                     require(data.size == expected + 28)
                     val plain = VaultCrypto.open(session.key, aad(file.id,index.toString()), data)
                     require(plain.size == expected)
-                    out.write(plain); sha.update(plain); done += plain.size; index++
+                    partial.write(plain); partial.fd.sync()
+                    sha.update(plain); done += plain.size; index++
                     progress(done,file.size)
                 }
-                out.fd.sync()
             }
-            check(VaultCrypto.hex(sha.digest()) == file.hash) { "Контрольная сумма файла не совпала" }
+            if (VaultCrypto.hex(sha.digest()) != file.hash) {
+                staging.delete()
+                error("Контрольная сумма файла не совпала; загрузку нужно повторить")
+            }
+            verified = true
+        } catch (e: javax.crypto.AEADBadTagException) { staging.delete(); throw e }
+        check(verified)
+        val temp = File.createTempFile(".storage-", ".part", directory)
+        try {
+            staging.inputStream().use { input -> temp.outputStream().use { out -> input.copyTo(out); out.fd.sync() } }
             val dot = file.name.lastIndexOf('.').takeIf { it > 0 } ?: file.name.length
             for (n in 0..9999) {
                 val name = if (n == 0) file.name else file.name.substring(0,dot) + " ($n)" + file.name.substring(dot)
                 val target = File(directory,name)
                 try {
                     Files.move(temp.toPath(), target.toPath())
+                    staging.delete()
                     return target
                 } catch (_: FileAlreadyExistsException) { /* never overwrite */ }
             }

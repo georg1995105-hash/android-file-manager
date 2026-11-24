@@ -9,6 +9,12 @@ plugins {
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
 val appVersionCode = 48
 val appVersionName = "0.13.0"
+// Only a public HTTPS origin, never a credential. Empty builds expose manual setup.
+val storageOrigin = providers.gradleProperty("pfmStorageUrl")
+    .orElse(providers.environmentVariable("PFM_STORAGE_URL")).orElse("").get().trimEnd('/')
+require(storageOrigin.isEmpty() || storageOrigin.matches(Regex("https://[A-Za-z0-9.-]+(:[0-9]+)?"))) {
+    "PFM_STORAGE_URL must be an HTTPS origin without path or credentials"
+}
 
 // Подпись release: keystore.properties (локально, вне Git) или переменные окружения CI.
 // Ключ и пароли никогда не коммитятся.
@@ -33,6 +39,7 @@ android {
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
+        buildConfigField("String", "PFM_STORAGE_URL", "\"$storageOrigin\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

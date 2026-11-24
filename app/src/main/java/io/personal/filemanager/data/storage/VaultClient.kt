@@ -6,6 +6,8 @@ import java.net.URI
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
+internal class VaultHttpError(val status: Int, message: String) : java.io.IOException(message)
+
 internal class VaultClient private constructor(private val base: String, private val token: String?) {
     constructor(session: VaultSession) : this(session.endpoint, session.token)
     constructor(endpoint: String) : this(endpoint(endpoint), null)
@@ -45,7 +47,7 @@ internal class VaultClient private constructor(private val base: String, private
             if (status !in 200..299) {
                 val error = conn.errorStream?.use { readBounded(it, 8192) }?.toString(Charsets.UTF_8)
                 val message = runCatching { JSONObject(error.orEmpty()).optString("error") }.getOrNull()
-                error("Хранилище: HTTP $status" + if (message.isNullOrBlank()) "" else " · $message")
+                throw VaultHttpError(status, "Хранилище: HTTP $status" + if (message.isNullOrBlank()) "" else " · $message")
             }
             return conn.inputStream.use { readBounded(it, limit) }
         } finally { conn.disconnect() }

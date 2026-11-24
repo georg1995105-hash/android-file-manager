@@ -124,7 +124,15 @@ class Vault:
             if len(parts)==3 and parts[1]=="devices" and ID.fullmatch(parts[2]) and method=="DELETE":
                 require(device["owner"],403,"owner only")
                 require(parts[2]!=device["id"],400,"cannot revoke owner")
-                self.db.execute("DELETE FROM devices WHERE id=? AND owner=0",(parts[2],))
+                partial=self.db.execute("SELECT id FROM files WHERE owner=? AND done=0",(parts[2],)).fetchall()
+                self.db.execute("BEGIN IMMEDIATE")
+                try:
+                    self.db.execute("DELETE FROM files WHERE owner=? AND done=0",(parts[2],))
+                    self.db.execute("DELETE FROM devices WHERE id=? AND owner=0",(parts[2],))
+                    self.db.execute("COMMIT")
+                except Exception:
+                    self.db.execute("ROLLBACK"); raise
+                for item in partial: shutil.rmtree(self.objects/item["id"],ignore_errors=True)
                 return {"ok":True}
             if parts==["v1","files"] and method=="GET":
                 return {"files":[dict(x) for x in self.db.execute("SELECT id,size,meta,created FROM files WHERE done=1 ORDER BY created DESC LIMIT 1000")]}

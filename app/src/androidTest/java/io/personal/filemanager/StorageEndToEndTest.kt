@@ -70,7 +70,13 @@ class StorageEndToEndTest {
             assertEquals("fixture.apk",remote.name)
             val destination = File(dir,"received").apply { mkdirs() }
             File(destination,"fixture.apk").writeText("do not overwrite")
-            val received = receiver.download(remote,destination) { _,_ -> }
+            try {
+                receiver.download(remote,destination) { done,_ -> if (done >= VaultClient.CHUNK) throw IOException("simulated receiver interruption") }
+                fail("download should have been interrupted")
+            } catch (_: IOException) {}
+            var resumedDownload = -1L
+            val received = VaultFiles(context,tv).download(remote,destination) { done,_ -> if (resumedDownload == -1L) resumedDownload=done }
+            assertEquals(VaultClient.CHUNK.toLong(), resumedDownload)
             assertArrayEquals(content,received.readBytes())
             assertEquals("do not overwrite",File(destination,"fixture.apk").readText())
             restarted.revoke(restarted.devices().single { it.id==tv.device })

@@ -23,6 +23,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import io.personal.filemanager.BuildConfig
 import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.storage.*
@@ -41,7 +42,7 @@ internal fun VaultScreen(shared: List<Uri> = emptyList(), onSharedConsumed: () -
     val scope = rememberCoroutineScope()
     var loaded by remember { mutableStateOf(false) }
     var session by remember { mutableStateOf<VaultSession?>(null) }
-    var endpoint by remember { mutableStateOf("") }
+    var endpoint by remember { mutableStateOf(BuildConfig.PFM_STORAGE_URL) }
     var setupCode by remember { mutableStateOf("") }
     var pair by remember { mutableStateOf<VaultPair?>(null) }
     var approveCode by remember { mutableStateOf("") }
@@ -53,6 +54,7 @@ internal fun VaultScreen(shared: List<Uri> = emptyList(), onSharedConsumed: () -
     var info by remember { mutableStateOf("") }
     var fraction by remember { mutableStateOf<Float?>(null) }
     var removeFile by remember { mutableStateOf<RemoteFile?>(null) }
+    var discardFile by remember { mutableStateOf<PendingFile?>(null) }
     var revoke by remember { mutableStateOf<VaultDevice?>(null) }
     var job by remember { mutableStateOf<Job?>(null) }
     var sharedDialog by remember(shared) { mutableStateOf(shared.isNotEmpty()) }
@@ -183,7 +185,12 @@ internal fun VaultScreen(shared: List<Uri> = emptyList(), onSharedConsumed: () -
                 }
                 if (pending.isNotEmpty()) {
                     Text("Ожидают отправки: ${pending.size}", style = MaterialTheme.typography.titleMedium)
-                    pending.forEach { Text(it.name + " · " + formatSize(it.size)) }
+                    pending.forEach { item ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(item.name + " · " + formatSize(item.size), Modifier.weight(1f))
+                            TextButton(enabled = !busy, onClick = { discardFile = item }) { Text("Отменить") }
+                        }
+                    }
                     Button(enabled = !busy, onClick = { task("Продолжение отправки…") {
                         val client = VaultFiles(context.applicationContext, s)
                         try { withContext(Dispatchers.IO) { for (item in client.pending()) client.upload(item, ::report) }; refresh(s); info = "Отправлено" }
@@ -248,6 +255,14 @@ internal fun VaultScreen(shared: List<Uri> = emptyList(), onSharedConsumed: () -
             task("Привязка…") { withContext(Dispatchers.IO) { VaultPairing.approve(s,code) }; info = "Устройство одобрено"; refresh(s) }
         }) { Text("Привязать") } },
         dismissButton = { TextButton(onClick = { approveDialog = false; approveCode = "" }) { Text("Отмена") } })
+    discardFile?.let { item -> AlertDialog(onDismissRequest = { discardFile = null },
+        title = { Text("Отменить отправку?") }, text = { Text(item.name + " · Незавершённая копия будет удалена.") },
+        confirmButton = { TextButton(onClick = { discardFile = null; session?.let { s -> task("Отмена отправки…") {
+            val client = VaultFiles(context.applicationContext,s)
+            withContext(Dispatchers.IO) { client.discard(item) }
+            refresh(s); info = "Отправка отменена"
+        } } }) { Text("Отменить отправку") } },
+        dismissButton = { TextButton(onClick = { discardFile = null }) { Text("Назад") } }) }
     removeFile?.let { file -> AlertDialog(onDismissRequest = { removeFile = null },
         title = { Text("Удалить файл из хранилища?") }, text = { Text(file.name + " · Удаление затронет все устройства.") },
         confirmButton = { TextButton(onClick = { removeFile = null; session?.let { s -> task("Удаление…") {

@@ -9,3 +9,6 @@ Owner rejected hosting a private relay. Previous prototype was never published a
 
 ## 0.13.3 — branding
 Owner requested the launcher name «Передача» and a new bidirectional transfer icon on phone/tablet/TV. Package, signing certificate, file directories, protocol identifiers and OTA artifact naming stay unchanged for backward compatibility. Google Cloud branding should use «Передача».
+
+## 0.13.4 — OAuth activation candidate
+Drive API enabled; owner created Android and TV clients in Google Cloud project personal-file-manager-515715 and added a test account. The public TV OAuth client ID is configured in the signed-release workflow. Its native credential is provided only through the encrypted Actions secret. Device authorization endpoint smoke verifies the client and scope without user tokens; actual same-account phone→Drive→TV transfer remains a required device test. Public branding/audience must be completed in Google Cloud; test-mode grants can expire. No cloud server. Website and policies: docs/index.html, privacy.html, terms.html.

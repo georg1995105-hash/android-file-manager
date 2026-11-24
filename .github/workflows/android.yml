@@ -33,9 +33,8 @@ jobs:
     env:
       # Release-подпись включается, только когда владелец добавил секреты (см. docs/SIGNING.md).
       HAS_RELEASE_KEY: ${{ secrets.PFM_KEYSTORE_B64 != '' }}
-      PFM_DRIVE_ENABLED: ${{ vars.PFM_DRIVE_ENABLED || 'false' }}
-      PFM_DRIVE_TV_CLIENT_ID: ${{ vars.PFM_DRIVE_TV_CLIENT_ID }}
-      PFM_DRIVE_TV_CLIENT_SECRET: ${{ secrets.PFM_DRIVE_TV_CLIENT_SECRET }}
+      # Public native OAuth client identifier; the credential stays in Actions secrets.
+      PFM_DRIVE_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
 
@@ -126,6 +125,13 @@ jobs:
 
       # Release-сборка: с ключом владельца — подписанная (для постоянной установки и обновлений);
       # без ключа — только проверка, что R8 и lint проходят (такой APK не устанавливается).
+      - name: Verify registered TV OAuth endpoint
+        if: env.HAS_RELEASE_KEY == 'true'
+        env:
+          PFM_DRIVE_TV_CLIENT_ID: '660764622565-jbchfv4s4sddd4ps6dnaa384a9tns249.apps.googleusercontent.com'
+          PFM_DRIVE_TV_CLIENT_SECRET: ${{ secrets.PFM_DRIVE_TV_CLIENT_SECRET }}
+        run: python3 tools/verify_drive_oauth.py
+
       - name: Release APK
         continue-on-error: ${{ env.HAS_RELEASE_KEY != 'true' }}
         env:
@@ -133,6 +139,9 @@ jobs:
           PFM_STORE_PASSWORD: ${{ secrets.PFM_STORE_PASSWORD }}
           PFM_KEY_ALIAS: ${{ secrets.PFM_KEY_ALIAS }}
           PFM_KEY_PASSWORD: ${{ secrets.PFM_KEY_PASSWORD }}
+          PFM_DRIVE_ENABLED: ${{ secrets.PFM_DRIVE_TV_CLIENT_SECRET != '' }}
+          PFM_DRIVE_TV_CLIENT_ID: '660764622565-jbchfv4s4sddd4ps6dnaa384a9tns249.apps.googleusercontent.com'
+          PFM_DRIVE_TV_CLIENT_SECRET: ${{ secrets.PFM_DRIVE_TV_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           if [ "$HAS_RELEASE_KEY" = "true" ]; then

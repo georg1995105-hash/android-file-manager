@@ -1,6 +1,7 @@
 package io.personal.filemanager.ui.transfer
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.personal.filemanager.data.transfer.TransferService
@@ -24,6 +29,7 @@ fun TransferScreen() {
     val state by manager.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val nav = LocalNavigator.current
+    val isTv = (LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
     var details by rememberSaveable { mutableStateOf(false) }
     val start = {
         runCatching { context.startForegroundService(Intent(context, TransferService::class.java)) }
@@ -37,6 +43,21 @@ fun TransferScreen() {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Передача", style = MaterialTheme.typography.headlineMedium)
+        if (isTv) {
+            if (state.running) {
+                TransferQr(state.browserAddresses.firstOrNull(), true)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { manager.receivedDirectory.mkdirs(); nav.open(Routes.browser(manager.receivedDirectory.absolutePath)) }) { Text("Полученные файлы") }
+                    OutlinedButton(onClick = { context.stopService(Intent(context, TransferService::class.java)) }) { Text("Остановить передачу") }
+                }
+            } else {
+                Text("Подключите телефон и телевизор к одной локальной сети.")
+                Button(onClick = start) { Text("Включить передачу") }
+            }
+            if (state.progress.isNotBlank()) Text(state.progress)
+            if (state.message.isNotBlank()) Text(state.message)
+            HorizontalDivider()
+        }
         Text(
             if (state.running) "Это устройство видно как «${Build.MODEL}». Второе устройство — в той же Wi-Fi сети, на нём тоже открыта «Передача»."
             else "Передача выключена — другие устройства вас не видят.",
@@ -57,31 +78,21 @@ fun TransferScreen() {
         manager.activeReceives().forEach { active ->
             TextButton(onClick = { manager.cancel(active.id) }) { Text("Отменить приём: ${active.description}") }
         }
-        if (state.progress.isNotBlank()) Text(state.progress)
-        if (state.message.isNotBlank()) Text(state.message)
-        Button(onClick = { manager.receivedDirectory.mkdirs(); nav.open(Routes.browser(manager.receivedDirectory.absolutePath)) }) {
-            Text("Полученные файлы")
-        }
-        HorizontalDivider()
-        if (state.running) {
-            Text("QR для телефона или компьютера", style = MaterialTheme.typography.titleLarge)
-            val address = state.browserAddresses.firstOrNull()
-            if (address == null) {
-                Text("Нет локального адреса. Подключитесь к Wi-Fi и перезапустите передачу.")
-            } else {
-                Text("Отсканируйте камерой (или откройте адрес в браузере) — откроется страница: отправить сюда или скачать отсюда.")
-                val bitmap = remember(address) {
-                    val matrix = com.google.zxing.MultiFormatWriter().encode(address, com.google.zxing.BarcodeFormat.QR_CODE, 256, 256)
-                    android.graphics.Bitmap.createBitmap(256, 256, android.graphics.Bitmap.Config.ARGB_8888).apply {
-                        for (y in 0 until 256) for (x in 0 until 256) setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
-                    }
-                }
-                androidx.compose.foundation.Image(bitmap.asImageBitmap(), "QR подключения", Modifier.size(200.dp))
-                SelectionContainer { Text(address, style = MaterialTheme.typography.titleMedium) }
+        if (!isTv) {
+            if (state.progress.isNotBlank()) Text(state.progress)
+            if (state.message.isNotBlank()) Text(state.message)
+            Button(onClick = { manager.receivedDirectory.mkdirs(); nav.open(Routes.browser(manager.receivedDirectory.absolutePath)) }) {
+                Text("Полученные файлы")
             }
-            OutlinedButton(onClick = { context.stopService(Intent(context, TransferService::class.java)) }) { Text("Остановить передачу") }
-        } else {
-            Button(onClick = start) { Text("Включить передачу") }
+            HorizontalDivider()
+        }
+        if (!isTv) {
+            if (state.running) {
+                TransferQr(state.browserAddresses.firstOrNull(), false)
+                OutlinedButton(onClick = { context.stopService(Intent(context, TransferService::class.java)) }) { Text("Остановить передачу") }
+            } else {
+                Button(onClick = start) { Text("Включить передачу") }
+            }
         }
         TextButton(onClick = { details = !details }) { Text(if (details) "Скрыть сведения о безопасности" else "Сведения о безопасности") }
         if (details) {
@@ -94,5 +105,44 @@ fun TransferScreen() {
             SelectionContainer { Text(state.fingerprint, style = MaterialTheme.typography.bodySmall) }
         }
         TextButton(onClick = nav::back) { Text("Назад") }
+    }
+}
+
+@Composable
+private fun TransferQr(address: String?, isTv: Boolean) {
+    Text(if (isTv) "Отправить с телефона" else "QR для телефона или компьютера", style = MaterialTheme.typography.titleLarge)
+    if (address == null) {
+        Text("Нет локального адреса. Подключитесь к Wi-Fi или Ethernet и перезапустите передачу.")
+        return
+    }
+    val bitmap = remember(address) {
+        runCatching {
+            val matrix = com.google.zxing.MultiFormatWriter().encode(address, com.google.zxing.BarcodeFormat.QR_CODE, 256, 256)
+            val pixels = IntArray(256 * 256) { i -> if (matrix[i % 256, i / 256]) android.graphics.Color.BLACK else android.graphics.Color.WHITE }
+            android.graphics.Bitmap.createBitmap(pixels, 256, 256, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
+        }.getOrNull()
+    }
+    val instructions: @Composable () -> Unit = {
+        Text("Наведите камеру телефона на QR-код, откройте страницу и выберите файлы. Телефон и телевизор должны быть в одной сети.")
+        if (isTv) Text(address, style = MaterialTheme.typography.titleMedium)
+        else SelectionContainer { Text(address, style = MaterialTheme.typography.titleMedium) }
+        if (bitmap == null) Text("QR-код недоступен. Откройте указанный адрес в браузере телефона.")
+    }
+    val qr: @Composable () -> Unit = {
+        bitmap?.let {
+            androidx.compose.foundation.Image(
+                painter = BitmapPainter(it, filterQuality = FilterQuality.None),
+                contentDescription = "QR подключения",
+                modifier = Modifier.size(if (isTv) 240.dp else 200.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+    }
+    if (isTv) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        qr()
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) { instructions() }
+    } else {
+        instructions()
+        qr()
     }
 }

@@ -23,6 +23,10 @@ class TransferUiTest {
         rule.openTile("Передача")
         // Открытие раздела само включает передачу; дальше выключение и включение — кнопкой OK пульта.
         rule.waitText("Остановить передачу", 15000)
+        rule.waitUntil(15_000) {
+            rule.onAllNodesWithContentDescription("QR подключения").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithContentDescription("QR подключения").assertIsDisplayed()
         rule.remoteCenter("Остановить передачу")
         rule.waitText("Включить передачу")
         rule.remoteCenter("Включить передачу")

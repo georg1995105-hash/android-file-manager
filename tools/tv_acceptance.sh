@@ -11,7 +11,7 @@ if [[ "${API_LEVEL:-30}" -ge 30 ]]; then
 fi
 # Catch instrumentation failure even when piped through tee.
 set +e
-adb shell am instrument -w -r -e class "$PKG.TvNavigationTest" \
+adb shell am instrument -w -r -e class "$PKG.TvNavigationTest,$PKG.TransferUiTest,$PKG.TransferIntegrationTest" \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee tv-test.log
 rc=${PIPESTATUS[0]}
 set -e

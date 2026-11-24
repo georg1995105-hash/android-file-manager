@@ -3,6 +3,7 @@ package io.personal.filemanager.data.transfer
 import android.app.*
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import io.personal.filemanager.FileManagerApp
@@ -21,7 +22,11 @@ class TransferService : Service() {
         val notification = Notification.Builder(this, "transfer").setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Локальная передача включена").setContentText("Откройте приложение для подтверждения запросов")
             .setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null, "Остановить", stop).build()).build()
-        startForeground(40, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(40, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(40, notification)
+        }
         wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "filemanager:transfer").apply { acquire(6 * 3600_000L) }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

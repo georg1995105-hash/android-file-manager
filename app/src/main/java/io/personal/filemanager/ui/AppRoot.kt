@@ -210,9 +210,10 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
         val now = System.currentTimeMillis()
         val day = 24L * 60L * 60L * 1000L
         if (now - prefs.getLong("lastChecked", 0L) > day) {
-            val available = runCatching { OtaUpdater(context.applicationContext).latest() }.getOrNull()
-            prefs.edit().putLong("lastChecked", now).apply()
-            if (available != null) pendingUpdate = available.version
+            runCatching { OtaUpdater(context.applicationContext).latest() }.onSuccess { available ->
+                prefs.edit().putLong("lastChecked", now).apply()
+                if (available != null) pendingUpdate = available.version
+            }
         }
     }
     if (tvUi && pendingUpdate != null) {

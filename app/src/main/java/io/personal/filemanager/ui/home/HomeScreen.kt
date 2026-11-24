@@ -256,6 +256,10 @@ private fun HomeHeader() {
                     text = { Text("Настройки") },
                     onClick = { menuOpen = false; navigator.open(Routes.SETTINGS) },
                 )
+                DropdownMenuItem(
+                    text = { Text("Обновления") },
+                    onClick = { menuOpen = false; navigator.open(Routes.UPDATES) },
+                )
                 if (config?.showTrashShortcut != false) {
                     DropdownMenuItem(
                         text = { Text("Корзина") },

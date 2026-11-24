@@ -1,7 +1,6 @@
 package io.personal.filemanager.ui.transfer
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,7 +13,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -29,7 +27,7 @@ fun TransferScreen() {
     val state by manager.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val nav = LocalNavigator.current
-    val isTv = (LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
+    val isTv = isTelevisionUi()
     var details by rememberSaveable { mutableStateOf(false) }
     val start = {
         runCatching { context.startForegroundService(Intent(context, TransferService::class.java)) }

@@ -39,16 +39,18 @@ class OtaUpdater(private val context: Context) {
     // Prefer that channel, with GitHub Releases as a backwards-compatible fallback.
     suspend fun latest(): OtaRelease? = withContext(Dispatchers.IO) {
         val direct = runCatching { latestFromDirectBranch() }
-        direct.getOrNull()?.let { return@withContext it }
         val releases = runCatching { latestFromReleases() }
-        if (releases.isSuccess) return@withContext releases.getOrNull()
+        listOfNotNull(direct.getOrNull(), releases.getOrNull())
+            .maxByOrNull { it.versionCode }?.let { return@withContext it }
+        // The Releases fallback can lag behind the direct channel. Never hide a direct-channel error.
         if (direct.isSuccess) return@withContext null
-        throw IllegalStateException("Не удалось проверить обновления в GitHub", releases.exceptionOrNull())
+        throw IllegalStateException("Не удалось проверить основной канал обновлений: ${direct.exceptionOrNull()?.message}", direct.exceptionOrNull())
     }
 
     private fun latestFromDirectBranch(): OtaRelease? {
         val base = "https://raw.githubusercontent.com/georg1995105-hash/android-file-manager/apk-downloads/"
-        val entries = org.json.JSONArray(read(base + "RELEASE_IDENTITY.json", 64 * 1024))
+        val fresh = "?ota=" + System.currentTimeMillis()
+        val entries = org.json.JSONArray(read(base + "RELEASE_IDENTITY.json" + fresh, 64 * 1024))
         val record = (0 until entries.length()).map { entries.getJSONObject(it) }
             .filter {
                 it.optString("package") == context.packageName &&
@@ -66,7 +68,7 @@ class OtaUpdater(private val context: Context) {
             throw SecurityException("Версия APK в метаданных не совпадает")
         val sha = record.optString("sha256").lowercase()
         if (!sha.matches(Regex("[a-f0-9]{64}"))) throw SecurityException("Неверный SHA-256 APK")
-        val published = read(base + "SHA256SUMS.txt", 65536).lineSequence().any {
+        val published = read(base + "SHA256SUMS.txt" + fresh, 65536).lineSequence().any {
             it.trim() == "$sha  $name"
         }
         if (!published) throw SecurityException("SHA-256 APK не подтверждён публикацией")
@@ -225,6 +227,8 @@ class OtaUpdater(private val context: Context) {
         return (URL(s).openConnection() as HttpsURLConnection).apply {
             connectTimeout = 12000
             readTimeout = 30000
+            useCaches = false
+            setRequestProperty("Cache-Control", "no-cache")
             setRequestProperty("User-Agent", "PersonalFileManager-OTA")
             instanceFollowRedirects = true
         }

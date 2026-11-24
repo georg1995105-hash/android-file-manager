@@ -25,8 +25,14 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -133,30 +139,31 @@ fun LinksScreen() {
                     action = { Button(onClick = { editing = newLink() }) { Text("Добавить ссылку") } },
                 )
                 filtered.isEmpty() -> EmptyState(Icons.Filled.Search, "Ничего не найдено", "Измените запрос.")
-                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(118.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     items(filtered, key = { it.id }) { link ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .tapClickable { openUrl(context, link.url) }
-                                .padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        var focused by remember { mutableStateOf(false) }
+                        val shape = RoundedCornerShape(16.dp)
+                        Column(
+                            Modifier.fillMaxWidth().heightIn(min = 128.dp)
+                                .onFocusChanged { focused = it.isFocused }
+                                .clip(shape).background(AppColors.Card)
+                                .border(if (focused) 2.dp else 0.dp, AppColors.Accent, shape)
+                                .clickable { openUrl(context, link.url) }.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            SiteIcon(link.url, enabled = iconsOn)
-                            Spacer(Modifier.width(14.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(link.title.ifBlank { link.url }, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(link.url, style = MaterialTheme.typography.bodySmall, color = AppColors.Accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                if (link.note.isNotBlank()) {
-                                    Text(link.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                }
-                                Text(formatShortDate(link.updated), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                                LinkMenu(link, onEdit = { editing = link }, onDelete = { deleting = link })
                             }
-                            LinkMenu(
-                                link = link,
-                                onEdit = { editing = link },
-                                onDelete = { deleting = link },
-                            )
+                            SiteIcon(link.url, enabled = iconsOn, large = true)
+                            Text(link.title.ifBlank { runCatching { java.net.URI(link.url).host }.getOrNull() ?: link.url },
+                                style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -311,7 +318,7 @@ private suspend fun exportLinks(container: io.personal.filemanager.AppContainer,
 
 /** Значок сайта слева от ссылки: загружается в фоне с кэшем; нет значка — стандартный. */
 @Composable
-private fun SiteIcon(url: String, enabled: Boolean) {
+private fun SiteIcon(url: String, enabled: Boolean, large: Boolean = false) {
     val loader = appContainer().siteIcons
     val bitmap by produceState(initialValue = if (enabled) loader.cached(url) else null, url, enabled) {
         if (enabled && value == null) value = loader.icon(url)
@@ -319,13 +326,13 @@ private fun SiteIcon(url: String, enabled: Boolean) {
     val image = remember(bitmap) { bitmap?.asImageBitmap() }
     Box(
         Modifier
-            .size(40.dp)
+            .size(if (large) 56.dp else 40.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(AppColors.Card),
         contentAlignment = Alignment.Center,
     ) {
         if (image != null) {
-            Image(image, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(28.dp))
+            Image(image, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(if (large) 40.dp else 28.dp))
         } else {
             Icon(Icons.Filled.Language, contentDescription = null, tint = AppColors.Accent, modifier = Modifier.size(22.dp))
         }

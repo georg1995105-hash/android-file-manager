@@ -7,6 +7,8 @@ import io.personal.filemanager.data.FileEntry
 
 object Routes {
     const val HOME = "home"
+    const val LOCAL_FILES = "local-files"
+    const val HUB_SETTINGS = "hub-settings"
     const val SECTION = "section/{id}"
     const val SEARCH = "search"
     const val IMAGE = "image?path={path}"

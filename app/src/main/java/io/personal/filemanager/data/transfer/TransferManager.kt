@@ -1,6 +1,9 @@
 package io.personal.filemanager.data.transfer
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Environment
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,7 +48,8 @@ class TransferManager(private val context: Context) {
     private var generation = 0L
     /** Полученное — сразу в «Загрузки/Передача» с исходными именами (при доступе ко всем файлам), иначе в память приложения. */
     val receivedDirectory: File get() =
-        if (android.os.Environment.isExternalStorageManager()) {
+        if (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
+            else context.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
             File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Передача")
         } else File(context.filesDir, "received")
     /** Недокачанное лежит рядом с итоговой папкой (та же файловая система — атомарный перенос), скрыто точкой. */
@@ -56,29 +60,47 @@ class TransferManager(private val context: Context) {
     fun message(text: String) = update { it.copy(message = text) }
     fun rescan(path: String) = android.media.MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
     fun start() {
+        val requestedGeneration = synchronized(lock) { generation }
         scope.launch {
             runCatching {
                 synchronized(lock) {
-                    if (server != null) return@launch
+                    if (requestedGeneration != generation || browserServer != null) return@launch
                     File(context.filesDir, "transfer-staging").deleteRecursively()
                     stagingDirectory.deleteRecursively()
-                    val (tls, fingerprint) = TransferTls.context()
-                    val listener = LocalHttpsServer(tls.serverSocketFactory, ::handle)
-                    server = listener
                     val browser = LocalHttpsServer(javax.net.ServerSocketFactory.getDefault(), ::handle)
                     browserServer = browser
-                    discovery.advertise(listener.port())
+                    // QR/browser reception must work even on TVs with a broken vendor AndroidKeyStore.
+                    val tlsResult = runCatching {
+                        val (tls, fingerprint) = TransferTls.context()
+                        LocalHttpsServer(tls.serverSocketFactory, ::handle) to fingerprint
+                    }
+                    val listener = tlsResult.getOrNull()?.first
+                    val fingerprint = tlsResult.getOrNull()?.second.orEmpty()
+                    server = listener
+                    listener?.let { discovery.advertise(it.port()) }
                     codeExpires = now() + 120_000
                     val hosts = NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
+                        .sortedBy { if (it.name.startsWith("eth") || it.name.startsWith("wlan")) 0 else 1 }
                         .flatMap { it.inetAddresses.toList() }.filter { it is java.net.Inet4Address && it.isSiteLocalAddress }
-                        .map { it.hostAddress }
-                    mutable.value = mutable.value.copy(running = true, addresses = hosts.map { "https://$it:${listener.port()}" },
+                        .mapNotNull { it.hostAddress }.distinct()
+                    mutable.value = mutable.value.copy(running = true, addresses = listener?.let { s -> hosts.map { "https://$it:${s.port()}" } }.orEmpty(),
                         browserAddresses = hosts.map { "http://$it:${browser.port()}" },
-                        code = "%08d".format(random.nextInt(100_000_000)), fingerprint = fingerprint, message = "")
-                    scope.launch { listener.run() }
+                        code = "%08d".format(random.nextInt(100_000_000)), fingerprint = fingerprint,
+                        message = if (listener == null) "Передача по QR доступна. Поиск устройств недоступен." else "")
+                    listener?.let { scope.launch { it.run() } }
                     scope.launch { browser.run() }
                 }
-            }.onFailure { message("Не удалось запустить: ${it.message}") }
+            }.onFailure { error ->
+                synchronized(lock) {
+                    if (requestedGeneration == generation) {
+                        server?.close(); server = null
+                        browserServer?.close(); browserServer = null
+                        discovery.stop()
+                        mutable.value = mutable.value.copy(running = false, addresses = emptyList(),
+                            browserAddresses = emptyList(), message = "Не удалось запустить: ${error.message}")
+                    }
+                }
+            }
         }
     }
     fun renewCode() = synchronized(lock) {

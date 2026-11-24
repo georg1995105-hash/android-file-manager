@@ -8,6 +8,14 @@ import io.personal.filemanager.ui.components.ListSearchButton
 import io.personal.filemanager.ui.components.rememberFileView
 import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.tapClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.testTag
+import kotlin.math.abs
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,9 +34,13 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -39,6 +51,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +66,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.personal.filemanager.AppContainer
+import io.personal.filemanager.core.formatShortDate
 import io.personal.filemanager.core.formatSize
 import io.personal.filemanager.data.InstalledApp
 import io.personal.filemanager.data.FileEntry
@@ -86,6 +102,10 @@ class AppsViewModel(private val container: AppContainer) : ViewModel() {
     }
 }
 
+/** Индекс вкладки приложения после горизонтального свайпа. */
+fun nextAppTab(current: Int, left: Boolean): Int =
+    if (left) (current + 1).coerceAtMost(1) else (current - 1).coerceAtLeast(0)
+
 /**
  * «Приложения»: установленные (запуск, системные сведения) и локальные APK-файлы.
  * Экспорт APK и split-наборов (.apks), отправка; установка APK-файлов — через экран APK.
@@ -93,7 +113,14 @@ class AppsViewModel(private val container: AppContainer) : ViewModel() {
 @Composable
 fun AppsScreen() {
     val navigator = LocalNavigator.current
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val pager = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val scope = rememberCoroutineScope()
+    val selectedTab = pager.currentPage
+    if (io.personal.filemanager.BuildConfig.DEBUG) {
+        LaunchedEffect(selectedTab) {
+            android.util.Log.i("PFM_PAGER", "Apps page changed: $selectedTab")
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         val apkView = rememberFileView(MediaCategory.APKS.name)
         val search = rememberListSearch()
@@ -102,23 +129,44 @@ fun AppsScreen() {
             onBack = { navigator.back() },
             actions = {
                 ListSearchButton(search)
-                if (tab == 1) ViewModeButton(apkView)
+                if (selectedTab == 1) ViewModeButton(apkView)
             },
         )
-        PrimaryTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Установленные") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("APK-файлы") })
+        PrimaryTabRow(selectedTabIndex = selectedTab, containerColor = MaterialTheme.colorScheme.background) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { scope.launch { pager.animateScrollToPage(0) } },
+                modifier = Modifier.testTag("apps-tab-installed"),
+                text = { Text("Установленные") },
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { scope.launch { pager.animateScrollToPage(1) } },
+                modifier = Modifier.testTag("apps-tab-apks"),
+                text = { Text("APK-файлы") },
+            )
         }
         ListSearchField(search)
-        if (tab == 0) InstalledAppsList(search) else MediaListBody(MediaCategory.APKS, search = search)
+        // Compose Pager owns horizontal swipes and coordinates them with vertical
+        // lists. No global swipe navigation between main sections.
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.fillMaxSize().testTag("apps-swipe-content"),
+            beyondViewportPageCount = 0,
+        ) { page ->
+            if (page == 0) InstalledAppsList(search)
+            else MediaListBody(MediaCategory.APKS, search = search)
+        }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun InstalledAppsList(search: ListSearchState) {
     val context = LocalContext.current
     val vm = appSharedViewModel(key = "installed-apps") { AppsViewModel(it) }
     val apps by vm.apps.collectAsStateWithLifecycle()
+    var actionsFor by remember { mutableStateOf<InstalledApp?>(null) }
     RefreshWhileVisible(null) { vm.refresh() }
     val all = apps
     val list = all?.filter { search.matches(it.label, it.packageName) }
@@ -129,7 +177,7 @@ private fun InstalledAppsList(search: ListSearchState) {
         else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
                 Text(
-                    "Приложения с иконкой на рабочем столе: ${list.size}. Нажмите, чтобы открыть.",
+                    "Приложения с иконкой на рабочем столе: ${list.size}. Нажмите на приложение для действий.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -139,10 +187,10 @@ private fun InstalledAppsList(search: ListSearchState) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .tapClickable {
-                            val intent = appLaunch(context, app.packageName)
-                            if (intent == null) FileActions.toast(context, "Приложение нельзя запустить")
-                        }
+                        .combinedClickable(
+                            onClick = { actionsFor = app },
+                            onLongClick = { actionsFor = app },
+                        )
                         .padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -160,12 +208,18 @@ private fun InstalledAppsList(search: ListSearchState) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                         )
+                        Text(
+                            if (app.lastUpdateTime > 0) "Обновлено: ${formatShortDate(app.lastUpdateTime)}" else "Дата обновления неизвестна",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
                     }
-                    AppMenu(app)
                 }
             }
         }
     }
+    actionsFor?.let { app -> AppMenu(app, onDismiss = { actionsFor = null }) }
 }
 
 private fun appLaunch(context: android.content.Context, packageName: String): android.content.Intent? {
@@ -191,45 +245,77 @@ private fun AppIcon(packageName: String) {
     }
 }
 
-/** Действия с установленным приложением: экспорт APK/набора, отправка, системные сведения. */
+/** Элегантное меню действий по обычному касанию приложения; запуск — отдельным действием. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun AppMenu(app: InstalledApp) {
+private fun AppMenu(app: InstalledApp, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val container = appContainer()
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "Действия с «${app.label}»")
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text("Запустить") },
-                onClick = {
-                    open = false
-                    if (appLaunch(context, app.packageName) == null) FileActions.toast(context, "Приложение нельзя запустить")
-                },
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = io.personal.filemanager.ui.theme.AppColors.Surface,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppIcon(app.packageName)
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(app.label, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                    Text(app.packageName, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.padding(8.dp))
+            val actionColors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+            ListItem(
+                headlineContent = { Text("Запустить") },
+                leadingContent = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        if (appLaunch(context, app.packageName) == null)
+                            FileActions.toast(context, "Приложение нельзя запустить")
+                    },
             )
-            DropdownMenuItem(
-                text = { Text(if (app.apkPaths.size > 1) "Экспорт набора (.apks)" else "Экспорт APK") },
-                onClick = {
-                    open = false
-                    val dest = File(container.storage.downloadsPath, EXPORT_DIR)
-                    container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest)
-                },
+            ListItem(
+                headlineContent = { Text(if (app.apkPaths.size > 1) "Экспортировать набор .apks" else "Экспортировать APK") },
+                leadingContent = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        val dest = File(container.storage.downloadsPath, EXPORT_DIR)
+                        container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest)
+                    },
             )
-            DropdownMenuItem(
-                text = { Text("Поделиться APK") },
-                onClick = {
-                    open = false
-                    val dest = File(context.cacheDir, "shared-apk").apply { deleteRecursively(); mkdirs() }
-                    container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest) { file ->
-                        FileActions.share(context, listOf(FileEntry.from(file)))
-                    }
-                },
+            ListItem(
+                headlineContent = { Text("Поделиться APK") },
+                leadingContent = { Icon(Icons.Filled.Share, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        val dest = File(context.cacheDir, "shared-apk").apply { deleteRecursively(); mkdirs() }
+                        container.operations.exportApk(app.label, app.versionName, app.apkPaths, dest) { file ->
+                            FileActions.share(context, listOf(FileEntry.from(file)))
+                        }
+                    },
             )
-            DropdownMenuItem(
-                text = { Text("Сведения (системные)") },
-                onClick = { open = false; FileActions.openAppDetails(context, app.packageName) },
+            ListItem(
+                headlineContent = { Text("Сведения о приложении") },
+                leadingContent = { Icon(Icons.Filled.Info, contentDescription = null) },
+                colors = actionColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .tapClickable {
+                        onDismiss()
+                        FileActions.openAppDetails(context, app.packageName)
+                    },
             )
         }
     }

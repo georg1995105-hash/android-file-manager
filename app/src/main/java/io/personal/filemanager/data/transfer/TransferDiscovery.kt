@@ -31,14 +31,14 @@ class TransferDiscovery(context: Context) {
             override fun onStopDiscoveryFailed(type: String, error: Int) {}
             override fun onServiceLost(info: NsdServiceInfo) { peers.value = peers.value.filterNot { it.name == info.serviceName } }
             override fun onServiceFound(info: NsdServiceInfo) {
-                nsd.resolveService(info, object : NsdManager.ResolveListener {
+                runCatching { nsd.resolveService(info, object : NsdManager.ResolveListener {
                     override fun onResolveFailed(info: NsdServiceInfo, code: Int) {}
                     override fun onServiceResolved(info: NsdServiceInfo) {
                         val host = info.host?.hostAddress ?: return
                         if (':' in host) return // Manual numeric IPv4 fallback is shared by all clients.
                         peers.value = (peers.value.filterNot { it.name == info.serviceName } + Peer(info.serviceName, "https://$host:${info.port}")).take(32)
                     }
-                })
+                }) }
             }
         }
         discovery = listener

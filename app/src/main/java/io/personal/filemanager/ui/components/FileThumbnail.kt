@@ -2,6 +2,7 @@ package io.personal.filemanager.ui.components
 
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -47,7 +51,7 @@ import kotlinx.coroutines.withContext
 
 @Suppress("DEPRECATION")
 fun kindIcon(kind: FileKind): Pair<ImageVector, Color> = when (kind) {
-    FileKind.FOLDER -> Icons.Filled.Folder to AccentColors.of("blue")
+    FileKind.FOLDER -> Icons.Filled.Folder to Color(0xFFE6B16B)
     FileKind.IMAGE -> Icons.Filled.Image to AccentColors.of("purple")
     FileKind.VIDEO -> Icons.Filled.Movie to AccentColors.of("red")
     FileKind.AUDIO -> Icons.Filled.MusicNote to AccentColors.of("pink")
@@ -59,9 +63,46 @@ fun kindIcon(kind: FileKind): Pair<ImageVector, Color> = when (kind) {
     FileKind.OTHER -> Icons.Filled.InsertDriveFile to AccentColors.of("gray")
 }
 
-/** Плашка с цветным значком типа файла (как в макете: PDF — красная, APK — зелёная). */
+/**
+ * Тёплая папка с заметным силуэтом и бумажными вкладками, без синей квадратной подложки.
+ * Рисуется локально Canvas: не зависит от ресурсов, темы или загрузки изображений.
+ */
+@Composable
+private fun FolderThumbnail(size: Dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val unit = this.size.minDimension / 64f
+        val x = (this.size.width - 64f * unit) / 2f
+        val y = (this.size.height - 64f * unit) / 2f
+        fun point(px: Float, py: Float) = Offset(x + px * unit, y + py * unit)
+        fun rect(
+            px: Float, py: Float, w: Float, h: Float,
+            radius: Float, color: Color,
+        ) {
+            drawRoundRect(
+                color = color,
+                topLeft = point(px, py),
+                size = Size(w * unit, h * unit),
+                cornerRadius = CornerRadius(radius * unit),
+            )
+        }
+        // Задняя часть, корешок и видимые края документов.
+        rect(5f, 17f, 54f, 39f, 6f, Color(0xFFB67D3B))
+        rect(7f, 10f, 26f, 20f, 5f, Color(0xFFE6B16B))
+        rect(15f, 15f, 38f, 28f, 3f, Color(0xFFF7E2BD))
+        rect(12f, 19f, 41f, 26f, 3f, Color(0xFFFFF1D9))
+        // Передняя поверхность: мягкий янтарный оттенок, как у обычной папки.
+        rect(4f, 25f, 56f, 32f, 6f, Color(0xFFE0A459))
+        rect(7f, 27f, 50f, 2f, 1f, Color(0xFFF1C384))
+    }
+}
+
+/** Понятные иконки файлов, без лишней подложки у папок. */
 @Composable
 fun KindBadge(kind: FileKind, size: Dp, modifier: Modifier = Modifier) {
+    if (kind == FileKind.FOLDER) {
+        FolderThumbnail(size, modifier)
+        return
+    }
     val (icon, color) = kindIcon(kind)
     Box(
         modifier = modifier
@@ -110,15 +151,20 @@ fun FileThumbnail(entry: FileEntry, size: Dp, modifier: Modifier = Modifier) {
 private fun ApkThumbnail(entry: FileEntry, size: Dp, modifier: Modifier) {
     val context = LocalContext.current
     val apps = remember { (context.applicationContext as FileManagerApp).container.apps }
-    val bitmap by produceState<ImageBitmap?>(null, entry.path) {
+    val visual by produceState<Pair<Boolean, ImageBitmap?>?>(null, entry.path) {
         value = if (entry.extension == "apk") {
-            withContext(Dispatchers.IO) { apps.apkArchive(entry.path)?.second?.toImage() }
-        } else {
-            null
-        }
+            withContext(Dispatchers.IO) {
+                apps.apkArchive(entry.path)?.let { data ->
+                    (data.first.packageName == context.packageName) to data.second?.toImage()
+                }
+            }
+        } else null
     }
-    val image = bitmap
-    if (image != null) {
+    val image = visual?.second
+    if (visual?.first == true) {
+        // APK is an application package, never a directory — show its type explicitly.
+        KindBadge(FileKind.APK, size, modifier)
+    } else if (image != null) {
         Image(image, contentDescription = null, modifier = modifier.size(size).padding(size / 12))
     } else {
         KindBadge(FileKind.APK, size, modifier)

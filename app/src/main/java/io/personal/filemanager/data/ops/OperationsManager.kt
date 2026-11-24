@@ -130,10 +130,14 @@ class OperationsManager(
 
     /** [onDone] — на главном потоке после завершения (null-отчёт: операция не выполнялась). */
     fun moveToTrash(paths: List<String>, onDone: ((OpReport?) -> Unit)? = null): Boolean =
-        launch("Удаление в корзину", cancellable = false, onDone = onDone) { _, _ -> ops.moveToTrash(paths.map(::File)) }
+        launch("Удаление в корзину", cancellable = true, onDone = onDone) { progress, cancelled ->
+            ops.moveToTrash(paths.map(::File), progress, cancelled)
+        }
 
     fun deletePermanently(paths: List<String>) {
-        launch("Удаление", cancellable = false) { _, _ -> ops.deletePermanently(paths.map(::File)) }
+        launch("Удаление навсегда", cancellable = true) { progress, cancelled ->
+            ops.deletePermanently(paths.map(::File), progress, cancelled)
+        }
     }
 
     suspend fun rename(path: String, newName: String): RenameResult = withContext(Dispatchers.IO) {
@@ -256,7 +260,10 @@ class OperationsManager(
             val f = File(p)
             if (f.isDirectory) f.walkTopDown().filter { it.isFile }.take(MAX_SCAN).map { it.absolutePath }.toList() + p else listOf(p)
         }.distinct().take(MAX_SCAN)
-        MediaScannerConnection.scanFile(context, expanded.toTypedArray(), null, null)
+        // Android имеет лимиты на размер одного вызова Binder; отправляем небольшими группами.
+        expanded.chunked(500).forEach { chunk ->
+            MediaScannerConnection.scanFile(context, chunk.toTypedArray(), null, null)
+        }
     }
 
     private fun summary(title: String, r: OpReport): String {
@@ -271,6 +278,6 @@ class OperationsManager(
     }
 
     companion object {
-        private const val MAX_SCAN = 5_000
+        private const val MAX_SCAN = 30_000
     }
 }

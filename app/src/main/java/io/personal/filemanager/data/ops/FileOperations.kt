@@ -294,28 +294,50 @@ class FileOperations(
         return if (file.renameTo(target)) RenameResult.Ok(target) else RenameResult.Error("Не удалось переименовать")
     }
 
-    /** Удаление в корзину; при недоступности корзины объект остаётся на месте. */
-    fun moveToTrash(files: List<File>): OpReport {
-        val done = mutableListOf<String>()
-        val failed = mutableListOf<Pair<String, String>>()
-        for (f in files) {
-            val result = trash?.moveToTrash(f) ?: Result.failure(IllegalStateException("Корзина недоступна"))
+    /** Массовое перемещение в корзину с реальным прогрессом и отменой между файлами. */
+    fun moveToTrash(
+        files: List<File>,
+        onProgress: (OpProgress) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ): OpReport {
+        val done = ArrayList<String>(files.size)
+        val failed = ArrayList<Pair<String, String>>()
+        var cancelled = false
+        files.forEachIndexed { index, file ->
+            if (isCancelled()) { cancelled = true; return@forEachIndexed }
+            if (cancelled) return@forEachIndexed
+            val result = trash?.moveToTrash(file)
+                ?: Result.failure(IllegalStateException("Корзина недоступна"))
             result.fold(
-                onSuccess = { done += f.absolutePath },
-                onFailure = { failed += f.path to (it.message ?: "Ошибка") },
+                onSuccess = { done += file.absolutePath },
+                onFailure = { failed += file.path to (it.message ?: "Ошибка") },
             )
+            if (index % 10 == 0 || index == files.lastIndex) {
+                onProgress(OpProgress(0, 0, files.size, index + 1, file.name))
+            }
         }
-        return OpReport(done = done, failed = failed, removed = done)
+        return OpReport(done = done, failed = failed, cancelled = cancelled, removed = done)
     }
 
-    /** Необратимое удаление (вызывается только после отдельного подтверждения пользователя). */
-    fun deletePermanently(files: List<File>): OpReport {
-        val done = mutableListOf<String>()
-        val failed = mutableListOf<Pair<String, String>>()
-        for (f in files) {
-            if (f.deleteRecursively()) done += f.absolutePath else failed += f.path to "Не удалось удалить"
+    /** Необратимое удаление: только после подтверждения, с реальным счётчиком результатов. */
+    fun deletePermanently(
+        files: List<File>,
+        onProgress: (OpProgress) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ): OpReport {
+        val done = ArrayList<String>(files.size)
+        val failed = ArrayList<Pair<String, String>>()
+        var cancelled = false
+        files.forEachIndexed { index, file ->
+            if (isCancelled()) { cancelled = true; return@forEachIndexed }
+            if (cancelled) return@forEachIndexed
+            if (file.deleteRecursively()) done += file.absolutePath
+            else failed += file.path to "Не удалось удалить"
+            if (index % 10 == 0 || index == files.lastIndex) {
+                onProgress(OpProgress(0, 0, files.size, index + 1, file.name))
+            }
         }
-        return OpReport(done = done, failed = failed, removed = done)
+        return OpReport(done = done, failed = failed, cancelled = cancelled, removed = done)
     }
 
     private fun sameVolume(a: File, b: File): Boolean = volumeRootOf(a) == volumeRootOf(b)

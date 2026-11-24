@@ -1,6 +1,7 @@
 package io.personal.filemanager.data
 
 import android.content.Context
+import android.content.res.Configuration
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -13,6 +14,7 @@ data class InstalledApp(
     val versionName: String?,
     val sizeBytes: Long,
     val isSystem: Boolean,
+    val lastUpdateTime: Long = 0L,
     /** base.apk + split-файлы (для экспорта набора .apks). */
     val apkPaths: List<String>,
 )
@@ -33,13 +35,23 @@ data class InstalledVersion(val versionName: String?, val versionCode: Long)
 class AppsRepository(private val context: Context) {
     private val pm: PackageManager = context.packageManager
 
+    private val isTelevision: Boolean
+        get() = (context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+
+    /** Include TV-only apps without broad installed-packages permission. */
     @Suppress("DEPRECATION")
-    fun launchableApps(): List<InstalledApp> {
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val packages = pm.queryIntentActivities(intent, 0)
+    private fun launcherPackages(): List<String> {
+        val intents = mutableListOf(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER))
+        if (isTelevision) intents += Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+        return intents.flatMap { pm.queryIntentActivities(it, 0) }
             .map { it.activityInfo.packageName }
             .distinct()
-            .filter { it != context.packageName }
+    }
+
+    @Suppress("DEPRECATION")
+    fun launchableApps(): List<InstalledApp> {
+        val packages = launcherPackages()
         return packages.mapNotNull { pkg ->
             runCatching {
                 val info = pm.getPackageInfo(pkg, 0)
@@ -51,6 +63,7 @@ class AppsRepository(private val context: Context) {
                     versionName = info.versionName,
                     sizeBytes = paths.sumOf { File(it).length() },
                     isSystem = app.flags and ApplicationInfo.FLAG_SYSTEM != 0,
+                    lastUpdateTime = info.lastUpdateTime,
                     apkPaths = paths,
                 )
             }.getOrNull()
@@ -67,9 +80,7 @@ class AppsRepository(private val context: Context) {
     fun launchableStats(): CategoryStats {
         val now = System.currentTimeMillis()
         statsCache?.let { (at, stats) -> if (now - at < STATS_TTL_MS) return stats }
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val packages = pm.queryIntentActivities(intent, 0).map { it.activityInfo.packageName }.distinct()
-            .filter { it != context.packageName }
+        val packages = launcherPackages()
         var total = 0L
         var count = 0
         for (pkg in packages) {
@@ -88,7 +99,9 @@ class AppsRepository(private val context: Context) {
 
     fun icon(packageName: String): Drawable? = runCatching { pm.getApplicationIcon(packageName) }.getOrNull()
 
-    fun launchIntent(packageName: String): Intent? = pm.getLaunchIntentForPackage(packageName)
+    fun launchIntent(packageName: String): Intent? =
+        if (isTelevision) pm.getLeanbackLaunchIntentForPackage(packageName) ?: pm.getLaunchIntentForPackage(packageName)
+        else pm.getLaunchIntentForPackage(packageName) ?: pm.getLeanbackLaunchIntentForPackage(packageName)
 
     /** Иконка и подписи APK-файла без установки. */
     @Suppress("DEPRECATION")

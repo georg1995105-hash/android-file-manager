@@ -46,4 +46,53 @@ class TransferIntegrationTest {
             manager.receivedDirectory.listFiles()?.filter { it !in original }?.forEach { it.deleteRecursively() }
         }
     }
+
+    /** Exercise the exact HTTP endpoint encoded into the QR, not the separate TLS app transport. */
+    @Test fun qrBrowserUploadSavesExactBytes() = runBlocking(Dispatchers.IO) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val manager = TransferManager(context)
+        val name = "qr-tv-test-${System.nanoTime()}.bin"
+        val expected = ByteArray(128 * 1024 + 17) { (it % 251).toByte() }
+        try {
+            manager.start()
+            withTimeout(15000) { while (!manager.state.value.running) {
+                delay(100)
+                check(!manager.state.value.message.startsWith("Не удалось")) { manager.state.value.message }
+            } }
+            val address = java.net.URI(manager.state.value.browserAddresses.first())
+            fun request(method: String, path: String, body: ByteArray = byteArrayOf(),
+                        headers: Map<String, String> = emptyMap()): String {
+                // Raw socket matches browser HTTP while keeping Android's app cleartext policy unchanged.
+                return java.net.Socket().use { socket ->
+                    socket.connect(java.net.InetSocketAddress(address.host, address.port), 5000)
+                    socket.soTimeout = 15000
+                    val head = buildString {
+                        append("$method $path HTTP/1.1\r\nHost: ${address.host}:${address.port}\r\n")
+                        append("Content-Length: ${body.size}\r\nConnection: close\r\n")
+                        headers.forEach { (key, value) -> append("$key: $value\r\n") }
+                        append("\r\n")
+                    }
+                    socket.getOutputStream().apply { write(head.toByteArray(Charsets.US_ASCII)); write(body); flush() }
+                    val response = socket.getInputStream().readBytes().toString(Charsets.UTF_8)
+                    assertTrue(response.take(300), response.startsWith("HTTP/1.1 200 "))
+                    response.substringAfter("\r\n\r\n")
+                }
+            }
+            assertTrue(request("GET", "/").contains("Выбрать файлы"))
+            assertTrue(request("GET", "/appjs").isNotBlank())
+            val pair = org.json.JSONObject(request("POST", "/pair", """{"name":"QR browser test"}""".toByteArray())).getString("id")
+            val token = org.json.JSONObject(request("GET", "/pair/$pair")).getString("token")
+            val auth = mapOf("Authorization" to "Bearer $token")
+            val batch = org.json.JSONObject(request("POST", "/batch", headers = auth)).getString("id")
+            val offer = org.json.JSONObject().put("name", name).put("size", expected.size).put("batch", batch)
+            val id = org.json.JSONObject(request("POST", "/offer", offer.toString().toByteArray(), auth)).getString("id")
+            val uploaded = org.json.JSONObject(request("PUT", "/upload/$id", expected, auth + ("X-Offset" to "0")))
+            assertEquals(expected.size.toLong(), uploaded.getLong("offset"))
+            request("POST", "/upload/$id", headers = auth)
+            assertArrayEquals(expected, File(manager.receivedDirectory, name).readBytes())
+        } finally {
+            manager.stop()
+            File(manager.receivedDirectory, name).delete()
+        }
+    }
 }

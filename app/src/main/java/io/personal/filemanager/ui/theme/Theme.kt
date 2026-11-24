@@ -9,18 +9,18 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-/** Палитра по утверждённому макету: тёмный фон, карточки чуть светлее, синий акцент. */
+/** Спокойная графитовая палитра с бирюзовым акцентом. Цвета иконок разделов остаются настраиваемыми. */
 object AppColors {
-    val Background = Color(0xFF0D0F13)
-    val Surface = Color(0xFF15181D)
-    val Card = Color(0xFF1A1E24)
-    val CardBorder = Color(0xFF262B33)
-    val Accent = Color(0xFF3D8BFF)
-    val AccentContainer = Color(0xFF16325A)
-    val OnAccentContainer = Color(0xFF8CB8FF)
+    val Background = Color(0xFF1A1E26)
+    val Surface = Color(0xFF222833)
+    val Card = Color(0xFF29313D)
+    val CardBorder = Color(0xFF3A4554)
+    val Accent = Color(0xFF31B8AD)
+    val AccentContainer = Color(0xFF143835)
+    val OnAccentContainer = Color(0xFFACE8DF)
     val TextPrimary = Color(0xFFF2F4F7)
-    val TextSecondary = Color(0xFFA3AAB6)
-    val Divider = Color(0xFF242930)
+    val TextSecondary = Color(0xFFB5BDCA)
+    val Divider = Color(0xFF36404C)
     val Danger = Color(0xFFFF5A5F)
 }
 
@@ -52,7 +52,7 @@ object AccentColors {
 
 private val scheme = darkColorScheme(
     primary = AppColors.Accent,
-    onPrimary = Color.White,
+    onPrimary = Color(0xFF062A28),
     primaryContainer = AppColors.AccentContainer,
     onPrimaryContainer = AppColors.OnAccentContainer,
     secondary = AppColors.Accent,

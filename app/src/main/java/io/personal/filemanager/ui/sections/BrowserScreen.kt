@@ -4,11 +4,13 @@ import io.personal.filemanager.ui.components.rememberFileView
 import io.personal.filemanager.ui.components.ViewModeButton
 import io.personal.filemanager.ui.components.FilesPane
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -57,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.personal.filemanager.AppContainer
 import io.personal.filemanager.data.CreateFolderResult
+import io.personal.filemanager.core.FileKind
 import io.personal.filemanager.data.FolderResult
 import io.personal.filemanager.data.settings.BrowserPrefs
 import io.personal.filemanager.data.settings.BrowserSort
@@ -70,6 +74,8 @@ import io.personal.filemanager.ui.components.DateShown
 import io.personal.filemanager.ui.components.EmptyState
 import io.personal.filemanager.ui.components.LoadingBox
 import io.personal.filemanager.ui.components.RefreshWhileVisible
+import io.personal.filemanager.ui.components.QuickCreateDialog
+import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.components.card
 import io.personal.filemanager.ui.components.rememberAllFilesAccess
@@ -114,6 +120,9 @@ class BrowserViewModel(private val container: AppContainer) : ViewModel() {
 
     suspend fun createFolder(parent: String, name: String): CreateFolderResult =
         withContext(Dispatchers.IO) { container.fileSystem.createFolder(parent, name) }
+
+    suspend fun createFile(parent: String, name: String): CreateFolderResult =
+        withContext(Dispatchers.IO) { container.fileSystem.createFile(parent, name) }
 }
 
 /**
@@ -130,7 +139,17 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     var path by rememberSaveable(rootPath) { mutableStateOf(rootPath) }
     var sortMenu by remember { mutableStateOf(false) }
-    var createDialog by remember { mutableStateOf(false) }
+    var createMenu by remember { mutableStateOf(false) }
+    var actionsMenu by remember { mutableStateOf(false) }
+
+    var pendingEditPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(createMenu, pendingEditPath) {
+        val next = pendingEditPath ?: return@LaunchedEffect
+        if (!createMenu) {
+            pendingEditPath = null
+            navigator.open(Routes.edit(next))
+        }
+    }
     val view = rememberFileView(viewKey)
 
     // Доступ проверяется системой при каждом чтении, поэтому после выдачи разрешения список появится сам.
@@ -162,19 +181,25 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
 
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(
-            title = if (relative.isEmpty()) title else File(path).name,
+            title = if (relative.isEmpty() && title == "Внутренняя память") "Память" else if (relative.isEmpty()) title else File(path).name,
             subtitle = if (relative.isEmpty()) path else "$title/$relative",
             onBack = { if (canGoUp) File(path).parent?.let { go(it) } else navigator.back() },
             actions = {
                 IconButton(onClick = { navigator.openSearch() }) {
                     Icon(Icons.Filled.Search, contentDescription = "Поиск")
                 }
-                if (hasAccess) {
-                    IconButton(onClick = { createDialog = true }) {
-                        Icon(Icons.Filled.CreateNewFolder, contentDescription = "Новая папка")
+                ViewModeButton(view)
+                IconButton(onClick = { actionsMenu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
+                }
+                DropdownMenu(expanded = actionsMenu, onDismissRequest = { actionsMenu = false }) {
+                    if (hasAccess) {
+                        DropdownMenuItem(
+                            text = { Text("Создать файл или папку") },
+                            onClick = { actionsMenu = false; createMenu = true },
+                        )
                     }
                 }
-                ViewModeButton(view)
             },
         )
         if (!hasAccess) {
@@ -247,68 +272,27 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                         contentDescription = if (prefs.showHidden) "Скрыть скрытые файлы" else "Показать скрытые файлы",
                     )
                 }
-                TextButton(onClick = { createDialog = true }) {
-                    Icon(Icons.Filled.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Папка")
-                }
             }
         }
     }
 
-    if (createDialog) {
-        CreateFolderDialog(
-            onDismiss = { createDialog = false },
-            onCreate = { name ->
-                val res = vm.createFolder(path, name)
-                when (res) {
-                    is CreateFolderResult.Created -> { vm.load(path); null }
-                    is CreateFolderResult.Invalid -> res.reason
-                    CreateFolderResult.AlreadyExists -> "Папка или файл с таким именем уже есть"
-                    CreateFolderResult.Failed -> "Не удалось создать папку".also { FileActions.toast(context, it) }
+    if (createMenu) {
+        val storage = appContainer().storage
+        QuickCreateDialog(
+            initialFolder = path,
+            rootFolder = storage.rootPath,
+            downloadsFolder = storage.downloadsPath,
+            onDismiss = { createMenu = false },
+            onCreate = { folder, isFolder, name ->
+                if (isFolder) vm.createFolder(folder, name) else vm.createFile(folder, name)
+            },
+            onCreated = { created ->
+                vm.load(path)
+                if (!created.isDirectory) {
+                    // Новый текстовый файл сразу готов к вводу, без пустого экрана просмотра.
+                    pendingEditPath = created.path
                 }
             },
         )
     }
-}
-
-/** Диалог создания папки. onCreate возвращает текст ошибки или null при успехе. */
-@Composable
-private fun CreateFolderDialog(onDismiss: () -> Unit, onCreate: suspend (String) -> String?) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val focus = remember { FocusRequester() }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая папка") },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it; error = null },
-                singleLine = true,
-                label = { Text("Имя папки") },
-                isError = error != null,
-                supportingText = { error?.let { Text(it) } },
-                modifier = Modifier.focusRequester(focus),
-            )
-            LaunchedEffect(Unit) { focus.requestFocus() }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = !busy,
-                onClick = {
-                    busy = true
-                    scope.launch {
-                        val err = onCreate(name)
-                        busy = false
-                        if (err == null) onDismiss() else error = err
-                    }
-                },
-            ) { Text("Создать") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    )
 }

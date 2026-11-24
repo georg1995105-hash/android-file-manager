@@ -2,7 +2,12 @@ package io.personal.filemanager.ui
 
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import androidx.core.app.ActivityCompat
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -88,6 +93,16 @@ object FileActions {
 
     /** Экран системы «Доступ ко всем файлам» для нашего приложения. */
     fun openAllFilesAccessSettings(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            var c: Context = context
+            while (c is ContextWrapper && c !is Activity) c = c.baseContext
+            val activity = c as? Activity
+            if (activity != null) ActivityCompat.requestPermissions(
+                activity, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE), 1407,
+            ) else openAppDetails(context, context.packageName)
+            return
+        }
         val direct = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
             .setData(Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

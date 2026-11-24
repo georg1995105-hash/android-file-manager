@@ -1,22 +1,61 @@
 package io.personal.filemanager.ui
 
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.onFocusChanged
+import android.content.Context
+import io.personal.filemanager.data.updates.OtaUpdater
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +74,7 @@ import io.personal.filemanager.data.FileEntry
 import io.personal.filemanager.data.MediaCategory
 import io.personal.filemanager.data.settings.TabConfig
 import io.personal.filemanager.ui.home.HomeScreen
+import io.personal.filemanager.ui.components.QuickCreateDialog
 import io.personal.filemanager.ui.icons.IconCatalog
 import io.personal.filemanager.ui.sections.ApkScreen
 import io.personal.filemanager.ui.sections.AppsScreen
@@ -51,10 +91,16 @@ import io.personal.filemanager.ui.personal.NotesScreen
 import io.personal.filemanager.ui.settings.BackupScreen
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+import io.personal.filemanager.ui.analyzer.AnalyzerScreen
+import io.personal.filemanager.ui.vault.VaultScreen
 import io.personal.filemanager.ui.archive.ArchiveScreen
 import io.personal.filemanager.data.archive.ArchiveFormats
 import io.personal.filemanager.ui.settings.TabSettingsScreen
+import io.personal.filemanager.ui.settings.AppSettingsScreen
+import io.personal.filemanager.ui.settings.UpdateScreen
 import io.personal.filemanager.ui.settings.TileSettingsScreen
 import io.personal.filemanager.ui.theme.AccentColors
 import io.personal.filemanager.ui.theme.AppColors
@@ -65,9 +111,10 @@ import io.personal.filemanager.ui.viewer.PdfViewerScreen
 import io.personal.filemanager.ui.viewer.findActivity
 
 @Composable
-fun AppRoot() {
+fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
     val nav = rememberNavController()
     val context = LocalContext.current
+    val tvUi = isTelevisionUi()
     val container = appContainer()
     val config by container.settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
     val backStack by nav.currentBackStackEntryAsState()
@@ -78,6 +125,20 @@ fun AppRoot() {
         else -> null
     }
     val showBar = route == Routes.HOME || route == Routes.SECTION
+    // «Создать» находится в меню ⋮ контекстных экранов, а не в глобальной FAB.
+    var showCreateDialog by remember { mutableStateOf(false) }
+    val openCreateDialog = { showCreateDialog = true }
+
+    // Навигацию выполняем после снятия модального окна из композиции:
+    // иначе NavBackStackEntry может остаться в INITIALIZED во время теста/ухода Activity.
+    var pendingEditPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(showCreateDialog, pendingEditPath) {
+        val next = pendingEditPath ?: return@LaunchedEffect
+        if (!showCreateDialog) {
+            pendingEditPath = null
+            nav.navigate(Routes.edit(next)) { launchSingleTop = true }
+        }
+    }
 
     val navigator = remember(nav) {
         object : AppNavigator {
@@ -135,7 +196,43 @@ fun AppRoot() {
         }
     }
 
-    CompositionLocalProvider(LocalNavigator provides navigator) {
+    LaunchedEffect(incomingPath) {
+        val path = incomingPath ?: return@LaunchedEffect
+        onIncomingConsumed()
+        navigator.openFile(FileEntry.from(File(path)))
+    }
+
+    // Only a stable signed OTA release can trigger a quiet daily update reminder.
+    var pendingUpdate by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(tvUi) {
+        if (!tvUi) return@LaunchedEffect
+        val prefs = context.getSharedPreferences("pfm-ota", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val day = 24L * 60L * 60L * 1000L
+        if (now - prefs.getLong("lastChecked", 0L) > day) {
+            runCatching { OtaUpdater(context.applicationContext).latest() }.onSuccess { available ->
+                prefs.edit().putLong("lastChecked", now).apply()
+                if (available != null) pendingUpdate = available.version
+            }
+        }
+    }
+    if (tvUi && pendingUpdate != null) {
+        AlertDialog(
+            onDismissRequest = { pendingUpdate = null },
+            title = { Text("Обновление «Мои файлы»") },
+            text = { Text("Доступна новая версия: ${pendingUpdate}") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingUpdate = null
+                    nav.navigate(Routes.UPDATES) { launchSingleTop = true }
+                }) { Text("Обновить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUpdate = null }) { Text("Позже") }
+            },
+        )
+    }
+    CompositionLocalProvider(LocalNavigator provides navigator, LocalCreateDialog provides openCreateDialog) {
         io.personal.filemanager.ui.transfer.TransferApprovalDialog()
         FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {
             Scaffold(
@@ -144,18 +241,22 @@ fun AppRoot() {
                 bottomBar = {
                     val tabs = config?.tabs
                     if (showBar && tabs != null) {
-                        BottomTabBar(tabs = tabs, current = currentSection, onSelect = { id -> selectTab(nav, id) })
+                        BottomTabBar(
+                            tabs = tabs, current = currentSection,
+                            onSelect = { id -> selectTab(nav, id) },
+                            onCreateRecent = openCreateDialog,
+                        )
                     }
                 },
             ) { inner ->
                 NavHost(
                     navController = nav,
                     startDestination = Routes.HOME,
-                    // Стандартное проявление навигации длится 0,7 с и ощущается как загрузка — экраны меняются сразу.
-                    enterTransition = { EnterTransition.None },
-                    exitTransition = { ExitTransition.None },
-                    popEnterTransition = { EnterTransition.None },
-                    popExitTransition = { ExitTransition.None },
+                    // Короткий cross-fade: переход остаётся быстрым, но не выглядит резким.
+                    enterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
+                    exitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
+                    popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
                     modifier = Modifier
                         .padding(inner)
                         .consumeWindowInsets(inner),
@@ -169,6 +270,10 @@ fun AppRoot() {
                         SectionScreen(id)
                     }
                     composable(Routes.SEARCH) { SearchScreen() }
+                    composable(
+                        Routes.EDIT,
+                        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    ) { entry -> TextViewerScreen(entry.arguments?.getString("path").orEmpty(), autoEdit = true) }
                     composable(
                         Routes.IMAGE,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
@@ -185,6 +290,8 @@ fun AppRoot() {
                         Routes.AUDIO,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> AudioPlayerScreen(entry.arguments?.getString("path").orEmpty()) }
+                    composable(Routes.SETTINGS) { AppSettingsScreen() }
+                    composable(Routes.UPDATES) { UpdateScreen() }
                     composable(Routes.SETTINGS_TILES) { TileSettingsScreen() }
                     composable(Routes.SETTINGS_TABS) { TabSettingsScreen() }
                     composable(Routes.TRASH) { TrashScreen() }
@@ -204,6 +311,8 @@ fun AppRoot() {
                         BrowserScreen(title = File(path).name.ifEmpty { path }, rootPath = path)
                     }
                     composable(Routes.BACKUP) { BackupScreen() }
+                    composable(Routes.ANALYZER) { AnalyzerScreen() }
+                    composable(Routes.VAULT) { VaultScreen() }
                     composable(
                         Routes.PDF,
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
@@ -213,6 +322,25 @@ fun AppRoot() {
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry -> ApkScreen(entry.arguments?.getString("path").orEmpty()) }
                 }
+            }
+            if (showCreateDialog) {
+                QuickCreateDialog(
+                    initialFolder = container.storage.downloadsPath,
+                    rootFolder = container.storage.rootPath,
+                    downloadsFolder = container.storage.downloadsPath,
+                    onDismiss = { showCreateDialog = false },
+                    onCreate = { folder, isFolder, name ->
+                        withContext(Dispatchers.IO) {
+                            if (isFolder) container.fileSystem.createFolder(folder, name)
+                            else container.fileSystem.prepareFile(folder, name)
+                        }
+                    },
+                    onCreated = { created ->
+                        if (created.isDirectory) container.operations.notify("Папка создана")
+                        else container.operations.notify("Файл будет создан после сохранения текста")
+                        if (!created.isDirectory) pendingEditPath = created.path
+                    },
+                )
             }
         }
     }
@@ -241,38 +369,213 @@ private fun SectionScreen(id: SectionId) {
 /** Вкладка «Файлы» — главный экран «Мои файлы»; остальные — разделы. Назад с вкладки ведёт на главную. */
 private fun selectTab(nav: NavHostController, id: SectionId) {
     if (id == SectionId.FILES) {
-        nav.popBackStack(Routes.HOME, inclusive = false)
+        if (nav.currentDestination?.route != Routes.HOME) nav.popBackStack(Routes.HOME, inclusive = false)
         return
     }
+    if (nav.currentDestination?.route == Routes.SECTION &&
+        nav.currentBackStackEntry?.arguments?.getString("id") == id.name) return
     nav.navigate(Routes.section(id)) {
         popUpTo(Routes.HOME)
         launchSingleTop = true
     }
 }
 
+/** Compact navigation with a hard-bounded row and Android system-bar spacing. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun BottomTabBar(tabs: List<TabConfig>, current: SectionId?, onSelect: (SectionId) -> Unit) {
-    NavigationBar(containerColor = AppColors.Surface, tonalElevation = 0.dp) {
-        tabs.forEach { tab ->
-            val id = SectionId.fromKey(tab.id) ?: return@forEach
-            val selected = id == current
-            val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onSelect(id) },
-                icon = { Icon(IconCatalog.of(tab.icon), contentDescription = null, tint = color) },
-                label = {
-                    Text(
-                        id.title,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = color,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Visible,
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent),
-            )
+internal fun BottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit = {},
+    onCreateRecent: () -> Unit = {},
+) {
+    if (!isTelevisionUi()) {
+        OriginalTouchBottomTabBar(tabs, current, onSelect, onCreateRecent)
+        return
+    }
+    TvBottomTabBar(tabs, current, onSelect, onCreateRecent)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun OriginalTouchBottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit = {},
+    onCreateRecent: () -> Unit = {},
+) {
+    // Do not use weighted Columns as children of Material3 NavigationBar:
+    // its internal measurement may allow them to occupy the entire Scaffold.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppColors.Surface)
+            .navigationBarsPadding(),
+    ) {
+        HorizontalDivider(thickness = 1.dp, color = AppColors.CardBorder.copy(alpha = 0.6f))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            tabs.forEach { tab ->
+                val id = SectionId.fromKey(tab.id) ?: return@forEach
+                val selected = id == current
+                val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
+                var createMenu by remember(id) { mutableStateOf(false) }
+
+                Box(modifier = Modifier.weight(1f).height(70.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("bottom-tab-${id.name}")
+                            .clip(RoundedCornerShape(16.dp))
+                            .combinedClickable(
+                                onClick = { onSelect(id) },
+                                onLongClick = if (id == SectionId.RECENT) {
+                                    { createMenu = true }
+                                } else null,
+                                onLongClickLabel = if (id == SectionId.RECENT) "Создать файл или папку" else null,
+                            )
+                            .semantics { role = Role.Tab; this.selected = selected },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(58.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(17.dp))
+                                .background(if (selected) color.copy(alpha = 0.17f) else Color.Transparent),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                IconCatalog.of(tab.icon),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = color,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            id.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = color,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    if (id == SectionId.RECENT) {
+                        DropdownMenu(
+                            expanded = createMenu,
+                            onDismissRequest = { createMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Создать файл или папку") },
+                                onClick = {
+                                    createMenu = false
+                                    onCreateRecent()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Remote-only navigation remains precisely as in the verified TV build. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TvBottomTabBar(
+    tabs: List<TabConfig>,
+    current: SectionId?,
+    onSelect: (SectionId) -> Unit,
+    onCreateRecent: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppColors.Surface)
+            .navigationBarsPadding(),
+    ) {
+        HorizontalDivider(thickness = 1.dp, color = AppColors.CardBorder.copy(alpha = 0.6f))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            tabs.forEach { tab ->
+                val id = SectionId.fromKey(tab.id) ?: return@forEach
+                val selected = id == current
+                val color = if (selected) AccentColors.of(tab.color) else AppColors.TextSecondary
+                var createMenu by remember(id) { mutableStateOf(false) }
+                var focused by remember(id) { mutableStateOf(false) }
+
+                Box(modifier = Modifier.weight(1f).height(70.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("bottom-tab-${id.name}")
+                            .onFocusChanged { focused = it.isFocused }
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(16.dp))
+                            .combinedClickable(
+                                onClick = { onSelect(id) },
+                                onLongClick = if (id == SectionId.RECENT) {
+                                    { createMenu = true }
+                                } else null,
+                                onLongClickLabel = if (id == SectionId.RECENT) "Создать файл или папку" else null,
+                            )
+                            .semantics { role = Role.Tab; this.selected = selected },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(58.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(17.dp))
+                                .background(if (selected) color.copy(alpha = 0.17f) else Color.Transparent),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                IconCatalog.of(tab.icon),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = color,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            id.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = color,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    if (id == SectionId.RECENT) {
+                        DropdownMenu(
+                            expanded = createMenu,
+                            onDismissRequest = { createMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Создать файл или папку") },
+                                onClick = {
+                                    createMenu = false
+                                    onCreateRecent()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -55,6 +55,7 @@ import io.personal.filemanager.data.ops.FileOperations
 import io.personal.filemanager.data.ops.RenameResult
 import io.personal.filemanager.data.ops.TransferMode
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.card
@@ -83,12 +84,12 @@ fun FileOpsHost(
     val operations = appContainer().operations
     val clipboard by operations.clipboard.collectAsStateWithLifecycle()
     val running by operations.running.collectAsStateWithLifecycle()
+    val uiConfig by appContainer().settings.uiConfig.collectAsStateWithLifecycle(initialValue = UiConfig.defaults())
     val scope = rememberCoroutineScope()
 
     var currentFolder by remember { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<FileEntry?>(null) }
     var deleteTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
-    var permanentTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
     var conflict by remember { mutableStateOf<Pair<String, List<String>>?>(null) }
     var compressTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
 
@@ -147,7 +148,10 @@ fun FileOpsHost(
                             .padding(14.dp),
                     ) {
                         val p = op.progress
-                        val known = p != null && p.totalBytes > 0
+                        val known = p != null && (p.totalBytes > 0 || p.totalItems > 0)
+                        val fraction = if (p == null) 0f else if (p.totalBytes > 0) p.fraction
+                            else if (p.totalItems > 0) (p.doneItems.toFloat() / p.totalItems).coerceIn(0f, 1f)
+                            else 0f
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 op.title,
@@ -157,7 +161,7 @@ fun FileOpsHost(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
-                            if (known) Text("${(p!!.fraction * 100).toInt()}%", style = MaterialTheme.typography.titleSmall, color = AppColors.TextPrimary)
+                            if (known) Text("${(fraction * 100).toInt()}%", style = MaterialTheme.typography.titleSmall, color = AppColors.TextPrimary)
                         }
                         p?.current?.takeIf { it.isNotEmpty() }?.let {
                             Text(
@@ -170,9 +174,16 @@ fun FileOpsHost(
                         }
                         Spacer(Modifier.height(8.dp))
                         if (known) {
-                            LinearProgressIndicator(progress = { p!!.fraction }, modifier = Modifier.fillMaxWidth())
+                            LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                         } else {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        if (p != null && p.totalBytes == 0L && p.totalItems > 0) {
+                            Text(
+                                "Обработано: ${p.doneItems} из ${p.totalItems}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         if (p != null && p.doneBytes > 0) {
                             val seconds = (android.os.SystemClock.elapsedRealtime() - op.startedAt).coerceAtLeast(1L) / 1000.0
@@ -246,52 +257,41 @@ fun FileOpsHost(
     }
 
     deleteTargets?.let { targets ->
-        val trashable = targets.all { FileOperations.defaultVolumeRoot(File(it.path)) != null && !operations.trash.isInTrash(File(it.path)) }
+        val trashable = uiConfig.trashEnabled && targets.all {
+            FileOperations.defaultVolumeRoot(File(it.path)) != null &&
+                !operations.trash.isInTrash(File(it.path))
+        }
+        val count = targets.size
         AlertDialog(
             onDismissRequest = { deleteTargets = null },
-            title = { Text(if (trashable) "Переместить в корзину?" else "Удалить безвозвратно?") },
+            title = { Text(if (count == 1) "Удалить файл?" else "Удалить $count файлов?") },
             text = {
-                TargetsList(
-                    targets,
-                    if (trashable) {
-                        "Восстановить можно в «Корзине» (меню ⋮ на главной)."
-                    } else {
-                        "Для этого места корзина недоступна — удаление нельзя будет отменить."
-                    },
+                Text(
+                    (if (count == 1) "«${targets.first().name}»" else "Выбрано: $count объектов") +
+                        if (trashable) "\nВ корзине файлы можно восстановить. Безвозвратное удаление отменить нельзя."
+                        else "\nБезвозвратное удаление нельзя отменить.",
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    deleteTargets = null
-                    if (trashable) operations.moveToTrash(targets.map { it.path }) else permanentTargets = targets
-                }) { Text(if (trashable) "В корзину" else "Продолжить…") }
-            },
-            dismissButton = {
-                Row {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        deleteTargets = null
+                        operations.deletePermanently(targets.map { it.path })
+                    }) {
+                        Text("Удалить навсегда", color = MaterialTheme.colorScheme.error)
+                    }
                     if (trashable) {
-                        TextButton(onClick = { deleteTargets = null; permanentTargets = targets }) {
-                            Text("Удалить навсегда…", color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = {
+                            deleteTargets = null
+                            operations.moveToTrash(targets.map { it.path })
+                        }) {
+                            Text("В корзину", color = AppColors.Accent)
                         }
                     }
-                    TextButton(onClick = { deleteTargets = null }) { Text("Отмена") }
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        )
-    }
-
-    permanentTargets?.let { targets ->
-        AlertDialog(
-            onDismissRequest = { permanentTargets = null },
-            title = { Text("Удалить без возможности восстановления?") },
-            text = { TargetsList(targets, "Это действие нельзя отменить.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    permanentTargets = null
-                    operations.deletePermanently(targets.map { it.path })
-                }) { Text("Удалить навсегда", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { permanentTargets = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { deleteTargets = null }) { Text("Отмена") } },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         )
     }
@@ -323,32 +323,6 @@ fun FileOpsHost(
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         )
-    }
-}
-
-/** Какие именно файлы будут удалены: имена (первые 12) и остаток, затем пояснение. */
-@Composable
-private fun TargetsList(targets: List<FileEntry>, note: String) {
-    val shown = 12
-    Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-        Text(
-            if (targets.size == 1) "Выбран 1 объект:" else "Выбрано: ${pluralRu(targets.size, "объект", "объекта", "объектов")}",
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Spacer(Modifier.height(6.dp))
-        targets.take(shown).forEach { t ->
-            Text(
-                "• " + t.name + if (t.isDirectory) " (папка)" else "",
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (targets.size > shown) {
-            Text("…и ещё ${targets.size - shown}", style = MaterialTheme.typography.bodyMedium)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(note, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

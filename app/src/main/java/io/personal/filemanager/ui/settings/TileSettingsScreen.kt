@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import io.personal.filemanager.data.settings.TILES_PER_ROW_OPTIONS
 import io.personal.filemanager.data.settings.TILES_PER_ROW_AUTO
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -80,6 +81,11 @@ import kotlinx.coroutines.launch
 class TileSettingsViewModel(private val container: AppContainer) : ViewModel() {
     private val _tiles = MutableStateFlow<List<TileConfig>?>(null)
     val tiles: StateFlow<List<TileConfig>?> = _tiles.asStateFlow()
+    val showTrashShortcut: StateFlow<Boolean> = container.settings.uiConfig.map { it.showTrashShortcut }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    fun setTrashShortcut(enabled: Boolean) {
+        viewModelScope.launch { container.settings.updateUiConfig { it.copy(showTrashShortcut = enabled) } }
+    }
     val tilesPerRow: StateFlow<Int> = container.settings.uiConfig.map { it.tilesPerRow }
         .stateIn(viewModelScope, SharingStarted.Eagerly, TILES_PER_ROW_AUTO)
 
@@ -112,6 +118,7 @@ fun TileSettingsScreen() {
     val vm = appViewModel { TileSettingsViewModel(it) }
     val tiles by vm.tiles.collectAsStateWithLifecycle()
     val perRow by vm.tilesPerRow.collectAsStateWithLifecycle()
+    val showTrashShortcut by vm.showTrashShortcut.collectAsStateWithLifecycle()
     TileSettingsContent(
         tiles,
         onMove = vm::move,
@@ -119,6 +126,8 @@ fun TileSettingsScreen() {
         onReset = vm::reset,
         tilesPerRow = perRow,
         onTilesPerRow = vm::setTilesPerRow,
+        showTrashShortcut = showTrashShortcut,
+        onTrashShortcut = vm::setTrashShortcut,
     )
 }
 
@@ -131,6 +140,8 @@ fun TileSettingsContent(
     onReset: () -> Unit,
     tilesPerRow: Int = TILES_PER_ROW_AUTO,
     onTilesPerRow: ((Int) -> Unit)? = null,
+    showTrashShortcut: Boolean = true,
+    onTrashShortcut: ((Boolean) -> Unit)? = null,
 ) {
     val navigator = LocalNavigator.current
     var editing by remember { mutableStateOf<String?>(null) }
@@ -195,6 +206,21 @@ fun TileSettingsContent(
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
+            if (onTrashShortcut != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Показывать корзину в меню ⋮", style = MaterialTheme.typography.titleSmall)
+                        Text("Скрывает пункт меню, но не удаляет содержимое корзины и не отключает безопасное удаление.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = showTrashShortcut, onCheckedChange = onTrashShortcut)
+                }
+            }
+            TextButton(onClick = { navigator.open(io.personal.filemanager.ui.Routes.TRASH) },
+                modifier = Modifier.padding(horizontal = 16.dp)) { Text("Открыть корзину") }
             Spacer(Modifier.height(8.dp))
             ReorderableColumn(
                 items = list,

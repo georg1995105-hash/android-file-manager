@@ -2,6 +2,8 @@ package io.personal.filemanager.ui.personal
 
 import io.personal.filemanager.ui.components.tapClickable
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -50,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -67,6 +70,7 @@ import io.personal.filemanager.ui.LocalNavigator
 import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
+import io.personal.filemanager.ui.viewer.insertAtSelection
 import io.personal.filemanager.ui.components.EmptyState
 import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.theme.AppColors
@@ -261,14 +265,18 @@ fun NoteEditorScreen(noteId: Long) {
     val state by vm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var title by rememberSaveable { mutableStateOf<String?>(null) }
-    var body by rememberSaveable { mutableStateOf<String?>(null) }
+    // Сохраняем и текст, и позицию курсора/выделение при повороте экрана.
+    // Текст заметки хранится в ViewModel/БД: не кладём мегабайты в Android Bundle
+    // (иначе возможен TransactionTooLargeException при повороте).
+    var bodyValue by remember { mutableStateOf(TextFieldValue("")) }
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.loaded) {
-        if (state.loaded && title == null) {
-            title = vm.title
-            body = vm.body
+        if (state.loaded) {
+            if (title == null) title = vm.title
+            // При пересоздании Activity берём актуальное значение из ViewModel.
+            bodyValue = TextFieldValue(vm.body)
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { vm.flush() }
@@ -326,8 +334,8 @@ fun NoteEditorScreen(noteId: Long) {
             modifier = Modifier.fillMaxWidth(),
         )
         TextField(
-            value = body.orEmpty(),
-            onValueChange = { body = it; vm.edit(newBody = it) },
+            value = bodyValue,
+            onValueChange = { bodyValue = it; vm.edit(newBody = it.text) },
             placeholder = { Text("Текст заметки") },
             textStyle = MaterialTheme.typography.bodyLarge,
             colors = fieldColors,
@@ -335,7 +343,40 @@ fun NoteEditorScreen(noteId: Long) {
                 .fillMaxWidth()
                 .weight(1f),
         )
-        Spacer(Modifier.navigationBarsPadding())
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
+        ) {
+            TextButton(onClick = {
+                val pasted = try {
+                    context.getSystemService(ClipboardManager::class.java)
+                        ?.primaryClip?.let { clip ->
+                            if (clip.itemCount == 0) null
+                            else clip.getItemAt(0).coerceToText(context)?.toString()
+                        }
+                } catch (_: Exception) { null }
+                if (pasted == null) {
+                    FileActions.toast(context, "В буфере обмена нет текста")
+                } else {
+                    val edited = insertAtSelection(bodyValue, pasted)
+                    bodyValue = edited
+                    vm.edit(newBody = edited.text)
+                }
+            }, modifier = Modifier.weight(1f)) { Text("Вставить") }
+            TextButton(onClick = {
+                val fullText = (if (title.isNullOrBlank()) "" else "# " + title + "\n\n") +
+                    bodyValue.text
+                try {
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                        ?: error("Буфер обмена недоступен")
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Заметка", fullText))
+                    FileActions.toast(context, "Текст скопирован")
+                } catch (_: Exception) {
+                    FileActions.toast(context, "Не удалось скопировать. Используй «Поделиться текстом».")
+                }
+            }, modifier = Modifier.weight(1f)) { Text("Копировать всё") }
+        }
     }
 
     if (confirmDelete) {

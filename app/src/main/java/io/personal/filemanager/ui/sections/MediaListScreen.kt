@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -44,6 +45,7 @@ import io.personal.filemanager.data.MediaRepository
 import io.personal.filemanager.data.MediaSort
 import io.personal.filemanager.data.settings.RecentSort
 import io.personal.filemanager.ui.LocalNavigator
+import io.personal.filemanager.ui.LocalCreateDialog
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.appViewModel
 import io.personal.filemanager.ui.components.AllFilesAccessRequired
@@ -55,6 +57,7 @@ import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.components.rememberAllFilesAccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -82,8 +85,15 @@ class MediaListViewModel(private val container: AppContainer, private val catego
     )
 
     private var job: Job? = null
+    private var lastRefreshAt = 0L
+    private var generation = 0
 
-    fun refresh() {
+    fun refresh(force: Boolean = false) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        // Coalesce MediaStore reads when quickly switching between bottom tabs.
+        if (!force && now - lastRefreshAt < 700L) return
+        lastRefreshAt = now
+        val request = ++generation
         job?.cancel()
         job = viewModelScope.launch(Dispatchers.IO) {
             if (!container.storage.hasAllFilesAccess()) {
@@ -91,7 +101,9 @@ class MediaListViewModel(private val container: AppContainer, private val catego
                 return@launch
             }
             val sort = MediaSort.valueOf(container.settings.mediaSort(category.name).first().name)
-            val result = runCatching { container.media.list(category, sort) }
+            val limit = if (category == MediaCategory.AUDIO) MediaRepository.AUDIO_LIMIT else MediaRepository.DEFAULT_LIMIT
+            val result = runCatching { container.media.list(category, sort, limit = limit) }
+            if (request != generation || !kotlinx.coroutines.currentCoroutineContext().isActive) return@launch
             _state.update {
                 MediaListState(
                     loading = false,
@@ -105,7 +117,7 @@ class MediaListViewModel(private val container: AppContainer, private val catego
     fun setSort(sort: RecentSort) {
         viewModelScope.launch {
             container.settings.setMediaSort(category.name, sort)
-            refresh()
+            refresh(force = true)
         }
     }
 }
@@ -114,18 +126,20 @@ class MediaListViewModel(private val container: AppContainer, private val catego
 @Composable
 fun MediaListScreen(section: SectionId, category: MediaCategory) {
     val navigator = LocalNavigator.current
+    val createFile = LocalCreateDialog.current
     val hasAccess = rememberAllFilesAccess()
     val vm = mediaListViewModel(category)
     val state by vm.state.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
     var sortMenu by remember { mutableStateOf(false) }
+    var actionsMenu by remember { mutableStateOf(false) }
     val view = rememberFileView(category.name)
     val search = rememberListSearch()
 
     val subtitle = when {
         !hasAccess || state.loading -> null
         else -> "${sort.title} • ${pluralRu(state.entries.size, "файл", "файла", "файлов")}" +
-            if (state.entries.size >= MediaRepository.DEFAULT_LIMIT) " (первые)" else ""
+            if (state.entries.size >= (if (category == MediaCategory.AUDIO) MediaRepository.AUDIO_LIMIT else MediaRepository.DEFAULT_LIMIT)) " (первые)" else ""
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -148,6 +162,15 @@ fun MediaListScreen(section: SectionId, category: MediaCategory) {
                                 onClick = { sortMenu = false; vm.setSort(s) },
                             )
                         }
+                    }
+                    IconButton(onClick = { actionsMenu = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
+                    }
+                    DropdownMenu(expanded = actionsMenu, onDismissRequest = { actionsMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Создать файл или папку") },
+                            onClick = { actionsMenu = false; createFile() },
+                        )
                     }
                 }
             },
@@ -172,12 +195,11 @@ fun MediaListBody(
     val hasAccess = rememberAllFilesAccess()
     val state by vm.state.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
-    val isRecent = category == MediaCategory.RECENT
-    val shown = if (search == null) state.entries else state.entries.filter { search.matches(it.name) }
+      val shown = if (search == null) state.entries else state.entries.filter { search.matches(it.name) }
 
     RefreshWhileVisible(vm.changes) { vm.refresh() }
     val opsVersion by appContainer().operations.version.collectAsStateWithLifecycle()
-    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.refresh() }
+    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.refresh(force = true) }
 
     when {
         !hasAccess -> AllFilesAccessRequired()
@@ -188,16 +210,11 @@ fun MediaListBody(
         else -> FilesPane(
             entries = shown,
             view = view,
+            galleryMode = category == MediaCategory.PHOTOS || category == MediaCategory.VIDEOS,
             // При сортировке по появлению под файлом дата добавления в память; иначе — дата изменения.
             dateShown = if (sort == RecentSort.ADDED) DateShown.ADDED else DateShown.MODIFIED,
-            headerText = if (!isRecent || sort == RecentSort.SIZE || sort == RecentSort.NAME) {
-                null
-            } else if (sort == RecentSort.ADDED) {
-                "Свежие сверху по дате появления файла в памяти телефона. " +
-                    "Android не хранит точную дату скачивания для каждого файла."
-            } else {
-                "Свежие сверху по дате последнего изменения файла."
-            },
+            // Date mode is already visible in the subtitle. Keep the grid clean and readable.
+            headerText = null,
         )
     }
 }

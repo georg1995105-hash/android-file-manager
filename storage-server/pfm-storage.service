@@ -1,0 +1,21 @@
+[Unit]
+Description=Personal File Manager encrypted storage relay
+After=network-online.target
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=pfm-storage
+StateDirectoryMode=0700
+EnvironmentFile=/etc/pfm-storage.env
+ExecStart=/usr/bin/python3 /opt/pfm-storage/server.py --data /var/lib/pfm-storage --quota-gib 10
+Restart=on-failure
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+UMask=0077
+[Install]
+WantedBy=multi-user.target

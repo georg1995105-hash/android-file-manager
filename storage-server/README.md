@@ -1,0 +1,11 @@
+# Personal encrypted storage relay (development)
+
+Independent single-owner service, not part of VPN infrastructure. Python 3.11+ standard library. Run tests: cd storage-server && python3 -m unittest -v.
+
+The service binds loopback only. Deploy on a specifically allocated online host behind a trusted HTTPS reverse proxy (e.g. Caddy). No deployment is implied by this repository. Set a real HTTPS hostname, provision disk/quota and firewall, set up TLS and backup policy, rate-limit unauthenticated pairing requests at the edge. Never serve the data directory as web content.
+
+Create a random 32-byte setup code with openssl rand -hex 32, store only SHA-256 of its lowercase ASCII hex representation as PFM_BOOTSTRAP_SHA256 in /etc/pfm-storage.env (root mode 0600). Keep the code private for initial phone enrollment. Copy server.py to /opt/pfm-storage and install the provided unit. The bootstrap is single-use; do not reset the database to recover access. Reserve a separate host or isolated storage service; no production VPN changes.
+
+The relay stores encrypted metadata and ciphertext chunks, with per-device bearer tokens hashed on disk. Pairing keys and file keys are generated/used on clients; the relay only receives the hash of a random pairing secret and the wrapped vault key. Size, time, device labels and access patterns are not hidden. AES-GCM per-object/chunk authentication is enforced by the client, not by the relay. Server-side revocation prevents future authorized downloads but cannot revoke data already downloaded or knowledge of the shared key; rotate keys for that threat. Keep paired-device recovery material private. HTTPS is mandatory for real clients. Do not publish a server address, bootstrap code, tokens, or keys to GitHub.
+
+API: /v1/bootstrap, /v1/pair, /v1/pair/{id}/approve, /claim, /v1/devices, /v1/files and /v1/files/{id}/{chunk|finish}. Completed objects are available to paired devices even if all sender devices are offline. Partial objects are invisible to other devices; retry resumes by acknowledged chunk index. Quota includes ciphertext overhead; no automatic deletion of completed files. Deployment and physical Android device end-to-end testing are release gates.

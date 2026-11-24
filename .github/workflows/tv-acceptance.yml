@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/compact-create-files-20261110
+      - feature/storage-first-20261124
     paths:
       - 'app/**'
       - 'tools/**'

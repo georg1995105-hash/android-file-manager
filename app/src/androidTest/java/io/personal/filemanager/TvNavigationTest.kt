@@ -59,38 +59,37 @@ class TvNavigationTest {
             },
         )
         rule.waitUntil(20_000) {
-            rule.onAllNodesWithTag("bottom-tab-RECENT").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithTag("hub-tab-LINKS").fetchSemanticsNodes().isNotEmpty()
         }
-        remoteCenterOnTag("bottom-tab-RECENT")
-        rule.onNodeWithTag("bottom-tab-RECENT").assertIsSelected()
-        remoteCenterOnTag("bottom-tab-FILES")
-        rule.onNodeWithTag("bottom-tab-FILES").assertIsSelected()
+        remoteCenterOnTag("hub-tab-LINKS")
+        rule.onNodeWithTag("hub-tab-LINKS").assertIsSelected()
+        remoteCenterOnTag("hub-tab-STORAGE")
+        rule.onNodeWithTag("hub-tab-STORAGE").assertIsSelected()
     }
 
     /** Verify actual spatial D-pad focus traversal; direct RequestFocus would hide broken TV navigation. */
-    @Test fun tvDpadRightMovesFocusBetweenTabs() {
+    @Test fun tvDpadDownMovesFocusBetweenTabs() {
         InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         rule.waitUntil(20_000) {
-            rule.onAllNodesWithTag("bottom-tab-RECENT").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithTag("hub-tab-LINKS").fetchSemanticsNodes().isNotEmpty()
         }
-        val first = rule.onNodeWithTag("bottom-tab-RECENT")
+        val first = rule.onNodeWithTag("hub-tab-STORAGE")
         first.performSemanticsAction(SemanticsActions.RequestFocus)
         first.assertIsFocused()
-        first.performKeyInput { pressKey(Key.DirectionRight) }
-        rule.onNodeWithTag("bottom-tab-FILES").assertIsFocused()
-        rule.onNodeWithTag("bottom-tab-FILES").performKeyInput {
+        first.performKeyInput { pressKey(Key.DirectionDown) }
+        rule.onNodeWithTag("hub-tab-TRANSFER").assertIsFocused()
+        rule.onNodeWithTag("hub-tab-TRANSFER").performKeyInput {
             pressKey(Key.DirectionCenter)
         }
-        rule.onNodeWithTag("bottom-tab-FILES").assertIsSelected()
+        rule.onNodeWithTag("hub-tab-TRANSFER").assertIsSelected()
     }
 
     @Test fun tvSettingsAndUpdateControlsRespondToRemote() {
         InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         rule.waitUntil(20_000) {
-            rule.onAllNodesWithContentDescription("Меню").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithTag("hub-tab-SETTINGS").fetchSemanticsNodes().isNotEmpty()
         }
-        remoteCenterOnDescription("Меню")
-        remoteCenterOnText("Настройки")
+        remoteCenterOnTag("hub-tab-SETTINGS")
         rule.onNodeWithText("Версия и обновления").assertExists()
         remoteCenterOnText("Версия и обновления")
         rule.onNodeWithText("Обновления").assertExists()

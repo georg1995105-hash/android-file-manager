@@ -103,7 +103,7 @@ internal fun HubHome() {
             }.getOrDefault(emptyList())
         }
     }
-    val openReceived = {
+    val openReceived: () -> Unit = {
         val dir = container.transfer.receivedDirectory
         if (dir.isDirectory || dir.mkdirs()) nav.open(Routes.browser(dir.absolutePath))
         else container.operations.notify("Не удалось открыть папку полученных файлов")

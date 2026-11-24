@@ -116,7 +116,7 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
             Text("Google Диск",style=MaterialTheme.typography.titleLarge)
             Text("Ваши файлы хранятся в вашем аккаунте Google. Подключите один и тот же аккаунт на своих устройствах.")
             if(!enabled) {
-                Text("Облачная передача пока не настроена в этой сборке. Передача по Wi-Fi работает без облака.")
+                Text("Google Диск недоступен до регистрации приложения в Google. Используйте передачу по Wi-Fi.")
                 Button(onClick={onSharedConsumed();nav.openSection(io.personal.filemanager.core.SectionId.TRANSFER)}){Text("Передача по Wi-Fi")}
             }else if(token==null) {
                 if(!busy)Button(onClick={if(tv)connectTv()else connectPhone(true)}){Text("Подключить Google Диск")}

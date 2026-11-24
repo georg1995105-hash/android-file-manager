@@ -244,7 +244,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, i
     if (route == Routes.HOME && pendingUpdate != null) {
         AlertDialog(
             onDismissRequest = { pendingUpdate = null },
-            title = { Text("Обновление «Мои файлы»") },
+            title = { Text("Обновление «Передача»") },
             text = { Text("Доступна новая версия: ${pendingUpdate}") },
             confirmButton = {
                 TextButton(onClick = {
@@ -389,7 +389,7 @@ private fun SectionScreen(id: SectionId) {
     }
 }
 
-/** Вкладка «Файлы» — главный экран «Мои файлы»; остальные — разделы. Назад с вкладки ведёт на главную. */
+/** Вкладка «Файлы» — главный экран «Передача»; остальные — разделы. Назад с вкладки ведёт на главную. */
 private fun selectTab(nav: NavHostController, id: SectionId) {
     if (id == SectionId.FILES) {
         if (nav.currentDestination?.route != Routes.HOME) nav.popBackStack(Routes.HOME, inclusive = false)

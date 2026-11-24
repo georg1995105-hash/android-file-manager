@@ -65,7 +65,7 @@ internal fun HubNavigation(current: HubTab?, side: Boolean, onSelect: (HubTab) -
             .statusBarsPadding().navigationBarsPadding().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.padding(8.dp).size(52.dp).clip(RoundedCornerShape(15.dp)).background(Brush.linearGradient(listOf(Color(0xFF276BDB),Color(0xFF123568)))), contentAlignment = Alignment.Center) { Icon(Icons.Filled.SwapHoriz, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
-            Text("Мои файлы", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp))
+            Text("Передача", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp))
             Spacer(Modifier.height(12.dp))
             HubTab.entries.forEach { tab -> HubNavItem(tab, current == tab, true, Modifier.fillMaxWidth(), onSelect) }
         }
@@ -279,7 +279,7 @@ internal fun HubSettings() {
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Настройки", style = MaterialTheme.typography.headlineMedium)
-        HubCard("Версия и обновления", "Мои файлы ${BuildConfig.VERSION_NAME}", Icons.Filled.SystemUpdate, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.UPDATES) }
+        HubCard("Версия и обновления", "Передача ${BuildConfig.VERSION_NAME}", Icons.Filled.SystemUpdate, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.UPDATES) }
         HubCard("Хранилище и устройства", "Подключение и привязка", Icons.Filled.Devices, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.CLOUD) }
         HubCard("Резервные копии", "Сохранить ссылки и настройки", Icons.Filled.Save, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.BACKUP) }
         HubCard("Личный сейф", "Защищённые локальные данные", Icons.Filled.Lock, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.VAULT) }

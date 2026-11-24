@@ -6,3 +6,6 @@ Owner rejected hosting a private relay. Previous prototype was never published a
 - If not configured, cloud screen explicitly reports unavailable. Local features remain operational and can receive signed OTA; do not label cloud as tested.
 - TLS and Google account access protect cloud data; not end-to-end encrypted against Google. Resumable upload retries during active operation; persistence across process death is not implemented.
 - Preserve official package and release certificate; versionCode monotonically increases, publish only from established release branch after tests. User confirms Android installer update; no uninstall.
+
+## 0.13.3 — branding
+Owner requested the launcher name «Передача» and a new bidirectional transfer icon on phone/tablet/TV. Package, signing certificate, file directories, protocol identifiers and OTA artifact naming stay unchanged for backward compatibility. Google Cloud branding should use «Передача».

@@ -58,9 +58,19 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import io.personal.filemanager.ui.hub.HubHome
+import io.personal.filemanager.ui.hub.DriveScreen
+import android.net.Uri
+import io.personal.filemanager.ui.hub.HubSettings
+import io.personal.filemanager.ui.hub.HubNavigation
+import io.personal.filemanager.ui.hub.HubTab
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import io.personal.filemanager.BuildConfig
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -111,20 +121,28 @@ import io.personal.filemanager.ui.viewer.PdfViewerScreen
 import io.personal.filemanager.ui.viewer.findActivity
 
 @Composable
-fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
+fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, incomingShared: List<Uri> = emptyList(), onSharedConsumed: () -> Unit = {}) {
     val nav = rememberNavController()
     val context = LocalContext.current
     val tvUi = isTelevisionUi()
     val container = appContainer()
-    val config by container.settings.uiConfig.collectAsStateWithLifecycle(initialValue = null)
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val currentSection = when (route) {
-        Routes.HOME -> SectionId.FILES
-        Routes.SECTION -> backStack?.arguments?.getString("id")?.let(SectionId::fromKey)
+    val currentTab = when {
+        route == Routes.HOME -> HubTab.STORAGE
+        route == Routes.HUB_SETTINGS -> HubTab.SETTINGS
+        route == Routes.SECTION && backStack?.arguments?.getString("id") == SectionId.TRANSFER.name -> HubTab.TRANSFER
+        route == Routes.SECTION && backStack?.arguments?.getString("id") == SectionId.LINKS.name -> HubTab.LINKS
         else -> null
     }
-    val showBar = route == Routes.HOME || route == Routes.SECTION
+    val showBar = currentTab != null
+    val wide = tvUi || LocalConfiguration.current.screenWidthDp >= 700
+    val selectHub: (HubTab) -> Unit = { tab ->
+        if (tab != currentTab) {
+            if (tab == HubTab.STORAGE) nav.popBackStack(Routes.HOME, false)
+            else nav.navigate(tab.route) { popUpTo(Routes.HOME); launchSingleTop = true }
+        }
+    }
     // «Создать» находится в меню ⋮ контекстных экранов, а не в глобальной FAB.
     var showCreateDialog by remember { mutableStateOf(false) }
     val openCreateDialog = { showCreateDialog = true }
@@ -196,30 +214,37 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
         }
     }
 
+    LaunchedEffect(incomingShared) {
+        if (incomingShared.isNotEmpty()) nav.navigate(Routes.section(SectionId.TRANSFER)) { launchSingleTop = true }
+    }
     LaunchedEffect(incomingPath) {
         val path = incomingPath ?: return@LaunchedEffect
         onIncomingConsumed()
         navigator.openFile(FileEntry.from(File(path)))
     }
 
-    // Only a stable signed OTA release can trigger a quiet daily update reminder.
+    // All device types use the same signed OTA channel; quiet foreground checks, no debug prompts.
     var pendingUpdate by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(tvUi) {
-        if (!tvUi) return@LaunchedEffect
+    var updateResume by remember { mutableStateOf(0) }
+    var lastAttempt by remember { mutableStateOf(0L) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { updateResume++ }
+    LaunchedEffect(updateResume,route) {
+        if (BuildConfig.DEBUG || route != Routes.HOME) return@LaunchedEffect
         val prefs = context.getSharedPreferences("pfm-ota", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        val day = 24L * 60L * 60L * 1000L
-        if (now - prefs.getLong("lastChecked", 0L) > day) {
+        val hour = 60L * 60L * 1000L
+        if (now - prefs.getLong("lastChecked", 0L) >= hour && now - lastAttempt >= 60_000L) {
+            lastAttempt = now
             runCatching { OtaUpdater(context.applicationContext).latest() }.onSuccess { available ->
                 prefs.edit().putLong("lastChecked", now).apply()
                 if (available != null) pendingUpdate = available.version
             }
         }
     }
-    if (tvUi && pendingUpdate != null) {
+    if (route == Routes.HOME && pendingUpdate != null) {
         AlertDialog(
             onDismissRequest = { pendingUpdate = null },
-            title = { Text("Обновление «Мои файлы»") },
+            title = { Text("Обновление «Передача»") },
             text = { Text("Доступна новая версия: ${pendingUpdate}") },
             confirmButton = {
                 TextButton(onClick = {
@@ -234,22 +259,17 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
     }
     CompositionLocalProvider(LocalNavigator provides navigator, LocalCreateDialog provides openCreateDialog) {
         io.personal.filemanager.ui.transfer.TransferApprovalDialog()
-        FileOpsHost(bottomInset = if (showBar) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {
+        FileOpsHost(bottomInset = if (showBar && !wide) 80.dp else 0.dp, extensions = rememberFavoritesExtension()) {
             Scaffold(
                 containerColor = AppColors.Background,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 bottomBar = {
-                    val tabs = config?.tabs
-                    if (showBar && tabs != null) {
-                        BottomTabBar(
-                            tabs = tabs, current = currentSection,
-                            onSelect = { id -> selectTab(nav, id) },
-                            onCreateRecent = openCreateDialog,
-                        )
-                    }
+                    if (showBar && !wide) HubNavigation(currentTab, false, selectHub)
                 },
             ) { inner ->
-                NavHost(
+                Row(Modifier.fillMaxSize().padding(inner).consumeWindowInsets(inner)) {
+                    if (showBar && wide) HubNavigation(currentTab, true, selectHub)
+                    NavHost(
                     navController = nav,
                     startDestination = Routes.HOME,
                     // Короткий cross-fade: переход остаётся быстрым, но не выглядит резким.
@@ -257,17 +277,19 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                     exitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
                     popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 120)) },
                     popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 80)) },
-                    modifier = Modifier
-                        .padding(inner)
-                        .consumeWindowInsets(inner),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                 ) {
-                    composable(Routes.HOME) { HomeScreen() }
+                    composable(Routes.HOME) { HubHome() }
+                    composable(Routes.LOCAL_FILES) { HomeScreen() }
+                    composable(Routes.CLOUD) { DriveScreen(incomingShared, onSharedConsumed) }
+                    composable(Routes.HUB_SETTINGS) { HubSettings() }
                     composable(
                         Routes.SECTION,
                         arguments = listOf(navArgument("id") { type = NavType.StringType }),
                     ) { entry ->
                         val id = entry.arguments?.getString("id")?.let(SectionId::fromKey) ?: SectionId.FILES
-                        SectionScreen(id)
+                        if (id == SectionId.TRANSFER) io.personal.filemanager.ui.transfer.TransferScreen(incomingShared, onSharedConsumed)
+                        else SectionScreen(id)
                     }
                     composable(Routes.SEARCH) { SearchScreen() }
                     composable(
@@ -323,6 +345,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                     ) { entry -> ApkScreen(entry.arguments?.getString("path").orEmpty()) }
                 }
             }
+            }
             if (showCreateDialog) {
                 QuickCreateDialog(
                     initialFolder = container.storage.downloadsPath,
@@ -366,7 +389,7 @@ private fun SectionScreen(id: SectionId) {
     }
 }
 
-/** Вкладка «Файлы» — главный экран «Мои файлы»; остальные — разделы. Назад с вкладки ведёт на главную. */
+/** Вкладка «Файлы» — главный экран «Передача»; остальные — разделы. Назад с вкладки ведёт на главную. */
 private fun selectTab(nav: NavHostController, id: SectionId) {
     if (id == SectionId.FILES) {
         if (nav.currentDestination?.route != Routes.HOME) nav.popBackStack(Routes.HOME, inclusive = false)

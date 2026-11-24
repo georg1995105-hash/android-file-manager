@@ -77,6 +77,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.platform.testTag
+import io.personal.filemanager.ui.components.MediaThumb
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
+import io.personal.filemanager.ui.isTelevisionUi
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -125,6 +141,9 @@ fun MediaViewerScreen(path: String) {
     val context = LocalContext.current
     val view = LocalView.current
     val configuration = LocalConfiguration.current
+    val tv = isTelevisionUi()
+    val remoteSurface=remember{FocusRequester()}
+    val remoteControls=remember{FocusRequester()}
     val activity = remember(context) { context.findActivity() }
     val container = appContainer()
     val vm = appViewModel(key = "media-$path") { MediaViewerViewModel(it, path) }
@@ -188,7 +207,7 @@ fun MediaViewerScreen(path: String) {
     // Ориентация: просмотр фиксирует ту, в которой открыт (без датчика); кнопка поворота меняет её явно.
     // При выходе восстанавливается исходная настройка активности.
     DisposableEffect(activity) {
-        if (activity != null) {
+        if (activity != null && !tv) {
             if (vm.originalOrientation == null) vm.originalOrientation = activity.requestedOrientation
             activity.requestedOrientation = vm.lockedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_LOCKED
         }
@@ -199,7 +218,7 @@ fun MediaViewerScreen(path: String) {
         }
     }
     // Android 16 на больших экранах игнорирует запросы ориентации — кнопка там бесполезна.
-    val canRotate = !(Build.VERSION.SDK_INT >= 36 && configuration.smallestScreenWidthDp >= 600)
+    val canRotate = !tv && !(Build.VERSION.SDK_INT >= 36 && configuration.smallestScreenWidthDp >= 600)
     fun rotate() {
         val landscapeNow = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val target = if (landscapeNow) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -225,7 +244,7 @@ fun MediaViewerScreen(path: String) {
     }
     // Автоскрытие панелей (ТЗ: 2–3 с), пока пользователь не работает с меню, диалогом или ползунком.
     LaunchedEffect(controlsVisible, interaction, holdControls) {
-        if (controlsVisible && !holdControls) {
+        if (!tv && controlsVisible && !holdControls) {
             delay(VIEWER_AUTO_HIDE_MS)
             controlsVisible = false
         }
@@ -256,9 +275,8 @@ fun MediaViewerScreen(path: String) {
         if (video.resumedFromMs > 0) FileActions.toast(context, "Продолжено с ${formatPlaybackTime(video.resumedFromMs)}")
     }
 
-    val controls = (config?.viewerControls ?: UiConfig.defaultViewerControls())
-        .filter { it.visible }
-        .mapNotNull { ViewerControl.fromKey(it.id) }
+    val controls = if(tv) listOf(ViewerControl.PREV,ViewerControl.PLAY_PAUSE,ViewerControl.NEXT)
+        else (config?.viewerControls ?: UiConfig.defaultViewerControls()).filter { it.visible }.mapNotNull { ViewerControl.fromKey(it.id) }
     fun entryOf(p: String) = FileEntry.from(File(p))
     fun goTo(index: Int) {
         if (index in items.indices) scope.launch { pagerState.animateScrollToPage(index) }
@@ -267,13 +285,27 @@ fun MediaViewerScreen(path: String) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .then(if(tv) Modifier.onPreviewKeyEvent { event ->
+                if(event.type != KeyEventType.KeyDown) false
+                else when(event.key) {
+                    Key.MediaPlayPause -> { if(videoActive && video.error==null) {vm.togglePlay();true}else false }
+                    Key.MediaPlay -> { if(videoActive && video.error==null) {vm.play();true}else false }
+                    Key.MediaPause -> { if(videoActive) {vm.pause();true}else false }
+                    Key.MediaNext -> {goTo(currentIndex+1);true}
+                    Key.MediaPrevious -> {goTo(currentIndex-1);true}
+                    Key.MediaFastForward -> { if(videoActive) { vm.seekBy(SEEK_STEP_MS); true } else false }
+                    Key.MediaRewind -> { if(videoActive) { vm.seekBy(-SEEK_STEP_MS); true } else false }
+                    else -> false
+                }
+            } else Modifier),
     ) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             key = { items[it] },
             beyondViewportPageCount = 1,
+            userScrollEnabled = !tv,
         ) { page ->
             val pagePath = items[page]
             if (MediaViewerViewModel.isVideo(pagePath)) {
@@ -299,6 +331,19 @@ fun MediaViewerScreen(path: String) {
             }
         }
 
+        if(tv) {
+            Box(Modifier.fillMaxSize().testTag("tv-media-surface").focusRequester(remoteSurface)
+                .onPreviewKeyEvent { e ->
+                    if(e.type!=KeyEventType.KeyDown) false else when(e.key) {
+                        Key.DirectionLeft -> {goTo(currentIndex-1);true}
+                        Key.DirectionRight -> {goTo(currentIndex+1);true}
+                        Key.DirectionCenter,Key.Enter -> {if(videoActive && video.error==null)vm.togglePlay();true}
+                        Key.DirectionDown -> {remoteControls.requestFocus();true}
+                        else -> false
+                    }
+                }.focusable())
+            LaunchedEffect(Unit){remoteSurface.requestFocus()}
+        }
         seekHint?.let { hint ->
             Text(
                 hint,
@@ -369,6 +414,7 @@ fun MediaViewerScreen(path: String) {
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 if (videoActive && video.error == null) {
+                    if (video.buffering) Text("Загрузка…",color=Color.White,style=MaterialTheme.typography.labelMedium)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             formatPlaybackTime(if (dragging) dragValue.toLong() else position),
@@ -404,7 +450,19 @@ fun MediaViewerScreen(path: String) {
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        controls.forEach { control ->
+                        if(tv) {
+                            ControlButton(Icons.Filled.ChevronLeft,"Предыдущий файл",enabled=currentIndex>0,
+                                modifier=Modifier.focusProperties{up=remoteSurface}) {goTo(currentIndex-1)}
+                            if(videoActive && video.error==null) {
+                                ControlButton(Icons.Filled.FastRewind,"Назад 10 секунд",modifier=Modifier.focusProperties{up=remoteSurface}) {vm.seekBy(-SEEK_STEP_MS)}
+                                ControlButton(if(video.isPlaying)Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                    if(video.isPlaying)"Пауза" else "Воспроизвести",modifier=Modifier.focusRequester(remoteControls).focusProperties{up=remoteSurface}){vm.togglePlay()}
+                                ControlButton(Icons.Filled.FastForward,"Вперёд 10 секунд",modifier=Modifier.focusProperties{up=remoteSurface}){vm.seekBy(SEEK_STEP_MS)}
+                            } else {
+                                ControlButton(Icons.Filled.Info,"Сведения",modifier=Modifier.focusRequester(remoteControls).focusProperties{up=remoteSurface}){detailsFor=entryOf(currentPath)}
+                            }
+                            ControlButton(Icons.Filled.ChevronRight,"Следующий файл",enabled=currentIndex<items.lastIndex,modifier=Modifier.focusProperties{up=remoteSurface}){goTo(currentIndex+1)}
+                        } else controls.forEach { control ->
                             when (control) {
                                 ViewerControl.PLAY_PAUSE -> if (videoActive && video.error == null) {
                                     ControlButton(
@@ -572,8 +630,10 @@ fun MediaViewerScreen(path: String) {
 }
 
 @Composable
-private fun ControlButton(icon: ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled) {
+private fun ControlButton(icon: ImageVector, description: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    IconButton(onClick = onClick, enabled = enabled, modifier = modifier.onFocusChanged { focused = it.isFocused }
+        .border(if (focused) 2.dp else 0.dp, if (focused) Color(0xFF69B1FF) else Color.Transparent, RoundedCornerShape(12.dp))) {
         Icon(icon, contentDescription = description, tint = if (enabled) Color.White else Color.White.copy(alpha = 0.35f))
     }
 }
@@ -599,6 +659,8 @@ private fun VideoPage(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         useController = false
+                        isFocusable = false
+                        descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         setShutterBackgroundColor(AndroidColor.BLACK)
                         player = vm.player
@@ -611,7 +673,7 @@ private fun VideoPage(
         if (!active || !video.firstFrameShown) {
             // Обложка до первого кадра: перелистывание не мигает чёрным.
             AsyncImage(
-                model = File(path),
+                model = MediaThumb.of(FileEntry.from(File(path))),
                 contentDescription = File(path).name,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),

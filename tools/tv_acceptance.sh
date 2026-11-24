@@ -9,9 +9,14 @@ adb install "$TEST_APK"
 if [[ "${API_LEVEL:-30}" -ge 30 ]]; then
   adb shell appops set --uid "$PKG" MANAGE_EXTERNAL_STORAGE allow
 fi
+# Small disposable media fixture for remote playback and thumbnail tests.
+fixture=$(mktemp -d)
+trap 'rm -rf "$fixture"' EXIT
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=320x240:rate=24 -t 4 -c:v libx264 -pix_fmt yuv420p "$fixture/pfm-tv-test.mp4"
+adb push "$fixture/pfm-tv-test.mp4" /sdcard/Download/pfm-tv-test.mp4
 # Catch instrumentation failure even when piped through tee.
 set +e
-adb shell am instrument -w -r -e class "$PKG.TvNavigationTest,$PKG.TransferUiTest,$PKG.TransferIntegrationTest" \
+adb shell am instrument -w -r -e class "$PKG.TvNavigationTest,$PKG.TransferUiTest,$PKG.TransferIntegrationTest,$PKG.TvMediaTest" \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee tv-test.log
 rc=${PIPESTATUS[0]}
 set -e

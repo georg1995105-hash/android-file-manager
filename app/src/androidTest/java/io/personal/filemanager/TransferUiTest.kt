@@ -19,8 +19,9 @@ class TransferUiTest {
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         val launch = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER).setPackage(rule.activity.packageName)
         assertNotNull(rule.activity.packageManager.resolveActivity(launch, 0))
-        rule.waitText("Мои файлы")
-        rule.openTile("Передача")
+        rule.waitUntil(20_000) { rule.onAllNodesWithTag("hub-tab-TRANSFER").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("hub-tab-TRANSFER").performSemanticsAction(SemanticsActions.RequestFocus)
+        rule.onNodeWithTag("hub-tab-TRANSFER").performKeyInput { pressKey(Key.DirectionCenter) }
         // Открытие раздела само включает передачу; дальше выключение и включение — кнопкой OK пульта.
         rule.waitText("Остановить передачу", 15000)
         rule.waitUntil(15_000) {

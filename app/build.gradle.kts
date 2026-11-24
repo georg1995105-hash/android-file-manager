@@ -7,8 +7,14 @@ plugins {
 }
 
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
-val appVersionCode = 47
-val appVersionName = "0.12.32"
+val appVersionCode = 51
+val appVersionName = "0.13.3"
+// Optional Google Drive integration. Android OAuth client is registered by package and SHA-1.
+// TV limited-input credentials identify a public native client, not a confidential server.
+val driveEnabled = providers.environmentVariable("PFM_DRIVE_ENABLED").orElse("false").get() == "true"
+val driveTvId = providers.environmentVariable("PFM_DRIVE_TV_CLIENT_ID").orElse("").get()
+val driveTvSecret = providers.environmentVariable("PFM_DRIVE_TV_CLIENT_SECRET").orElse("").get()
+require(driveTvId.matches(Regex("[A-Za-z0-9._-]*")) && driveTvSecret.matches(Regex("[A-Za-z0-9._-]*")))
 
 // Подпись release: keystore.properties (локально, вне Git) или переменные окружения CI.
 // Ключ и пароли никогда не коммитятся.
@@ -33,6 +39,9 @@ android {
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
+        buildConfigField("boolean", "PFM_DRIVE_ENABLED", driveEnabled.toString())
+        buildConfigField("String", "PFM_DRIVE_TV_CLIENT_ID", "\"$driveTvId\"")
+        buildConfigField("String", "PFM_DRIVE_TV_CLIENT_SECRET", "\"$driveTvSecret\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -97,6 +106,8 @@ android {
 
 dependencies {
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.android.gms:play-services-auth:21.4.0")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

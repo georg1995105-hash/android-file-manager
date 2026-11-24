@@ -161,6 +161,13 @@ class MediaViewerViewModel(private val container: AppContainer, startPath: Strin
         _video.value = VideoState()
     }
 
+    fun play() {
+        val p=playerOrNull ?: return
+        if(_video.value.error!=null)return
+        if(p.playbackState==Player.STATE_ENDED)p.seekTo(0)
+        p.play()
+    }
+
     fun togglePlay() {
         val p = playerOrNull ?: return
         if (_video.value.error != null) return

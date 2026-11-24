@@ -33,6 +33,9 @@ jobs:
     env:
       # Release-подпись включается, только когда владелец добавил секреты (см. docs/SIGNING.md).
       HAS_RELEASE_KEY: ${{ secrets.PFM_KEYSTORE_B64 != '' }}
+      PFM_DRIVE_ENABLED: ${{ vars.PFM_DRIVE_ENABLED || 'false' }}
+      PFM_DRIVE_TV_CLIENT_ID: ${{ vars.PFM_DRIVE_TV_CLIENT_ID }}
+      PFM_DRIVE_TV_CLIENT_SECRET: ${{ secrets.PFM_DRIVE_TV_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -160,6 +163,26 @@ jobs:
           path: dist/
           retention-days: 30
 
+      - name: Prepare signed OTA upgrade acceptance
+        if: env.HAS_RELEASE_KEY == 'true' && github.ref == 'refs/heads/feature/compact-create-files-20261110' && github.event_name == 'push'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/boost /opt/hostedtoolcache/CodeQL || true
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify signed in-place upgrade before OTA publication
+        if: env.HAS_RELEASE_KEY == 'true' && github.ref == 'refs/heads/feature/compact-create-files-20261110' && github.event_name == 'push'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86
+          target: android-tv
+          profile: tv_1080p
+          disk-size: 4096M
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash tools/verify_ota_candidate.sh
       # The signed RELEASE is also published to a plain Git branch.
       # This avoids GitHub Release API permission failures and gives Android a stable direct APK URL.
       - name: Publish verified signed APK to direct-download branch
@@ -176,6 +199,7 @@ jobs:
           import json
           from pathlib import Path
           records=json.loads(Path('RELEASE_IDENTITY.json').read_text())
+          # Local-only builds are valid; optional cloud requires registered OAuth clients.
           assert len(records) == 1
           r=records[0]
           assert r['package']=='io.personal.filemanager'

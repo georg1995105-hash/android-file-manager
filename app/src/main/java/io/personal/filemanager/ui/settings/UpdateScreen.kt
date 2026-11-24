@@ -64,7 +64,7 @@ fun UpdateScreen() {
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Мои файлы ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleLarge)
+            Text("Передача ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleLarge)
             Text(message, style = MaterialTheme.typography.bodyLarge)
             if (loading && progress >= 0) {
                 LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())

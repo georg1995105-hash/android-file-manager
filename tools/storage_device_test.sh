@@ -3,7 +3,7 @@ set -euo pipefail
 PKG=io.personal.filemanager
 fixture=$(mktemp -d)
 cleanup() {
-  if [[ -n "PID" ]]; then kill "$PID" 2>/dev/null || true; fi
+  if [[ -n "$PID" ]]; then kill "$PID" 2>/dev/null || true; fi
   adb reverse --remove tcp:8788 >/dev/null 2>&1 || true
   rm -rf "$fixture"
 }

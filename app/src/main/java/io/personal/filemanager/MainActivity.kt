@@ -22,9 +22,23 @@ import io.personal.filemanager.ui.theme.FileManagerTheme
 
 class MainActivity : ComponentActivity() {
     private var incomingPath by mutableStateOf<String?>(null)
+    private var incomingShared by mutableStateOf<List<android.net.Uri>>(emptyList())
     private var importJob: Job? = null
 
+    @Suppress("DEPRECATION")
     private fun openIncoming(incoming: Intent?) {
+        if (incoming?.action == Intent.ACTION_SEND || incoming?.action == Intent.ACTION_SEND_MULTIPLE) {
+            val uris = ArrayList<android.net.Uri>()
+            runCatching {
+                if (incoming.action == Intent.ACTION_SEND) incoming.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let(uris::add)
+                else incoming.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let(uris::addAll)
+                val clips = incoming.clipData
+                if (clips != null) for (i in 0 until minOf(clips.itemCount,100)) clips.getItemAt(i).uri?.let(uris::add)
+            }
+            incomingShared = uris.filter { it.scheme == "content" }.distinct().take(100)
+            if (incomingShared.isEmpty()) Toast.makeText(this,"Нет файлов для отправки",Toast.LENGTH_SHORT).show()
+            return
+        }
         if (incoming?.action != Intent.ACTION_VIEW) return
         importJob?.cancel()
         importJob = lifecycleScope.launch {
@@ -55,7 +69,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             FileManagerTheme {
-                AppRoot(incomingPath = incomingPath, onIncomingConsumed = { incomingPath = null })
+                AppRoot(incomingPath = incomingPath, onIncomingConsumed = { incomingPath = null },
+                    incomingShared = incomingShared, onSharedConsumed = { incomingShared = emptyList() })
             }
         }
         openIncoming(intent)

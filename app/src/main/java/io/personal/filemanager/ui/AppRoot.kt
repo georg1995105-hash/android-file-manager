@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import io.personal.filemanager.ui.hub.HubHome
+import io.personal.filemanager.ui.hub.VaultScreen
+import android.net.Uri
 import io.personal.filemanager.ui.hub.HubSettings
 import io.personal.filemanager.ui.hub.HubNavigation
 import io.personal.filemanager.ui.hub.HubTab
@@ -116,7 +118,7 @@ import io.personal.filemanager.ui.viewer.PdfViewerScreen
 import io.personal.filemanager.ui.viewer.findActivity
 
 @Composable
-fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
+fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, incomingShared: List<Uri> = emptyList(), onSharedConsumed: () -> Unit = {}) {
     val nav = rememberNavController()
     val context = LocalContext.current
     val tvUi = isTelevisionUi()
@@ -209,6 +211,9 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
         }
     }
 
+    LaunchedEffect(incomingShared) {
+        if (incomingShared.isNotEmpty()) nav.navigate(Routes.CLOUD) { launchSingleTop = true }
+    }
     LaunchedEffect(incomingPath) {
         val path = incomingPath ?: return@LaunchedEffect
         onIncomingConsumed()
@@ -269,6 +274,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}) {
                 ) {
                     composable(Routes.HOME) { HubHome() }
                     composable(Routes.LOCAL_FILES) { HomeScreen() }
+                    composable(Routes.CLOUD) { VaultScreen(incomingShared, onSharedConsumed) }
                     composable(Routes.HUB_SETTINGS) { HubSettings() }
                     composable(
                         Routes.SECTION,

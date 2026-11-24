@@ -114,6 +114,7 @@ internal fun HubHome() {
             Text("Хранилище", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
             IconButton(onClick = { nav.openSearch() }) { Icon(Icons.Filled.Search, "Поиск локальных файлов") }
         }
+        HubCard("Личное хранилище", "Файлы для всех привязанных устройств", Icons.Filled.Cloud, Modifier.fillMaxWidth()) { nav.open(Routes.CLOUD) }
         Text("На этом устройстве", color = AppColors.TextSecondary, style = MaterialTheme.typography.bodyMedium)
         val receiveCard: @Composable (Modifier) -> Unit = { m ->
             HubCard("Полученные файлы", "Файлы, принятые по локальной сети", Icons.Filled.Folder, m, openReceived)
@@ -177,6 +178,7 @@ internal fun HubSettings() {
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Настройки", style = MaterialTheme.typography.headlineMedium)
         HubCard("Версия и обновления", "Мои файлы ${BuildConfig.VERSION_NAME}", Icons.Filled.SystemUpdate, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.UPDATES) }
+        HubCard("Хранилище и устройства", "Подключение и привязка", Icons.Filled.Devices, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.CLOUD) }
         HubCard("Резервные копии", "Сохранить ссылки и настройки", Icons.Filled.Save, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.BACKUP) }
         HubCard("Личный сейф", "Защищённые локальные данные", Icons.Filled.Lock, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.VAULT) }
         HubCard("Дополнительные настройки", "Корзина и локальные файлы", Icons.Filled.Settings, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.SETTINGS) }

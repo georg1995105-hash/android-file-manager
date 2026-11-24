@@ -21,6 +21,8 @@
 
     <!-- Телевизоры могут не иметь сенсорного экрана или камеры. -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" tools:replace="android:required" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" tools:replace="android:required" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -70,6 +72,16 @@
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/yaml" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

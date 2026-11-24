@@ -133,7 +133,11 @@ class BrowserViewModel(private val container: AppContainer) : ViewModel() {
 fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val hasAccess = rememberAllFilesAccess()
+    val allFilesAccess = rememberAllFilesAccess()
+    val privateReceived = remember(rootPath) {
+        runCatching { File(rootPath).canonicalFile == File(context.filesDir, "received").canonicalFile }.getOrDefault(false)
+    }
+    val hasAccess = allFilesAccess || privateReceived
     val vm = appViewModel(key = "browser-$rootPath") { BrowserViewModel(it) }
     val result by vm.result.collectAsStateWithLifecycle()
     val prefs by vm.prefs.collectAsStateWithLifecycle()

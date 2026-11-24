@@ -79,7 +79,7 @@ fun TransferPeerPanel(manager: TransferManager) {
 
     Text("Устройства рядом", style = MaterialTheme.typography.titleLarge)
     if (visible.isEmpty()) {
-        Text("Ищем… Откройте «Передачу» на другом устройстве в той же Wi-Fi сети.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Поиск устройств в Wi-Fi…", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     visible.forEach { peer ->
         val name = peer.name.removePrefix("Мои файлы ").ifBlank { peer.name }
@@ -87,7 +87,7 @@ fun TransferPeerPanel(manager: TransferManager) {
             Text(if (own.shared > 0) "Отправить на «$name»" else "Подключиться к «$name»")
         }
     }
-    TextButton(enabled = !busy, onClick = { manual = !manual }) { Text(if (manual) "Скрыть ввод адреса" else "Устройства нет в списке? Ввести адрес") }
+    TextButton(enabled = !busy, onClick = { manual = !manual }) { Text(if (manual) "Скрыть ввод адреса" else "Ввести адрес") }
     if (manual) {
         OutlinedTextField(address, { address = it }, enabled = !busy, label = { Text("Адрес с экрана другого устройства") },
             placeholder = { Text("https://192.168.0.10:40000") }, singleLine = true, modifier = Modifier.fillMaxWidth())

@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import io.personal.filemanager.ui.components.MediaThumb
+import io.personal.filemanager.ui.components.KindBadge
 import androidx.compose.ui.layout.ContentScale
 import io.personal.filemanager.core.FileKind
 import androidx.compose.foundation.lazy.LazyRow
@@ -218,7 +220,8 @@ internal fun HubHome() {
                         .background(Panel).border(if(focused) 2.dp else 1.dp,if(focused) Blue else AppColors.CardBorder,shape)
                         .clickable { nav.openFile(entry,recentMedia) }.padding(8.dp)) {
                         Box(Modifier.fillMaxWidth().aspectRatio(1.5f).clip(RoundedCornerShape(9.dp)).background(AppColors.Surface),contentAlignment=Alignment.Center) {
-                            AsyncImage(model=entry.file,contentDescription=entry.name,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
+                            KindBadge(entry.kind, 46.dp)
+                            AsyncImage(model=MediaThumb.of(entry),contentDescription=entry.name,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
                             if(entry.kind==FileKind.VIDEO) Icon(Icons.Filled.PlayCircle,null,tint=Color.White,modifier=Modifier.size(36.dp))
                         }
                         Text(entry.name,maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall)

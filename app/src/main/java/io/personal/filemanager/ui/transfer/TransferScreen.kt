@@ -41,6 +41,8 @@ fun TransferScreen() {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Передача", style = MaterialTheme.typography.headlineMedium)
+        OutlinedButton(onClick = { nav.open(Routes.CLOUD) }, modifier = Modifier.fillMaxWidth()) { Text("Через личный Google Диск") }
+        Text("Напрямую по Wi-Fi", style = MaterialTheme.typography.titleMedium)
         if (isTv) {
             if (state.running) {
                 TransferQr(state.browserAddresses.firstOrNull(), true)

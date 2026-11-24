@@ -7,8 +7,8 @@ plugins {
 }
 
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
-val appVersionCode = 48
-val appVersionName = "0.13.0"
+val appVersionCode = 49
+val appVersionName = "0.13.1"
 // Only a public HTTPS origin, never a credential. Empty builds expose manual setup.
 val storageOrigin = providers.gradleProperty("pfmStorageUrl")
     .orElse(providers.environmentVariable("PFM_STORAGE_URL")).orElse("").get().trimEnd('/')

@@ -318,7 +318,7 @@ private suspend fun exportLinks(container: io.personal.filemanager.AppContainer,
 
 /** Значок сайта слева от ссылки: загружается в фоне с кэшем; нет значка — стандартный. */
 @Composable
-private fun SiteIcon(url: String, enabled: Boolean, large: Boolean = false) {
+internal fun SiteIcon(url: String, enabled: Boolean, large: Boolean = false) {
     val loader = appContainer().siteIcons
     val bitmap by produceState(initialValue = if (enabled) loader.cached(url) else null, url, enabled) {
         if (enabled && value == null) value = loader.icon(url)

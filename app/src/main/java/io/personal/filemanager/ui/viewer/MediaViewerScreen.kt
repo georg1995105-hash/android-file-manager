@@ -77,6 +77,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import io.personal.filemanager.ui.isTelevisionUi
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -125,6 +136,7 @@ fun MediaViewerScreen(path: String) {
     val context = LocalContext.current
     val view = LocalView.current
     val configuration = LocalConfiguration.current
+    val tv = isTelevisionUi()
     val activity = remember(context) { context.findActivity() }
     val container = appContainer()
     val vm = appViewModel(key = "media-$path") { MediaViewerViewModel(it, path) }
@@ -188,7 +200,7 @@ fun MediaViewerScreen(path: String) {
     // Ориентация: просмотр фиксирует ту, в которой открыт (без датчика); кнопка поворота меняет её явно.
     // При выходе восстанавливается исходная настройка активности.
     DisposableEffect(activity) {
-        if (activity != null) {
+        if (activity != null && !tv) {
             if (vm.originalOrientation == null) vm.originalOrientation = activity.requestedOrientation
             activity.requestedOrientation = vm.lockedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_LOCKED
         }
@@ -199,7 +211,7 @@ fun MediaViewerScreen(path: String) {
         }
     }
     // Android 16 на больших экранах игнорирует запросы ориентации — кнопка там бесполезна.
-    val canRotate = !(Build.VERSION.SDK_INT >= 36 && configuration.smallestScreenWidthDp >= 600)
+    val canRotate = !tv && !(Build.VERSION.SDK_INT >= 36 && configuration.smallestScreenWidthDp >= 600)
     fun rotate() {
         val landscapeNow = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val target = if (landscapeNow) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -225,7 +237,7 @@ fun MediaViewerScreen(path: String) {
     }
     // Автоскрытие панелей (ТЗ: 2–3 с), пока пользователь не работает с меню, диалогом или ползунком.
     LaunchedEffect(controlsVisible, interaction, holdControls) {
-        if (controlsVisible && !holdControls) {
+        if (!tv && controlsVisible && !holdControls) {
             delay(VIEWER_AUTO_HIDE_MS)
             controlsVisible = false
         }
@@ -267,7 +279,18 @@ fun MediaViewerScreen(path: String) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .then(if(tv) Modifier.onPreviewKeyEvent { event ->
+                if(event.type != KeyEventType.KeyDown) false
+                else when(event.key) {
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        if(videoActive && video.error==null) { vm.togglePlay(); controlsVisible=true; touch(); true } else false
+                    }
+                    Key.MediaFastForward -> { if(videoActive) { vm.seekBy(SEEK_STEP_MS); true } else false }
+                    Key.MediaRewind -> { if(videoActive) { vm.seekBy(-SEEK_STEP_MS); true } else false }
+                    else -> false
+                }
+            } else Modifier),
     ) {
         HorizontalPager(
             state = pagerState,
@@ -369,6 +392,7 @@ fun MediaViewerScreen(path: String) {
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 if (videoActive && video.error == null) {
+                    if (video.buffering) Text("Загрузка…",color=Color.White,style=MaterialTheme.typography.labelMedium)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             formatPlaybackTime(if (dragging) dragValue.toLong() else position),
@@ -573,7 +597,9 @@ fun MediaViewerScreen(path: String) {
 
 @Composable
 private fun ControlButton(icon: ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled) {
+    var focused by remember { mutableStateOf(false) }
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.onFocusChanged { focused = it.isFocused }
+        .border(if (focused) 2.dp else 0.dp, if (focused) Color(0xFF69B1FF) else Color.Transparent, RoundedCornerShape(12.dp))) {
         Icon(icon, contentDescription = description, tint = if (enabled) Color.White else Color.White.copy(alpha = 0.35f))
     }
 }

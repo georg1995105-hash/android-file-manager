@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui.hub
 
+import io.personal.filemanager.ui.components.tvFocusOutline
+
 import android.app.Activity
 import android.graphics.Bitmap
 import android.net.Uri
@@ -195,7 +197,7 @@ private fun DriveAction(label:String,enabled:Boolean,onClick:()->Unit) {
     var focused by remember { mutableStateOf(false) }
     OutlinedButton(onClick=onClick,enabled=enabled,
         modifier=Modifier.onFocusChanged { focused=it.isFocused }
-            .border(if(focused) 2.dp else 0.dp,if(focused) MaterialTheme.colorScheme.primary else Color.Transparent,RoundedCornerShape(24.dp))) {
+            .tvFocusOutline(focused, RoundedCornerShape(24.dp), MaterialTheme.colorScheme.primary)) {
         Text(label)
     }
 }

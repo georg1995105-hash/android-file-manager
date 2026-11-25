@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui.components
 
+import androidx.compose.ui.platform.testTag
+
 import androidx.compose.ui.focus.onFocusChanged
 import io.personal.filemanager.ui.isTelevisionUi
 
@@ -181,9 +183,10 @@ fun FileRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .testTag("local-file-row-${entry.name}")
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
             .onFocusChanged { focused = it.isFocused }
-            .then(if (tvUi && focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(8.dp)) else Modifier)
+            .tvFocusOutline(tvUi && focused, RoundedCornerShape(8.dp))
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)
@@ -233,7 +236,7 @@ fun FileRow(
 private fun FileDeleteButton(name: String, onClick: () -> Unit) {
     var focused by remember(name) { mutableStateOf(false) }
     IconButton(onClick = onClick, modifier = Modifier.onFocusChanged { focused = it.isFocused }
-        .border(if (focused) 2.dp else 0.dp, if (focused) AppColors.Accent else Color.Transparent, RoundedCornerShape(10.dp))) {
+        .tvFocusOutline(focused, RoundedCornerShape(10.dp))) {
         Icon(Icons.Filled.Delete, contentDescription = "Удалить «$name»")
     }
 }
@@ -740,7 +743,7 @@ private fun GalleryMediaCell(
         Modifier.fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(4.dp))
-            .then(if (tvUi && focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(4.dp)) else Modifier)
+            .tvFocusOutline(tvUi && focused, RoundedCornerShape(4.dp))
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)

@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui
 
+import io.personal.filemanager.ui.components.tvFocusOutline
+
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -545,7 +547,7 @@ private fun TvBottomTabBar(
                             .testTag("bottom-tab-${id.name}")
                             .onFocusChanged { focused = it.isFocused }
                             .clip(RoundedCornerShape(16.dp))
-                            .then(if (focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(16.dp)) else Modifier)
+                            .tvFocusOutline(focused, RoundedCornerShape(16.dp))
                             .combinedClickable(
                                 onClick = { onSelect(id) },
                                 onLongClick = if (id == SectionId.RECENT) {

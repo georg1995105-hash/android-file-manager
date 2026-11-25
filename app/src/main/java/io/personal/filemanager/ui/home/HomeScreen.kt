@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui.home
 
+import io.personal.filemanager.ui.components.tvFocusOutline
+
 import androidx.compose.material3.LocalContentColor
 import io.personal.filemanager.core.TileLayout
 import androidx.compose.ui.text.style.TextOverflow
@@ -287,7 +289,7 @@ private fun StorageCard(state: HomeState, onClick: () -> Unit, modifier: Modifie
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(20.dp))
-            .then(if (tvUi && focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(20.dp)) else Modifier)
+            .tvFocusOutline(tvUi && focused, RoundedCornerShape(20.dp))
             .card(RoundedCornerShape(20.dp))
             .tapClickable(onClick = onClick)
             .padding(12.dp),
@@ -392,9 +394,10 @@ private fun SectionTile(
     Column(
         modifier = modifier
             .heightIn(min = minHeight)
+            .testTag("local-tile-${tile.id}")
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(18.dp))
-            .then(if (tvUi && focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(18.dp)) else Modifier)
+            .tvFocusOutline(tvUi && focused, RoundedCornerShape(18.dp))
             .card()
             .tapClickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 10.dp),

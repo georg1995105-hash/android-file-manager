@@ -105,6 +105,7 @@ private fun HubNavItem(tab: HubTab, selected: Boolean, side: Boolean, modifier: 
 internal fun HubHome() {
     val container = appContainer()
     val nav = LocalNavigator.current
+    val fileOps = io.personal.filemanager.ui.ops.LocalFileOps.current
     val context = LocalContext.current
     val iconsOn by container.settings.linkIcons.collectAsStateWithLifecycle(initialValue=true)
     val tv = isTelevisionUi()
@@ -228,12 +229,18 @@ internal fun HubHome() {
                             if(entry.kind==FileKind.VIDEO) Icon(Icons.Filled.PlayCircle,null,tint=Color.White,modifier=Modifier.size(36.dp))
                         }
                         Text(entry.name,maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall)
+                        if(tv) HubDeleteButton(entry.name) { fileOps.delete(listOf(entry)) }
                     }
                 }
             }
         }
         received.filterNot { it.kind==FileKind.IMAGE || it.kind==FileKind.VIDEO }.take(if(tv) 4 else 5).forEach { entry ->
-            HubCard(entry.name,if(entry.isDirectory) "Папка" else formatSize(entry.size),if(entry.isDirectory) Icons.Filled.Folder else Icons.Filled.Description,Modifier.fillMaxWidth(),compact=true) { nav.openFile(entry,received) }
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                HubCard(entry.name,if(entry.isDirectory) "Папка" else formatSize(entry.size),if(entry.isDirectory) Icons.Filled.Folder else Icons.Filled.Description,Modifier.weight(1f),compact=true) {
+                    if(entry.isDirectory) nav.open(Routes.browser(entry.path)) else nav.openFile(entry,received)
+                }
+                if(tv) HubDeleteButton(entry.name) { fileOps.delete(listOf(entry)) }
+            }
         }
     }
 }
@@ -287,5 +294,14 @@ internal fun HubSettings() {
         HubCard("Резервные копии", "Сохранить ссылки и настройки", Icons.Filled.Save, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.BACKUP) }
         HubCard("Личный сейф", "Защищённые локальные данные", Icons.Filled.Lock, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.VAULT) }
         HubCard("Дополнительные настройки", "Корзина и локальные файлы", Icons.Filled.Settings, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.SETTINGS) }
+    }
+}
+
+@Composable
+private fun HubDeleteButton(name:String,onClick:()->Unit) {
+    var focused by remember { mutableStateOf(false) }
+    IconButton(onClick=onClick,modifier=Modifier.onFocusChanged { focused=it.isFocused }
+        .border(if(focused) 2.dp else 0.dp,if(focused) Blue else Color.Transparent,RoundedCornerShape(10.dp))) {
+        Icon(Icons.Filled.Delete,"Удалить «$name»")
     }
 }

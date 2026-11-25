@@ -114,10 +114,12 @@ class TvNavigationTest {
             }
             remoteCenterOnDescription("Удалить «${target.name}»")
             rule.onNodeWithText("Удалить файл?").assertExists()
-            remoteCenterOnText("Отмена")
+            rule.onNodeWithText("Отмена").performSemanticsAction(SemanticsActions.RequestFocus)
+            rule.onNodeWithText("Отмена").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
             assertTrue(target.exists())
             remoteCenterOnDescription("Удалить «${target.name}»")
-            remoteCenterOnText("Удалить навсегда")
+            rule.onNodeWithText("Удалить навсегда").performSemanticsAction(SemanticsActions.RequestFocus)
+            rule.onNodeWithText("Удалить навсегда").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
             rule.waitUntil(20_000) { !target.exists() }
             rule.waitUntil(20_000) {
                 rule.onAllNodesWithContentDescription("Удалить «${target.name}»").fetchSemanticsNodes().isEmpty()

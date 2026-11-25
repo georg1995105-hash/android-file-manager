@@ -6,6 +6,8 @@ APK="app/build/outputs/apk/debug/app-universal-debug.apk"
 TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
 adb install -g "$APK"
 adb install "$TEST_APK"
+# Grant only the disposable emulator the normal install-source permission for the OTA UI test.
+adb shell appops set "$PKG" REQUEST_INSTALL_PACKAGES allow
 if [[ "${API_LEVEL:-30}" -ge 30 ]]; then
   adb shell appops set --uid "$PKG" MANAGE_EXTERNAL_STORAGE allow
 fi
@@ -16,7 +18,7 @@ ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=320x240:rate=24
 adb push "$fixture/pfm-tv-test.mp4" /sdcard/Download/pfm-tv-test.mp4
 # Catch instrumentation failure even when piped through tee.
 set +e
-adb shell am instrument -w -r -e class "$PKG.TvNavigationTest,$PKG.TransferUiTest,$PKG.TransferIntegrationTest,$PKG.TvMediaTest" \
+adb shell am instrument -w -r -e class "$PKG.TvNavigationTest,$PKG.TransferUiTest,$PKG.TransferIntegrationTest,$PKG.TvMediaTest,$PKG.OtaInstallTest" \
   "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee tv-test.log
 rc=${PIPESTATUS[0]}
 set -e

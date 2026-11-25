@@ -183,8 +183,7 @@ fun FileRow(
             .fillMaxWidth()
             .background(if (selected) AppColors.AccentContainer.copy(alpha = 0.55f) else Color.Transparent)
             .onFocusChanged { focused = it.isFocused }
-            .then(if (tvUi) Modifier.border(if (focused) 2.dp else 0.dp,
-                AppColors.Accent, RoundedCornerShape(8.dp)) else Modifier)
+            .then(if (tvUi && focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(8.dp)) else Modifier)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)
@@ -741,8 +740,7 @@ private fun GalleryMediaCell(
         Modifier.fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(4.dp))
-            .then(if (tvUi) Modifier.border(if (focused) 2.dp else 0.dp,
-                AppColors.Accent, RoundedCornerShape(4.dp)) else Modifier)
+            .then(if (tvUi && focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(4.dp)) else Modifier)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)

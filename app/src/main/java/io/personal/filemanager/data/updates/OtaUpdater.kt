@@ -123,10 +123,9 @@ class OtaUpdater(private val context: Context) {
         withContext(Dispatchers.IO) {
             checkUrl(release.apkUrl)
             val dir = File(context.cacheDir, "ota").also { it.mkdirs() }
-            val tmp = File(dir, "update.part")
-            val target = File(dir, "verified.apk")
+            val tmp = File(dir, "update.part.apk")
+            val target = File(dir, "verified-${release.versionCode}.apk")
             tmp.delete()
-            target.delete()
             val conn = connect(release.apkUrl)
             try {
                 if (conn.responseCode !in 200..299) error("Скачивание: HTTP ${conn.responseCode}")
@@ -144,7 +143,7 @@ class OtaUpdater(private val context: Context) {
                             if (bytes > MAX_APK || (release.size > 0 && bytes > release.size)) throw SecurityException("Неверный размер APK")
                             sha.update(buffer, 0, n)
                             output.write(buffer, 0, n)
-                            val percent = if (reportedSize > 0) ((100 * bytes) / reportedSize).toInt().coerceAtMost(100) else -1
+                            val percent = if (reportedSize > 0) ((100 * bytes) / reportedSize).toInt().coerceAtMost(99) else -1
                             if (percent >= 0 && percent != last) {
                                 last = percent
                                 withContext(Dispatchers.Main) { onProgress(percent) }
@@ -158,33 +157,61 @@ class OtaUpdater(private val context: Context) {
                 val hash = sha.digest().joinToString("") { "%02x".format(it) }
                 if (hash != release.sha256) throw SecurityException("SHA-256 APK не совпадает")
                 verify(tmp, release.versionCode)
+                if (target.exists() && !target.delete()) error("Не удалось заменить временный APK")
                 if (!tmp.renameTo(target)) error("Не удалось сохранить APK")
+                withContext(Dispatchers.Main) { onProgress(100) }
                 target
             } catch (e: Exception) {
                 tmp.delete()
-                target.delete()
                 throw e
             } finally {
                 conn.disconnect()
             }
         }
 
-    fun install(file: File): Boolean {
-        if (!file.isFile) error("APK отсутствует")
-        if (!context.packageManager.canRequestPackageInstalls()) {
-            context.startActivity(
-                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-                    .setData(Uri.parse("package:${context.packageName}"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-            return false
+    suspend fun cached(release: OtaRelease): File? = withContext(Dispatchers.IO) {
+        val file = File(context.cacheDir, "ota/verified-${release.versionCode}.apk")
+        if (!file.isFile) return@withContext null
+        try {
+            verifyDownloaded(file, release)
+            file
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            file.delete()
+            null
         }
+    }
+
+    private fun verifyDownloaded(file: File, release: OtaRelease) {
+        if (!file.isFile || file.length() !in 1024L..MAX_APK ||
+            (release.size > 0 && file.length() != release.size)) error("APK отсутствует или повреждён")
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(32768)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                digest.update(buffer, 0, n)
+            }
+        }
+        if (digest.digest().joinToString("") { "%02x".format(it) } != release.sha256)
+            throw SecurityException("SHA-256 APK не совпадает")
+        verify(file, release.versionCode)
+    }
+
+    suspend fun install(file: File, release: OtaRelease): Unit = withContext(Dispatchers.IO) {
+        verifyDownloaded(file, release)
+        check(context.packageManager.canRequestPackageInstalls()) { "Разрешите установку из этого источника" }
+        OtaInstallSession.start(context, file)
+    }
+
+    suspend fun installerIntent(file: File, release: OtaRelease): Intent = withContext(Dispatchers.IO) {
+        verifyDownloaded(file, release)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION),
-        )
-        return true
+        Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            .apply { clipData = android.content.ClipData.newRawUri("APK", uri) }
     }
 
     private fun verify(file: File, expectedVersion: Long) {

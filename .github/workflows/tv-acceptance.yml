@@ -6,6 +6,7 @@ on:
       - feature/compact-create-files-20261110
       - feature/storage-first-20261124
       - fix/file-actions-tv-20261125
+      - fix/ota-installer-tv-20261125
     paths:
       - 'app/**'
       - 'tools/**'

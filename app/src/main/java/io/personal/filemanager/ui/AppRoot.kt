@@ -545,7 +545,7 @@ private fun TvBottomTabBar(
                             .testTag("bottom-tab-${id.name}")
                             .onFocusChanged { focused = it.isFocused }
                             .clip(RoundedCornerShape(16.dp))
-                            .border(if (focused) 2.dp else 0.dp, AppColors.Accent, RoundedCornerShape(16.dp))
+                            .then(if (focused) Modifier.border(2.dp, AppColors.Accent, RoundedCornerShape(16.dp)) else Modifier)
                             .combinedClickable(
                                 onClick = { onSelect(id) },
                                 onLongClick = if (id == SectionId.RECENT) {

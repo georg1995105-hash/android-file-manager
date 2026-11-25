@@ -1,5 +1,6 @@
 package io.personal.filemanager.ui.transfer
 
+import io.personal.filemanager.ui.components.tvRemoteFocus
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -71,30 +72,30 @@ fun TransferScreen(incomingShared:List<Uri> = emptyList(), onSharedConsumed:()->
             TransferQr(state.browserAddresses.firstOrNull(), isTv)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = { manager.receivedDirectory.mkdirs(); nav.open(Routes.browser(manager.receivedDirectory.absolutePath)) },
-                    modifier=Modifier.weight(1f)) { Text("Полученные файлы") }
+                    modifier=Modifier.weight(1f).tvRemoteFocus()) { Text("Полученные файлы") }
                 OutlinedButton(onClick = { context.stopService(Intent(context, TransferService::class.java)) },
-                    modifier=Modifier.weight(1f)) { Text("Остановить передачу") }
+                    modifier=Modifier.weight(1f).tvRemoteFocus()) { Text("Остановить передачу") }
             }
         } else {
-            Button(onClick=start) { Text("Включить передачу") }
+            Button(onClick=start, modifier=Modifier.tvRemoteFocus()) { Text("Включить передачу") }
         }
         if (state.progress.isNotBlank()) Text(state.progress)
         if (state.message.isNotBlank()) Text(state.message, style=MaterialTheme.typography.bodySmall)
         if(io.personal.filemanager.BuildConfig.PFM_DRIVE_ENABLED) {
-            OutlinedButton(onClick={nav.open(Routes.CLOUD)}, modifier=Modifier.fillMaxWidth()) { Text("Google Диск") }
+            OutlinedButton(onClick={nav.open(Routes.CLOUD)}, modifier=Modifier.fillMaxWidth().tvRemoteFocus()) { Text("Google Диск") }
         }
         if(!isTv) Button(enabled=!preparing,onClick={runCatching{picker.launch(arrayOf("*/*"))}.onFailure{manager.message("Нет приложения для выбора файлов")}},modifier=Modifier.fillMaxWidth()){Text(if(preparing) "Подготовка…" else "Выбрать файлы") }
         if (state.shared > 0) {
             Row(verticalAlignment=Alignment.CenterVertically) {
                 Text("Выбрано: ${state.shared}",modifier=Modifier.weight(1f))
-                TextButton(onClick=manager::clearShared){Text("Очистить")}
+                TextButton(onClick=manager::clearShared, modifier=Modifier.tvRemoteFocus()){Text("Очистить")}
             }
         }
         TransferPeerPanel(manager)
         manager.activeReceives().forEach { active ->
-            TextButton(onClick={manager.cancel(active.id)}) { Text("Отменить приём: ${active.description}") }
+            TextButton(onClick={manager.cancel(active.id)}, modifier=Modifier.tvRemoteFocus()) { Text("Отменить приём: ${active.description}") }
         }
-        TextButton(onClick = { details = !details }) { Text(if (details) "Скрыть сведения о безопасности" else "Сведения о безопасности") }
+        TextButton(onClick = { details = !details }, modifier=Modifier.tvRemoteFocus()) { Text(if (details) "Скрыть сведения о безопасности" else "Сведения о безопасности") }
         if (details) {
             Text(
                 "Интернет не используется, всё идёт внутри вашей Wi-Fi сети. Подключения и файлы принимаются без вопросов, " +

@@ -1,5 +1,7 @@
 package io.personal.filemanager.ui.hub
 
+import io.personal.filemanager.ui.components.tvFocusOutline
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -87,7 +89,7 @@ private fun HubNavItem(tab: HubTab, selected: Boolean, side: Boolean, modifier: 
     Box(modifier.height(if (side) 56.dp else 66.dp).testTag("hub-tab-${tab.name}")
         .onFocusChanged { focused = it.isFocused }.clip(shape)
         .background(if (selected || focused) Color(0xFF1B4D92) else Color.Transparent)
-        .border(if (focused) 2.dp else 0.dp, if (focused) Blue else Color.Transparent, shape)
+        .tvFocusOutline(focused, shape, Blue)
         .clickable(role = Role.Tab) { onSelect(tab) }.semantics { this.selected = selected },
         contentAlignment = if (side) Alignment.CenterStart else Alignment.Center) {
         if (side) Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
@@ -301,7 +303,7 @@ internal fun HubSettings() {
 private fun HubDeleteButton(name:String,onClick:()->Unit) {
     var focused by remember { mutableStateOf(false) }
     IconButton(onClick=onClick,modifier=Modifier.onFocusChanged { focused=it.isFocused }
-        .border(if(focused) 2.dp else 0.dp,if(focused) Blue else Color.Transparent,RoundedCornerShape(10.dp))) {
+        .tvFocusOutline(focused, RoundedCornerShape(10.dp), Blue)) {
         Icon(Icons.Filled.Delete,"Удалить «$name»")
     }
 }

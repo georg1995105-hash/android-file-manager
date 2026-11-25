@@ -109,6 +109,10 @@ fun SectionIcon(iconKey: String, colorKey: String, size: Dp, modifier: Modifier 
 fun Modifier.tapClickable(enabled: Boolean = true, onLongClick: () -> Unit = {}, onClick: () -> Unit): Modifier =
     combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
 
+/** Inactive controls must not draw an accent outline at all; 0.dp is a hairline. */
+fun Modifier.tvFocusOutline(focused: Boolean, shape: androidx.compose.ui.graphics.Shape, color: Color = AppColors.Accent): Modifier =
+    if (focused) this.border(2.dp, color, shape) else this
+
 fun Modifier.card(shape: RoundedCornerShape = RoundedCornerShape(18.dp)): Modifier =
     this
         .background(AppColors.Card, shape)

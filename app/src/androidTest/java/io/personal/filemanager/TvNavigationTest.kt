@@ -1,6 +1,10 @@
 package io.personal.filemanager
 
 import android.content.Intent
+import androidx.compose.ui.graphics.toPixelMap
+import io.personal.filemanager.ui.theme.AppColors
+import kotlin.math.abs
+import org.junit.Assert.assertEquals
 import android.content.pm.PackageManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
@@ -130,4 +134,39 @@ class TvNavigationTest {
         }
     }
 
+    /** Check rendered edges rather than only focus semantics. */
+    private fun accentEdgePixels(node: SemanticsNodeInteraction): Int {
+        val image = node.captureToImage().toPixelMap()
+        val accent = AppColors.Accent
+        var count = 0
+        for (y in 0 until minOf(5, image.height)) {
+            for (x in image.width / 4 until image.width * 3 / 4) {
+                val color = image[x, y]
+                if (abs(color.red - accent.red) < 0.08f &&
+                    abs(color.green - accent.green) < 0.08f &&
+                    abs(color.blue - accent.blue) < 0.08f) count++
+            }
+        }
+        return count
+    }
+
+    @Test fun localStorageUnfocusedTilesHaveNoAccentOutline() {
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+        rule.waitText("Файлы устройства")
+        remoteCenterOnText("Файлы устройства")
+        rule.waitText("Загрузки")
+        val downloads = rule.onNodeWithText("Загрузки")
+        val photos = rule.onNodeWithText("Фото")
+        downloads.performScrollTo()
+        downloads.performSemanticsAction(SemanticsActions.RequestFocus)
+        downloads.assertIsFocused()
+        photos.assertIsNotFocused()
+        assertEquals("Unfocused tile has a bright outline", 0, accentEdgePixels(photos))
+        assertTrue("Focused tile has no visible outline", accentEdgePixels(downloads) > 0)
+        photos.performSemanticsAction(SemanticsActions.RequestFocus)
+        photos.assertIsFocused()
+        downloads.assertIsNotFocused()
+        assertEquals("Old focus outline remained on tile", 0, accentEdgePixels(downloads))
+        assertTrue("New focus outline missing", accentEdgePixels(photos) > 0)
+    }
 }

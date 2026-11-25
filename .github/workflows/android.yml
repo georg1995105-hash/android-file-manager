@@ -9,6 +9,10 @@ on:
       - '!ci-device-shots'
       - '!ci-device-shots-tablet'
     paths-ignore:
+      # CI-policy-only changes must not rebuild or republish an unchanged version.
+      - 'AGENTS.md'
+      - '.github/workflows/android.yml'
+      - '.github/workflows/tv-acceptance.yml'
       - '.github/workflows/release-preflight.yml'
       - '.github/workflows/release-key-setup.yml'
       - '.github/workflows/release.yml'

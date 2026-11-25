@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 
 /**
  * Real D-pad events on Android TV emulators. No touch or onClick shortcuts.
- * The test does not read, alter, or delete any personal files.
+ * Deletion uses isolated disposable fixtures, never personal files.
  */
 @RunWith(AndroidJUnit4::class)
 class TvNavigationTest {
@@ -59,10 +59,12 @@ class TvNavigationTest {
             },
         )
         rule.waitUntil(20_000) {
-            rule.onAllNodesWithTag("hub-tab-LINKS").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithTag("hub-tab-SETTINGS").fetchSemanticsNodes().isNotEmpty()
         }
-        remoteCenterOnTag("hub-tab-LINKS")
-        rule.onNodeWithTag("hub-tab-LINKS").assertIsSelected()
+        rule.onNodeWithTag("hub-tab-LINKS").assertDoesNotExist()
+        rule.onNodeWithText("Ссылки").assertDoesNotExist()
+        remoteCenterOnTag("hub-tab-SETTINGS")
+        rule.onNodeWithTag("hub-tab-SETTINGS").assertIsSelected()
         remoteCenterOnTag("hub-tab-STORAGE")
         rule.onNodeWithTag("hub-tab-STORAGE").assertIsSelected()
     }
@@ -71,7 +73,7 @@ class TvNavigationTest {
     @Test fun tvDpadDownMovesFocusBetweenTabs() {
         InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         rule.waitUntil(20_000) {
-            rule.onAllNodesWithTag("hub-tab-LINKS").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithTag("hub-tab-SETTINGS").fetchSemanticsNodes().isNotEmpty()
         }
         val first = rule.onNodeWithTag("hub-tab-STORAGE")
         first.performSemanticsAction(SemanticsActions.RequestFocus)
@@ -95,4 +97,35 @@ class TvNavigationTest {
         rule.onNodeWithText("Обновления").assertExists()
         rule.onNodeWithText("Проверить обновления").assertExists()
     }
+    @Test fun receivedFileCanBeDeletedWithRemoteWithoutOpeningIt() {
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+        val app = rule.activity.application as FileManagerApp
+        val dir = java.io.File(app.container.transfer.receivedDirectory, "pfm-delete-" + java.util.UUID.randomUUID())
+        check(dir.mkdirs())
+        val target = java.io.File(dir, "delete-test.apk").apply { writeText("disposable fixture") }
+        val keep = java.io.File(dir, "keep-test.txt").apply { writeText("keep") }
+        try {
+            rule.waitText("Полученные файлы")
+            remoteCenterOnText("Полученные файлы")
+            rule.waitText(dir.name)
+            rule.onAllNodesWithText(dir.name).onFirst().performClick()
+            rule.waitUntil(20_000) {
+                rule.onAllNodesWithContentDescription("Удалить «${target.name}»").fetchSemanticsNodes().isNotEmpty()
+            }
+            remoteCenterOnDescription("Удалить «${target.name}»")
+            rule.onNodeWithText("Удалить файл?").assertExists()
+            remoteCenterOnText("Отмена")
+            assertTrue(target.exists())
+            remoteCenterOnDescription("Удалить «${target.name}»")
+            remoteCenterOnText("Удалить навсегда")
+            rule.waitUntil(20_000) { !target.exists() }
+            rule.waitUntil(20_000) {
+                rule.onAllNodesWithContentDescription("Удалить «${target.name}»").fetchSemanticsNodes().isEmpty()
+            }
+            assertTrue(keep.exists())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
 }

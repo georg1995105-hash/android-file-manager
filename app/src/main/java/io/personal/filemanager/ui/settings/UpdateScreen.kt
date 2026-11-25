@@ -1,5 +1,6 @@
 package io.personal.filemanager.ui.settings
 
+import io.personal.filemanager.ui.components.tvRemoteFocus
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageInstaller
@@ -175,7 +176,7 @@ fun UpdateScreen() {
             }
             val candidate = release
             if (candidate != null) {
-                Button(modifier = Modifier.fillMaxWidth().focusRequester(focus), enabled = !loading, onClick = {
+                Button(modifier = Modifier.fillMaxWidth().focusRequester(focus).tvRemoteFocus(), enabled = !loading, onClick = {
                     val file = downloaded
                     if (file != null && file.isFile) install(file, candidate)
                     else scope.launch {
@@ -194,11 +195,11 @@ fun UpdateScreen() {
                         } finally { if (downloaded == null) loading = false }
                     }
                 }) { Text(if (downloaded == null) "Скачать и обновить" else "Установить") }
-                if (fallback && downloaded?.isFile == true) TextButton(enabled = !loading, onClick = {
+                if (fallback && downloaded?.isFile == true) TextButton(modifier = Modifier.tvRemoteFocus(), enabled = !loading, onClick = {
                     downloaded?.let { install(it, candidate, true) }
                 }) { Text("Открыть APK системным установщиком") }
             }
-            TextButton(onClick = check, enabled = !loading) { Text("Проверить обновления") }
+            TextButton(onClick = check, enabled = !loading, modifier = Modifier.tvRemoteFocus()) { Text("Проверить обновления") }
             Text("Обновление устанавливается поверх текущей версии. Данные сохраняются.", style = MaterialTheme.typography.bodySmall)
         }
     }

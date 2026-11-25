@@ -809,7 +809,8 @@ private fun GridCell(
             .onFocusChanged { focused = it.isFocused }
             .clip(shape)
             .background(if (selected) AppColors.AccentContainer else AppColors.Card)
-            .then(if (selected || (tvUi && focused)) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
+            .then(if (selected) Modifier.border(2.dp, AppColors.Accent, shape) else Modifier)
+            .tvFocusOutline(tvUi && focused, shape)
             .then(
                 if (onLongClick != null) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 else Modifier.clickable(onClick = onClick)

@@ -23,3 +23,11 @@ fun isTelevisionUi(): Boolean {
     return isTelevisionMode(config.uiMode, tv, pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN),
         config.orientation == Configuration.ORIENTATION_LANDSCAPE && config.screenWidthDp >= 700)
 }
+
+/** Keep the existing OAuth method on generic boxes that were previously using Google Play Services. */
+@Composable
+fun isStandardTelevisionUi(): Boolean {
+    val config = LocalConfiguration.current
+    val pm = LocalContext.current.packageManager
+    return isTelevisionMode(config.uiMode, pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK))
+}

@@ -40,7 +40,8 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
     val context=LocalContext.current
     val nav=LocalNavigator.current
     val container=appContainer()
-    val tv=isTelevisionUi()
+    // Keep the previous Google authorization mode when only the UI gains TV support.
+    val tv=isStandardTelevisionUi()
     val scope=rememberCoroutineScope()
     val auth=remember{TvDriveAuth(context.applicationContext)}
     val prefs=remember{context.getSharedPreferences("pfm-drive-ui",0)}

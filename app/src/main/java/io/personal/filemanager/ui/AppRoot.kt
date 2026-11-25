@@ -416,7 +416,7 @@ internal fun BottomTabBar(
         OriginalTouchBottomTabBar(tabs, current, onSelect, onCreateRecent)
         return
     }
-    TvBottomTabBar(tabs, current, onSelect, onCreateRecent)
+    TvBottomTabBar(tabs.filterNot { SectionId.fromKey(it.id) == SectionId.LINKS }, current, onSelect, onCreateRecent)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

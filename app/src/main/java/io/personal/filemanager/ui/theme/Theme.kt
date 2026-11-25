@@ -1,5 +1,11 @@
 package io.personal.filemanager.ui.theme
 
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.RippleConfiguration
+import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.runtime.CompositionLocalProvider
+import io.personal.filemanager.ui.isTelevisionUi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -83,7 +89,17 @@ private val typography = Typography(
     labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 14.sp),
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileManagerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = scheme, typography = typography, content = content)
+    MaterialTheme(colorScheme = scheme, typography = typography) {
+        if (isTelevisionUi()) {
+            // Also cover standard Material controls and dialogs without bespoke TV outlines.
+            CompositionLocalProvider(LocalRippleConfiguration provides RippleConfiguration(
+                color = Color.White,
+                rippleAlpha = RippleAlpha(draggedAlpha = 0.16f, focusedAlpha = 0.36f,
+                    hoveredAlpha = 0.08f, pressedAlpha = 0.16f),
+            ), content = content)
+        } else content()
+    }
 }

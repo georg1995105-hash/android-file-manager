@@ -135,7 +135,10 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     val context = LocalContext.current
     val allFilesAccess = rememberAllFilesAccess()
     val privateReceived = remember(rootPath) {
-        runCatching { File(rootPath).canonicalFile == File(context.filesDir, "received").canonicalFile }.getOrDefault(false)
+        runCatching {
+            val root = File(context.filesDir, "received").canonicalFile.toPath()
+            File(rootPath).canonicalFile.toPath().startsWith(root)
+        }.getOrDefault(false)
     }
     val hasAccess = allFilesAccess || privateReceived
     val vm = appViewModel(key = "browser-$rootPath") { BrowserViewModel(it) }
@@ -186,7 +189,7 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(
             title = if (relative.isEmpty() && title == "Внутренняя память") "Память" else if (relative.isEmpty()) title else File(path).name,
-            subtitle = if (relative.isEmpty()) path else "$title/$relative",
+            subtitle = if (relative.isEmpty() && title == "Полученные файлы") "Файлы с ваших устройств" else if (relative.isEmpty()) path else "$title/$relative",
             onBack = { if (canGoUp) File(path).parent?.let { go(it) } else navigator.back() },
             actions = {
                 IconButton(onClick = { navigator.openSearch() }) {

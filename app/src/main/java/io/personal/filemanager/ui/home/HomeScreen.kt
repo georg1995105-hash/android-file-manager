@@ -102,6 +102,7 @@ fun HomeScreen() {
 fun HomeContent(state: HomeState, config: UiConfig?) {
     val navigator = LocalNavigator.current
     val tvUi = isTelevisionUi()
+    val fileOps = io.personal.filemanager.ui.ops.LocalFileOps.current
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
     val selection = remember { SelectionState() }
@@ -112,7 +113,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-    val tiles = config?.tiles?.filter { it.visible }.orEmpty()
+    val tiles = config?.tiles?.filter { it.visible && (!tvUi || SectionId.fromKey(it.id) != SectionId.LINKS) }.orEmpty()
     // Колонки по ширине (телефон/планшет, вертикально/горизонтально) и настройке «Плиток в ряду».
     val columns = TileLayout.columns(config?.tilesPerRow ?: 0, maxWidth.value.toInt(), tiles.size)
     val compactHeight = maxHeight < 480.dp
@@ -198,6 +199,7 @@ fun HomeContent(state: HomeState, config: UiConfig?) {
                 onClick = { if (selection.active) selection.toggle(entry.path) else navigator.openFile(entry, state.recent) },
                 onLongClick = { selection.toggle(entry.path) },
                 onMenu = { menuFor = entry },
+                onDelete = if (tvUi) ({ fileOps.delete(listOf(entry)) }) else null,
             )
         }
         if (selection.active) item { Spacer(Modifier.height(140.dp)) }

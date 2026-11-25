@@ -330,7 +330,7 @@ fun AppRoot(incomingPath: String? = null, onIncomingConsumed: () -> Unit = {}, i
                         arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
                     ) { entry ->
                         val path = entry.arguments?.getString("path").orEmpty()
-                        BrowserScreen(title = File(path).name.ifEmpty { path }, rootPath = path)
+                        BrowserScreen(title = if (File(path).absoluteFile == container.transfer.receivedDirectory.absoluteFile) "Полученные файлы" else File(path).name.ifEmpty { path }, rootPath = path)
                     }
                     composable(Routes.BACKUP) { BackupScreen() }
                     composable(Routes.ANALYZER) { AnalyzerScreen() }
@@ -416,7 +416,7 @@ internal fun BottomTabBar(
         OriginalTouchBottomTabBar(tabs, current, onSelect, onCreateRecent)
         return
     }
-    TvBottomTabBar(tabs, current, onSelect, onCreateRecent)
+    TvBottomTabBar(tabs.filterNot { SectionId.fromKey(it.id) == SectionId.LINKS }, current, onSelect, onCreateRecent)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

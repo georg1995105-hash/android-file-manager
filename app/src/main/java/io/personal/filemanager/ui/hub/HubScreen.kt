@@ -60,6 +60,8 @@ internal enum class HubTab(val label: String, val icon: ImageVector, val route: 
 
 @Composable
 internal fun HubNavigation(current: HubTab?, side: Boolean, onSelect: (HubTab) -> Unit) {
+    val tv = isTelevisionUi()
+    val tabs = HubTab.entries.filterNot { tv && it == HubTab.LINKS }
     if (side) {
         Column(Modifier.width(184.dp).fillMaxHeight().background(AppColors.Surface)
             .statusBarsPadding().navigationBarsPadding().padding(12.dp),
@@ -67,12 +69,12 @@ internal fun HubNavigation(current: HubTab?, side: Boolean, onSelect: (HubTab) -
             Box(Modifier.padding(8.dp).size(52.dp).clip(RoundedCornerShape(15.dp)).background(Brush.linearGradient(listOf(Color(0xFF276BDB),Color(0xFF123568)))), contentAlignment = Alignment.Center) { Icon(Icons.Filled.SwapHoriz, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
             Text("Передача", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp))
             Spacer(Modifier.height(12.dp))
-            HubTab.entries.forEach { tab -> HubNavItem(tab, current == tab, true, Modifier.fillMaxWidth(), onSelect) }
+            tabs.forEach { tab -> HubNavItem(tab, current == tab, true, Modifier.fillMaxWidth(), onSelect) }
         }
     } else {
         Row(Modifier.fillMaxWidth().background(AppColors.Surface).navigationBarsPadding().padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            HubTab.entries.forEach { tab -> HubNavItem(tab, current == tab, false, Modifier.weight(1f), onSelect) }
+            tabs.forEach { tab -> HubNavItem(tab, current == tab, false, Modifier.weight(1f), onSelect) }
         }
     }
 }
@@ -103,18 +105,20 @@ private fun HubNavItem(tab: HubTab, selected: Boolean, side: Boolean, modifier: 
 internal fun HubHome() {
     val container = appContainer()
     val nav = LocalNavigator.current
+    val fileOps = io.personal.filemanager.ui.ops.LocalFileOps.current
     val context = LocalContext.current
     val iconsOn by container.settings.linkIcons.collectAsStateWithLifecycle(initialValue=true)
     val tv = isTelevisionUi()
     val wide = tv || LocalConfiguration.current.screenWidthDp >= 700
     val transfer by container.transfer.state.collectAsStateWithLifecycle()
     val links by container.personal.links.collectAsStateWithLifecycle(initialValue = null)
-    val received by produceState<List<FileEntry>>(emptyList(), transfer.progress, transfer.message) {
+    val opsVersion by container.operations.version.collectAsStateWithLifecycle()
+    val received by produceState<List<FileEntry>>(emptyList(), transfer.progress, transfer.message, opsVersion) {
         value = withContext(Dispatchers.IO) {
             runCatching {
                 container.transfer.receivedDirectory.listFiles().orEmpty()
                     .filterNot { it.name.startsWith(".") }
-                    .sortedByDescending { it.lastModified() }.take(50).map { FileEntry.from(it) }
+                    .sortedByDescending { it.lastModified() }.map { FileEntry.from(it) }
             }.getOrDefault(emptyList())
         }
     }
@@ -225,12 +229,18 @@ internal fun HubHome() {
                             if(entry.kind==FileKind.VIDEO) Icon(Icons.Filled.PlayCircle,null,tint=Color.White,modifier=Modifier.size(36.dp))
                         }
                         Text(entry.name,maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.labelSmall)
+                        if(tv) HubDeleteButton(entry.name) { fileOps.delete(listOf(entry)) }
                     }
                 }
             }
         }
         received.filterNot { it.kind==FileKind.IMAGE || it.kind==FileKind.VIDEO }.take(if(tv) 4 else 5).forEach { entry ->
-            HubCard(entry.name,if(entry.isDirectory) "Папка" else formatSize(entry.size),if(entry.isDirectory) Icons.Filled.Folder else Icons.Filled.Description,Modifier.fillMaxWidth(),compact=true) { nav.openFile(entry,received) }
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                HubCard(entry.name,if(entry.isDirectory) "Папка" else formatSize(entry.size),if(entry.isDirectory) Icons.Filled.Folder else Icons.Filled.Description,Modifier.weight(1f),compact=true) {
+                    if(entry.isDirectory) nav.open(Routes.browser(entry.path)) else nav.openFile(entry,received)
+                }
+                if(tv) HubDeleteButton(entry.name) { fileOps.delete(listOf(entry)) }
+            }
         }
     }
 }
@@ -284,5 +294,14 @@ internal fun HubSettings() {
         HubCard("Резервные копии", "Сохранить ссылки и настройки", Icons.Filled.Save, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.BACKUP) }
         HubCard("Личный сейф", "Защищённые локальные данные", Icons.Filled.Lock, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.VAULT) }
         HubCard("Дополнительные настройки", "Корзина и локальные файлы", Icons.Filled.Settings, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.SETTINGS) }
+    }
+}
+
+@Composable
+private fun HubDeleteButton(name:String,onClick:()->Unit) {
+    var focused by remember { mutableStateOf(false) }
+    IconButton(onClick=onClick,modifier=Modifier.onFocusChanged { focused=it.isFocused }
+        .border(if(focused) 2.dp else 0.dp,if(focused) Blue else Color.Transparent,RoundedCornerShape(10.dp))) {
+        Icon(Icons.Filled.Delete,"Удалить «$name»")
     }
 }

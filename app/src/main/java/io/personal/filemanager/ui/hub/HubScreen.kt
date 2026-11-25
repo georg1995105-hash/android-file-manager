@@ -1,6 +1,7 @@
 package io.personal.filemanager.ui.hub
 
 import io.personal.filemanager.ui.components.tvFocusOutline
+import io.personal.filemanager.ui.components.tvRemoteFocus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -143,7 +144,7 @@ internal fun HubHome() {
         verticalArrangement = Arrangement.spacedBy(if (tv) 16.dp else 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Хранилище", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = { nav.openSearch() }) { Icon(Icons.Filled.Search, "Поиск локальных файлов") }
+            IconButton(onClick = { nav.openSearch() }, modifier = Modifier.tvRemoteFocus(RoundedCornerShape(50))) { Icon(Icons.Filled.Search, "Поиск локальных файлов") }
         }
         if (tv) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -162,7 +163,7 @@ internal fun HubHome() {
                 var focused by remember { mutableStateOf(false) }
                 val shape = RoundedCornerShape(18.dp)
                 Row(m.onFocusChanged { focused = it.isFocused }.clip(shape).background(Panel)
-                    .border(if (focused) 2.dp else 1.dp, if (focused) Blue else AppColors.CardBorder,shape)
+                    .border(1.dp, AppColors.CardBorder,shape).tvFocusOutline(focused, shape, Blue)
                     .clickable { nav.open(Routes.LOCAL_FILES) }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Icon(Icons.Filled.Storage,null,tint=Blue,modifier=Modifier.size(34.dp))
@@ -214,7 +215,7 @@ internal fun HubHome() {
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
             Text("Недавние файлы",style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f))
-            TextButton(onClick=openReceived) { Text("Все") }
+            TextButton(onClick=openReceived, modifier=Modifier.tvRemoteFocus()) { Text("Все") }
         }
         if (received.isEmpty()) Text("Полученные файлы появятся здесь",color=AppColors.TextSecondary,style=MaterialTheme.typography.bodyMedium)
         if(recentMedia.isNotEmpty()) {
@@ -223,7 +224,7 @@ internal fun HubHome() {
                     var focused by remember { mutableStateOf(false) }
                     val shape=RoundedCornerShape(14.dp)
                     Column(Modifier.width(if(tv) 150.dp else 120.dp).onFocusChanged { focused=it.isFocused }.clip(shape)
-                        .background(Panel).border(if(focused) 2.dp else 1.dp,if(focused) Blue else AppColors.CardBorder,shape)
+                        .background(Panel).border(1.dp,AppColors.CardBorder,shape).tvFocusOutline(focused, shape, Blue)
                         .clickable { nav.openFile(entry,recentMedia) }.padding(8.dp)) {
                         Box(Modifier.fillMaxWidth().aspectRatio(1.5f).clip(RoundedCornerShape(9.dp)).background(AppColors.Surface),contentAlignment=Alignment.Center) {
                             KindBadge(entry.kind, 46.dp)
@@ -253,7 +254,7 @@ private fun TvTile(title:String,subtitle:String,icon:ImageVector,modifier:Modifi
     val shape=RoundedCornerShape(20.dp)
     Box(modifier.heightIn(min=142.dp).onFocusChanged { focused=it.isFocused }.clip(shape)
         .background(Brush.verticalGradient(if(focused) listOf(Color(0xFF28476E),Color(0xFF182B44)) else listOf(Color(0xFF27364B),Color(0xFF1B283B))))
-        .border(if(focused) 3.dp else 1.dp,if(focused) Color(0xFF69B1FF) else AppColors.CardBorder,shape)
+        .border(1.dp,AppColors.CardBorder,shape).tvFocusOutline(focused, shape, Color(0xFF69B1FF))
         .clickable(role=Role.Button,onClick=onClick).padding(18.dp)) {
         Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.fillMaxWidth()) {
             Icon(icon,null,tint=if(focused) Color.White else Color(0xFFA9C9F3),modifier=Modifier.size(34.dp))
@@ -273,7 +274,7 @@ private fun HubCard(title: String, subtitle: String, icon: ImageVector, modifier
     val shape = RoundedCornerShape(18.dp)
     Row(modifier.onFocusChanged { focused = it.isFocused }.clip(shape)
         .background(if (focused) Blue.copy(alpha = .16f) else Panel)
-        .border(if (focused) 2.dp else 1.dp, if (focused) Blue else AppColors.CardBorder, shape)
+        .border(1.dp, AppColors.CardBorder, shape).tvFocusOutline(focused, shape, Blue)
         .clickable(role = Role.Button, onClick = onClick).heightIn(min = if (compact) 64.dp else 104.dp)
         .padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Icon(icon, null, tint = Blue, modifier = Modifier.size(if (compact) 26.dp else 34.dp))

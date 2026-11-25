@@ -13,6 +13,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -42,6 +48,7 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
     var token by remember{mutableStateOf<String?>(null)}
     var account by remember{mutableStateOf("")}
     var files by remember{mutableStateOf<List<DriveFile>>(emptyList())}
+    var deleteTarget by remember{mutableStateOf<DriveFile?>(null)}
     var busy by remember{mutableStateOf(false)}
     var message by remember{mutableStateOf("")}
     var progress by remember{mutableStateOf<Float?>(null)}
@@ -136,11 +143,22 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
                 Text("Файлы · ${files.size}",style=MaterialTheme.typography.titleMedium)
                 if(files.isEmpty())Text("Здесь будут файлы, отправленные с ваших устройств.")
                 files.forEach{file->
-                    OutlinedButton(enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={task("Скачивание…"){
-                        val t=token?:error("Подключите аккаунт")
-                        val f=withContext(Dispatchers.IO){DriveApi(t).download(file,container.transfer.receivedDirectory,::report)}
-                        container.transfer.rescan(f.absolutePath);message="Получено";nav.openFile(FileEntry.from(f))
-                    }}){Column(Modifier.fillMaxWidth()){Text(file.name);Text(formatSize(file.size),style=MaterialTheme.typography.bodySmall)}}
+                    key(file.id) {
+                        Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surfaceContainer) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text(file.name,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.titleMedium)
+                                Text(formatSize(file.size),style=MaterialTheme.typography.bodySmall)
+                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+                                    DriveAction("Скачать",!busy) { task("Скачивание…"){
+                                        val t=token?:error("Подключите аккаунт")
+                                        val f=withContext(Dispatchers.IO){DriveApi(t).download(file,container.transfer.receivedDirectory,::report)}
+                                        container.transfer.rescan(f.absolutePath);message="Получено";nav.openFile(FileEntry.from(f))
+                                    } }
+                                    DriveAction("Удалить",!busy) { deleteTarget=file }
+                                }
+                            }
+                        }
+                    }
                 }
                 TextButton(enabled=!busy,onClick={auth.disconnect();prefs.edit().remove("connected").apply();token=null;account="";files=emptyList();message="Аккаунт отключён на этом устройстве"}){Text("Отключить")}
             }
@@ -149,8 +167,34 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
             if(message.isNotBlank())Text(message)
         }
     }
+    deleteTarget?.let { file ->
+        AlertDialog(onDismissRequest={deleteTarget=null},title={Text("Удалить из Google Диска?")},
+            text={Text("«${file.name}» будет перемещён в корзину Google Диска. Скачанные копии на устройствах останутся.")},
+            confirmButton={DriveAction("В корзину",!busy){
+                deleteTarget=null
+                task("Удаление…"){
+                    val t=token?:error("Подключите аккаунт")
+                    val current=if(tv) withContext(Dispatchers.IO){auth.refresh()}?:error("Подключите аккаунт") else t
+                    withContext(Dispatchers.IO){DriveApi(current).trash(file)}
+                    token=current
+                    files=files.filterNot{it.id==file.id}
+                    message="Перемещено в корзину Google Диска"
+                }
+            }},
+            dismissButton={DriveAction("Отмена",true){deleteTarget=null}})
+    }
     if(shareDialog && shared.isNotEmpty() && token!=null && !busy) AlertDialog(onDismissRequest={shareDialog=false;onSharedConsumed()},
         title={Text("Отправить в Google Диск?")},text={Text("Файлов: ${shared.size}")},
         confirmButton={TextButton(onClick={shareDialog=false;upload(shared);onSharedConsumed()}){Text("Отправить")}},
         dismissButton={TextButton(onClick={shareDialog=false;onSharedConsumed()}){Text("Отмена")}})
+}
+
+@Composable
+private fun DriveAction(label:String,enabled:Boolean,onClick:()->Unit) {
+    var focused by remember { mutableStateOf(false) }
+    OutlinedButton(onClick=onClick,enabled=enabled,
+        modifier=Modifier.onFocusChanged { focused=it.isFocused }
+            .border(if(focused) 2.dp else 0.dp,if(focused) MaterialTheme.colorScheme.primary else Color.Transparent,RoundedCornerShape(24.dp))) {
+        Text(label)
+    }
 }

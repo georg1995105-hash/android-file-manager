@@ -60,6 +60,8 @@ internal enum class HubTab(val label: String, val icon: ImageVector, val route: 
 
 @Composable
 internal fun HubNavigation(current: HubTab?, side: Boolean, onSelect: (HubTab) -> Unit) {
+    val tv = isTelevisionUi()
+    val tabs = HubTab.entries.filterNot { tv && it == HubTab.LINKS }
     if (side) {
         Column(Modifier.width(184.dp).fillMaxHeight().background(AppColors.Surface)
             .statusBarsPadding().navigationBarsPadding().padding(12.dp),
@@ -67,12 +69,12 @@ internal fun HubNavigation(current: HubTab?, side: Boolean, onSelect: (HubTab) -
             Box(Modifier.padding(8.dp).size(52.dp).clip(RoundedCornerShape(15.dp)).background(Brush.linearGradient(listOf(Color(0xFF276BDB),Color(0xFF123568)))), contentAlignment = Alignment.Center) { Icon(Icons.Filled.SwapHoriz, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
             Text("Передача", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp))
             Spacer(Modifier.height(12.dp))
-            HubTab.entries.forEach { tab -> HubNavItem(tab, current == tab, true, Modifier.fillMaxWidth(), onSelect) }
+            tabs.forEach { tab -> HubNavItem(tab, current == tab, true, Modifier.fillMaxWidth(), onSelect) }
         }
     } else {
         Row(Modifier.fillMaxWidth().background(AppColors.Surface).navigationBarsPadding().padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            HubTab.entries.forEach { tab -> HubNavItem(tab, current == tab, false, Modifier.weight(1f), onSelect) }
+            tabs.forEach { tab -> HubNavItem(tab, current == tab, false, Modifier.weight(1f), onSelect) }
         }
     }
 }
@@ -109,12 +111,13 @@ internal fun HubHome() {
     val wide = tv || LocalConfiguration.current.screenWidthDp >= 700
     val transfer by container.transfer.state.collectAsStateWithLifecycle()
     val links by container.personal.links.collectAsStateWithLifecycle(initialValue = null)
-    val received by produceState<List<FileEntry>>(emptyList(), transfer.progress, transfer.message) {
+    val opsVersion by container.operations.version.collectAsStateWithLifecycle()
+    val received by produceState<List<FileEntry>>(emptyList(), transfer.progress, transfer.message, opsVersion) {
         value = withContext(Dispatchers.IO) {
             runCatching {
                 container.transfer.receivedDirectory.listFiles().orEmpty()
                     .filterNot { it.name.startsWith(".") }
-                    .sortedByDescending { it.lastModified() }.take(50).map { FileEntry.from(it) }
+                    .sortedByDescending { it.lastModified() }.map { FileEntry.from(it) }
             }.getOrDefault(emptyList())
         }
     }

@@ -79,6 +79,21 @@ internal class DriveApi(private val token:String) {
         } while(page.isNotBlank() && files.size<1000)
         return files
     }
+    fun trash(file:DriveFile) {
+        require(file.id.matches(Regex("[A-Za-z0-9_-]+")))
+        val c=connection("https://www.googleapis.com/drive/v3/files/${file.id}?fields=id,trashed","POST")
+        try {
+            c.setRequestProperty("X-HTTP-Method-Override","PATCH")
+            c.setRequestProperty("Content-Type","application/json; charset=UTF-8")
+            val body=JSONObject().put("trashed",true).toString().toByteArray(Charsets.UTF_8)
+            c.doOutput=true
+            c.setFixedLengthStreamingMode(body.size)
+            c.outputStream.use { it.write(body) }
+            val result=read(c)
+            check(result.optString("id")==file.id && result.optBoolean("trashed")) { "Google Диск не подтвердил удаление" }
+        } finally { c.disconnect() }
+    }
+
     suspend fun upload(context:Context,uri:Uri,progress:(Long,Long)->Unit) {
         val resolver=context.contentResolver
         val name=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { if(it.moveToFirst()) it.getString(0) else null }?.let(::validName)

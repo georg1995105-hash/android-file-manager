@@ -174,6 +174,7 @@ fun FileRow(
     onLongClick: (() -> Unit)?,
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
+    onDelete: (() -> Unit)? = null,
 ) {
     val tvUi = isTelevisionUi()
     var focused by remember(entry.path) { mutableStateOf(false) }
@@ -220,9 +221,21 @@ fun FileRow(
                 maxLines = 1,
             )
         }
+        if (onDelete != null && !selectionMode) {
+            FileDeleteButton(entry.name, onDelete)
+        }
         IconButton(onClick = onMenu, enabled = !selectionMode) {
             Icon(Icons.Filled.MoreVert, contentDescription = "Действия с «${entry.name}»")
         }
+    }
+}
+
+@Composable
+private fun FileDeleteButton(name: String, onClick: () -> Unit) {
+    var focused by remember(name) { mutableStateOf(false) }
+    IconButton(onClick = onClick, modifier = Modifier.onFocusChanged { focused = it.isFocused }
+        .border(if (focused) 2.dp else 0.dp, if (focused) AppColors.Accent else Color.Transparent, RoundedCornerShape(10.dp))) {
+        Icon(Icons.Filled.Delete, contentDescription = "Удалить «$name»")
     }
 }
 
@@ -418,6 +431,7 @@ fun FileListPane(
 ) {
     val navigator = LocalNavigator.current
     val tvUi = isTelevisionUi()
+    val fileOps = LocalFileOps.current
     val files = remember(entries) { entries.filter { !it.isDirectory } }
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     // «Назад» в режиме выбора снимает выбор, а не уходит с экрана.
@@ -436,7 +450,7 @@ fun FileListPane(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().dragSelectFilesInList(entries, listState, selection),
-            contentPadding = contentPadding,
+            contentPadding = PaddingValues(start = contentPadding.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr), end = contentPadding.calculateRightPadding(androidx.compose.ui.unit.LayoutDirection.Ltr), top = contentPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding() + if (selection.active) 140.dp else 0.dp),
         ) {
             header?.invoke(this)
             items(entries, key = { it.path }) { entry ->
@@ -448,6 +462,7 @@ fun FileListPane(
                     onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
                     onLongClick = if (tvUi) { { selection.set(selection.paths + entry.path) } } else null,
                     onMenu = { menuFor = entry },
+                    onDelete = if (tvUi) ({ fileOps.delete(listOf(entry)) }) else null,
                 )
                 // Ненавязчивая граница вместо отдельных тяжёлых карточек для каждой строки.
                 HorizontalDivider(
@@ -496,6 +511,7 @@ fun FileGridPane(
 ) {
     val navigator = LocalNavigator.current
     val tvUi = isTelevisionUi()
+    val fileOps = LocalFileOps.current
     val files = remember(entries) { entries.filter { !it.isDirectory } }
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
@@ -544,7 +560,23 @@ fun FileGridPane(
                         )
                     }
                     items(groupEntries, key = { it.path }, contentType = { "gallery-media" }) { entry ->
-                        GalleryMediaCell(
+                        Column {
+                            GalleryMediaCell(
+                                entry = entry,
+                                selected = entry.path in selection.paths,
+                                selectionMode = selection.active,
+                                dateShown = dateShown,
+                                onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
+                                onLongClick = if (tvUi) { { selection.set(selection.paths + entry.path) } } else null,
+                            )
+                            if (tvUi && !selection.active) FileDeleteButton(entry.name) { fileOps.delete(listOf(entry)) }
+                        }
+                    }
+                }
+            } else {
+                items(entries, key = { it.path }, contentType = { "file" }) { entry ->
+                    Column {
+                        GridCell(
                             entry = entry,
                             selected = entry.path in selection.paths,
                             selectionMode = selection.active,
@@ -552,18 +584,8 @@ fun FileGridPane(
                             onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
                             onLongClick = if (tvUi) { { selection.set(selection.paths + entry.path) } } else null,
                         )
+                        if (tvUi && !selection.active) FileDeleteButton(entry.name) { fileOps.delete(listOf(entry)) }
                     }
-                }
-            } else {
-                items(entries, key = { it.path }, contentType = { "file" }) { entry ->
-                    GridCell(
-                        entry = entry,
-                        selected = entry.path in selection.paths,
-                        selectionMode = selection.active,
-                        dateShown = dateShown,
-                        onClick = { if (selection.active) selection.toggle(entry.path) else open(entry) },
-                        onLongClick = if (tvUi) { { selection.set(selection.paths + entry.path) } } else null,
-                    )
                 }
             }
         }

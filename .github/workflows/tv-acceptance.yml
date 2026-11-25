@@ -1,21 +1,11 @@
 name: Android TV acceptance
 
 on:
-  push:
-    branches:
-      - feature/compact-create-files-20261110
-      - feature/storage-first-20261124
-      - fix/file-actions-tv-20261125
-      - fix/ota-installer-tv-20261125
-      - fix/tv-focus-visual-20261125
-    paths:
-      - 'app/**'
-      - 'tools/**'
-      - '.github/workflows/tv-acceptance.yml'
+  # Full TV regression is opt-in; routine OTA retains its signed upgrade smoke test.
   workflow_dispatch:
     inputs:
       signed_release_test:
-        description: 'Validate installation of signed universal APK and vc39→vc40 update, without uninstall'
+        description: 'Validate signed universal APK and in-place update, without uninstall'
         type: boolean
         required: false
         default: false

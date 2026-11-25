@@ -32,6 +32,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.focus.onFocusChanged
+import io.personal.filemanager.ui.isTelevisionUi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -64,7 +67,7 @@ fun ScreenTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.tvRemoteFocus(RoundedCornerShape(50))) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
             }
             Spacer(Modifier.width(4.dp))
@@ -111,7 +114,15 @@ fun Modifier.tapClickable(enabled: Boolean = true, onLongClick: () -> Unit = {},
 
 /** Inactive controls must not draw an accent outline at all; 0.dp is a hairline. */
 fun Modifier.tvFocusOutline(focused: Boolean, shape: androidx.compose.ui.graphics.Shape, color: Color = AppColors.Accent): Modifier =
-    if (focused) this.border(2.dp, color, shape) else this
+    if (focused) this.border(2.dp, color, shape).border(5.dp, Color.White, shape) else this
+
+/** Visible only for the current D-pad target, including already-coloured buttons. No extra focus target. */
+fun Modifier.tvRemoteFocus(shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp)): Modifier = composed {
+    if (!isTelevisionUi()) Modifier else {
+        var focused by remember { mutableStateOf(false) }
+        Modifier.onFocusChanged { focused = it.isFocused }.tvFocusOutline(focused, shape)
+    }
+}
 
 fun Modifier.card(shape: RoundedCornerShape = RoundedCornerShape(18.dp)): Modifier =
     this
@@ -169,7 +180,7 @@ fun AllFilesAccessRequired(modifier: Modifier = Modifier) {
             "Android/data и Android/obb. Личные файлы не отправляются в облако.",
         modifier = modifier,
         action = {
-            Button(onClick = { FileActions.openAllFilesAccessSettings(context) }) {
+            Button(onClick = { FileActions.openAllFilesAccessSettings(context) }, modifier = Modifier.tvRemoteFocus(RoundedCornerShape(50))) {
                 Text("Открыть настройки доступа")
             }
         },

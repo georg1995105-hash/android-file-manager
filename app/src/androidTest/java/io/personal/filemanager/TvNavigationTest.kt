@@ -150,6 +150,37 @@ class TvNavigationTest {
         return count
     }
 
+    private fun whiteEdgePixels(node: SemanticsNodeInteraction): Int {
+        val image = node.captureToImage().toPixelMap()
+        var count = 0
+        for (y in 0 until minOf(12, image.height / 3)) {
+            for (x in image.width / 4 until image.width * 3 / 4) {
+                val c = image[x, y]
+                if (c.red > .92f && c.green > .92f && c.blue > .92f) count++
+            }
+        }
+        return count
+    }
+
+    @Test fun tvDpadMovesBrightOutlineBetweenTabs() {
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
+        rule.waitUntil(20_000) {
+            rule.onAllNodesWithTag("hub-tab-TRANSFER").fetchSemanticsNodes().isNotEmpty()
+        }
+        val storage = rule.onNodeWithTag("hub-tab-STORAGE")
+        val transfer = rule.onNodeWithTag("hub-tab-TRANSFER")
+        storage.performSemanticsAction(SemanticsActions.RequestFocus)
+        storage.assertIsFocused()
+        transfer.assertIsNotFocused()
+        assertTrue("Focused tab must have a bright ring", whiteEdgePixels(storage) > 0)
+        assertEquals("Unfocused tab must not have a white ring", 0, whiteEdgePixels(transfer))
+        storage.performKeyInput { pressKey(Key.DirectionDown) }
+        transfer.assertIsFocused()
+        storage.assertIsNotFocused()
+        assertTrue("Focus ring must follow D-pad", whiteEdgePixels(transfer) > 0)
+        assertEquals("Selected but unfocused tab must not retain ring", 0, whiteEdgePixels(storage))
+    }
+
     @Test fun localStorageUnfocusedTilesHaveNoAccentOutline() {
         InstrumentationRegistry.getInstrumentation().setInTouchMode(false)
         rule.waitText("Файлы устройства")

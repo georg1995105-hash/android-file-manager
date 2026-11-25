@@ -68,7 +68,9 @@ fun UpdateScreen() {
             message = "Подготовка установки…"
             try {
                 if (useDirect) {
-                    confirmation.launch(updater.installerIntent(file, candidate))
+                    val intent = updater.installerIntent(file, candidate)
+                    OtaInstallSession.cancel(context)
+                    confirmation.launch(intent)
                     message = "Подтвердите обновление в системном окне Android"
                     loading = false
                 } else {

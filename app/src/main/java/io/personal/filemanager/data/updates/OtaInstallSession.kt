@@ -49,6 +49,14 @@ internal object OtaInstallSession {
         }
     }
 
+    fun cancel(context: Context) = synchronized(lock) {
+        val prefs = context.getSharedPreferences("ota-install", Context.MODE_PRIVATE)
+        val id = prefs.getInt("session", -1)
+        prefs.edit().remove("session").apply()
+        if (id >= 0) runCatching { context.packageManager.packageInstaller.abandonSession(id) }
+        events.value = null
+    }
+
     fun receive(context: Context, intent: Intent) {
         if (intent.action != ACTION) return
         val prefs = context.getSharedPreferences("ota-install", Context.MODE_PRIVATE)

@@ -230,15 +230,29 @@ class OtaUpdater(private val context: Context) {
             throw SecurityException("Неверная версия обновления")
         @Suppress("DEPRECATION")
         val installed = pm.getPackageInfo(context.packageName, flags)
-        fun signature(info: PackageInfo): Signature? {
-            @Suppress("DEPRECATION")
-            return if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners?.singleOrNull()
-                   else info.signatures?.singleOrNull()
+        // Some vendor Android TV builds return PackageInfo but omit archive signingInfo.
+        // Query the legacy platform verifier separately only when the modern result is absent.
+        // Never fall back after an explicit multi-signer or mismatched-certificate result.
+        fun modern(info: PackageInfo): Array<Signature>? =
+            if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else null
+        @Suppress("DEPRECATION")
+        fun legacyInstalled(): Array<Signature>? =
+            pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES).signatures
+        @Suppress("DEPRECATION")
+        fun legacyArchive(): Array<Signature>? {
+            val parsed = pm.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNATURES)
+                ?: return null
+            if (parsed.packageName != context.packageName) return null
+            val parsedCode = if (Build.VERSION.SDK_INT >= 28) parsed.longVersionCode else parsed.versionCode.toLong()
+            if (parsedCode != expectedVersion) return null
+            return parsed.signatures
         }
         fun fingerprint(s: Signature): String = MessageDigest.getInstance("SHA-256")
             .digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
-        val oldCert = signature(installed) ?: throw SecurityException("Нельзя проверить установленную подпись")
-        val newCert = signature(candidate) ?: throw SecurityException("Нельзя проверить подпись загруженного APK")
+        val oldCert = otaSingleSigner(modern(installed), ::legacyInstalled)
+            ?: throw SecurityException("Нельзя проверить установленную подпись")
+        val newCert = otaSingleSigner(modern(candidate), ::legacyArchive)
+            ?: throw SecurityException("Нельзя проверить подпись загруженного APK: Android не вернул сертификат")
         if (fingerprint(oldCert) != CERT || fingerprint(newCert) != CERT)
             throw SecurityException("Требуется исходная RELEASE-подпись. DEBUG нельзя обновить через OTA")
     }
@@ -281,3 +295,7 @@ class OtaUpdater(private val context: Context) {
         }
     }
 }
+
+/** A missing modern result permits a separately verified legacy result, not a conflicting result. */
+internal fun <T> otaSingleSigner(modern: Array<T>?, legacy: () -> Array<T>?): T? =
+    if (modern.isNullOrEmpty()) legacy()?.singleOrNull() else modern.singleOrNull()

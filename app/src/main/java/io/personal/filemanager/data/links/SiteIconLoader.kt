@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,12 +37,12 @@ class SiteIconLoader(context: Context, private val scope: CoroutineScope) {
     suspend fun icon(url: String): Bitmap? {
         val host = SiteIcons.hostOf(url) ?: return null
         memory.get(host)?.let { return it }
-        val job = inFlight.getOrPut(host) { scope.async(network) { load(host) } }
-        return try {
-            job.await()
-        } finally {
-            inFlight.remove(host, job)
-        }
+        val candidate = scope.async(network, start = CoroutineStart.LAZY) { load(host) }
+        val existing = inFlight.putIfAbsent(host, candidate)
+        val job = existing ?: candidate
+        if (existing != null) candidate.cancel()
+        else candidate.invokeOnCompletion { inFlight.remove(host, candidate) }
+        return job.await()
     }
 
     private fun load(host: String): Bitmap? {

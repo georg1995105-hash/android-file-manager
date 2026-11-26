@@ -165,7 +165,7 @@ class PrivateVault(private val context: Context) {
         }
     }
 
-    private fun readEncrypted(source: File, destination: java.io.OutputStream) {
+    private fun readEncrypted(source: File, destination: java.io.OutputStream, checkActive: () -> Unit = {}) {
         FileInputStream(source).use { stream ->
             val data = DataInputStream(stream)
             val magic = ByteArray(4)
@@ -181,7 +181,16 @@ class PrivateVault(private val context: Context) {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(allowCreate = false), GCMParameterSpec(128, iv))
             CipherInputStream(data, cipher).use { decrypted ->
-                decrypted.copyTo(destination, 64 * 1024)
+                val buffer = ByteArray(64 * 1024)
+                try {
+                    while (true) {
+                        checkActive()
+                        val n = decrypted.read(buffer)
+                        if (n < 0) break
+                        if (n > 0) destination.write(buffer, 0, n)
+                    }
+                    checkActive()
+                } finally { buffer.fill(0) }
             }
         }
     }
@@ -351,7 +360,8 @@ class PrivateVault(private val context: Context) {
 
     /** Called only by visible, unlocked rows on I/O. Thumbnails are never written as plaintext. */
     @Synchronized
-    fun thumbnail(item: VaultItem): Bitmap? {
+    fun thumbnail(item: VaultItem, checkActive: () -> Unit = {}): Bitmap? {
+        checkActive()
         require(item.kind == VaultKind.PHOTO || item.kind == VaultKind.VIDEO)
         val encrypted = thumbnailFile(item)
         if (encrypted.isFile && encrypted.length() <= 1024 * 1024) {
@@ -363,8 +373,9 @@ class PrivateVault(private val context: Context) {
         }
         // Existing vaults have no thumbnail sidecar. Decode once, then encrypt it for future access.
         // Legacy media uses the same private temporary preview as the existing viewer, deleted in finally.
-        val temp = preview(item)
+        val temp = preview(item, checkActive)
         try {
+            checkActive()
             val bitmap = if (item.kind == VaultKind.PHOTO) {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeFile(temp.path, bounds)
@@ -384,13 +395,17 @@ class PrivateVault(private val context: Context) {
             val small = if (scale < 1f) Bitmap.createScaledBitmap(bitmap,
                 (bitmap.width * scale).toInt().coerceAtLeast(1), (bitmap.height * scale).toInt().coerceAtLeast(1), true) else bitmap
             if (small !== bitmap) bitmap.recycle()
-            runCatching { storeThumbnail(item, small) }
-            return small
+            try {
+                checkActive()
+                runCatching { storeThumbnail(item, small) }
+                return small
+            } catch (e: Exception) { small.recycle(); throw e }
         } finally { temp.delete() }
     }
 
     /** Temporary app-private preview, deleted by the UI on close and on next vault launch. */
-    fun preview(item: VaultItem): File {
+    fun preview(item: VaultItem, checkActive: () -> Unit = {}): File {
+        checkActive()
         require(item.kind == VaultKind.PHOTO || item.kind == VaultKind.VIDEO)
         val previewDir = File(context.cacheDir, "pfm_private_preview").apply { mkdirs() }
         val ext = when (item.mime) {
@@ -402,7 +417,8 @@ class PrivateVault(private val context: Context) {
         }
         val temp = File.createTempFile(item.id + "-", "." + ext, previewDir)
         try {
-            FileOutputStream(temp).use { readEncrypted(safeFile(item.id), it) }
+            FileOutputStream(temp).use { readEncrypted(safeFile(item.id), it, checkActive) }
+            checkActive()
             return temp
         } catch (e: Exception) {
             temp.delete()

@@ -93,6 +93,8 @@ import io.personal.filemanager.ui.components.ScreenTopBar
 import io.personal.filemanager.ui.theme.AppColors
 import io.personal.filemanager.ui.viewer.findActivity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -225,7 +227,9 @@ fun VaultScreen() {
         editorText = ""
         if (item != null) scope.launch {
             try {
-                editorText = withContext(Dispatchers.IO) { vault.readText(item) }
+                val generation = lockGeneration
+                val text = withContext(Dispatchers.IO) { vault.readText(item) }
+                if (unlocked && generation == lockGeneration && editing?.id == item.id) editorText = text
             } catch (e: Exception) { notice = e.message ?: "Не удалось открыть запись" }
         }
     }
@@ -241,7 +245,10 @@ fun VaultScreen() {
                     // Own the temporary file even if the composition is cancelled while decrypting.
                     var pending: File? = null
                     try {
-                        withContext(Dispatchers.IO) { pending = vault.preview(item) }
+                        withContext(Dispatchers.IO) {
+                            val request = currentCoroutineContext()
+                            pending = vault.preview(item) { request.ensureActive() }
+                        }
                         if (unlocked && generation == lockGeneration) {
                             mediaPreview?.delete()
                             mediaPreview = pending
@@ -383,12 +390,15 @@ fun VaultScreen() {
                                 busy = true
                                 scope.launch {
                                     try {
+                                        val generation = lockGeneration
                                         withContext(Dispatchers.IO) { vault.setupPin(submittedPin) }
                                         configured = true
-                                        unlocked = true
-                                        pin = ""
-                                        firstPin = null
-                                        refreshItems()
+                                        if (generation == lockGeneration && owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                                            unlocked = true
+                                            pin = ""
+                                            firstPin = null
+                                            refreshItems()
+                                        }
                                     } catch (e: Exception) {
                                         notice = e.message ?: "Не удалось создать сейф"
                                     } finally { busy = false }
@@ -398,7 +408,9 @@ fun VaultScreen() {
                             busy = true
                             scope.launch {
                                 try {
+                                    val generation = lockGeneration
                                     val valid = withContext(Dispatchers.IO) { vault.checkPin(submittedPin) }
+                                    if (generation != lockGeneration || !owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
                                     if (valid) {
                                         unlocked = true
                                         pin = ""
@@ -418,6 +430,7 @@ fun VaultScreen() {
                 if (biometricAvailable && configured && activity != null) {
                     Button(
                         onClick = {
+                            val generation = lockGeneration
                             val prompt = BiometricPrompt.Builder(activity)
                                 .setTitle("Открыть личный сейф")
                                 .setSubtitle("Лицо или отпечаток — способ выбирает Android")
@@ -429,7 +442,7 @@ fun VaultScreen() {
                                 activity.mainExecutor,
                                 object : BiometricPrompt.AuthenticationCallback() {
                                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                        if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                                        if (generation == lockGeneration && owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                                             unlocked = true
                                             refreshItems()
                                         }
@@ -716,7 +729,10 @@ private val vaultThumbnailIo = Dispatchers.IO.limitedParallelism(1)
 private fun VaultThumbnail(vault: PrivateVault, item: VaultItem) {
     val bitmap by produceState<android.graphics.Bitmap?>(null, item.id) {
         if (item.kind == VaultKind.PHOTO || item.kind == VaultKind.VIDEO) {
-            value = withContext(vaultThumbnailIo) { runCatching { vault.thumbnail(item) }.getOrNull() }
+            value = withContext(vaultThumbnailIo) {
+                val request = currentCoroutineContext()
+                runCatching { vault.thumbnail(item) { request.ensureActive() } }.getOrNull()
+            }
         }
     }
     val image = remember(bitmap) { bitmap?.asImageBitmap() }

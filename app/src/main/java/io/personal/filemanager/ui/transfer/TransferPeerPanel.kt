@@ -22,15 +22,16 @@ fun TransferPeerPanel(manager: TransferManager) {
     val prefs = remember { context.getSharedPreferences("transfer-trusted-certificates", Context.MODE_PRIVATE) }
     val peers by manager.discovery.peers.collectAsStateWithLifecycle()
     val own by manager.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
+    val session = manager.peerSession
+    val scope = session.scope
     var manual by rememberSaveable { mutableStateOf(false) }
     var address by rememberSaveable { mutableStateOf("") }
-    var client by remember { mutableStateOf<TransferClient?>(null) }
-    var connectedName by remember { mutableStateOf("") }
-    var files by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
-    var message by remember { mutableStateOf("") }
-    var job by remember { mutableStateOf<Job?>(null) }
-    var busy by remember { mutableStateOf(false) }
+    var client by session::client
+    var connectedName by session::connectedName
+    var files by session::files
+    var message by session::message
+    var job by session::job
+    var busy by session::busy
     fun launch(action: suspend () -> Unit) {
         if (busy) return
         runCatching { context.startForegroundService(android.content.Intent(context, io.personal.filemanager.data.transfer.TransferService::class.java)) }
@@ -72,7 +73,7 @@ fun TransferPeerPanel(manager: TransferManager) {
     }
     DisposableEffect(Unit) {
         manager.discovery.discover()
-        onDispose { client?.cancel(); job?.cancel(); manager.discovery.stopDiscovery() }
+        onDispose { manager.discovery.stopDiscovery() }
     }
     val visible = peers.filterNot { it.address in own.addresses }
     val connected = client?.token?.isNotEmpty() == true
@@ -110,7 +111,7 @@ fun TransferPeerPanel(manager: TransferManager) {
             if (own.shared > 0) TextButton(enabled = !busy, onClick = { launch { sendSelected(client!!, connectedName) } }) { Text("Отправить выбранные (${own.shared})") }
         }
     }
-    if (busy) OutlinedButton(onClick = { client?.cancel(); job?.cancel(); busy = false; message = "Отменено" }) { Text("Отменить") }
+    if (busy) OutlinedButton(onClick = { job?.cancel(); client?.cancel(); message = "Отменено" }) { Text("Отменить") }
     if (message.isNotBlank()) Text(message, style = MaterialTheme.typography.titleSmall)
     if (prefs.all.isNotEmpty()) {
         TextButton(enabled = !busy, onClick = { prefs.edit().clear().apply(); message = "Запомненные устройства забыты" }) { Text("Забыть устройства") }

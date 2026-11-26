@@ -125,7 +125,16 @@ class TransferClient(address: String, private val pin: String? = null) {
                     check(acknowledged); offset += count; progress("${item.name}: $offset / ${item.size}")
                 }
             }
-            api("/upload/$key", "POST")
+            for (attempt in 0..4) {
+                currentCoroutineContext().ensureActive()
+                try { api("/upload/$key", "POST"); break }
+                catch (e: Exception) {
+                    if (e is CancellationException || attempt == 4) throw e
+                    // A previous peer may have finished the file even if the reply was lost.
+                    if (runCatching { api("/upload/$key").getBoolean("done") }.getOrDefault(false)) break
+                    delay(1000)
+                }
+            }
             progress("Получен и проверен: ${item.name}")
         } catch (e: Exception) {
             runCatching { api("/upload/$key", "DELETE") }

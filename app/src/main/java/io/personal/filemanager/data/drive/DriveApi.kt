@@ -170,29 +170,47 @@ internal class DriveApi(private val token:String) {
         check(directory.isDirectory || directory.mkdirs()) {"Папка недоступна"}
         require(directory.usableSpace>file.size+16*1024*1024) {"Недостаточно места"}
         val temp=File.createTempFile(".drive-",".part",directory)
-        val c=connection("https://www.googleapis.com/drive/v3/files/${file.id}?alt=media","GET")
         try {
-            check(c.responseCode==200) {"Google Диск: HTTP ${c.responseCode}"}
             val sha=MessageDigest.getInstance("SHA-256")
             var done=0L
-            c.inputStream.use { input -> temp.outputStream().use { out ->
+            var failures=0
+            temp.outputStream().use { out ->
                 val buf=ByteArray(256*1024)
-                while(true) {
+                do {
                     currentCoroutineContext().ensureActive()
-                    val n=input.read(buf);if(n<0)break
-                    done+=n;require(done<=file.size) {"Некорректный размер"}
-                    out.write(buf,0,n);sha.update(buf,0,n);progress(done,file.size)
-                }
+                    val c=connection("https://www.googleapis.com/drive/v3/files/${file.id}?alt=media","GET")
+                    try {
+                        if(done>0) c.setRequestProperty("Range","bytes=$done-")
+                        val status=c.responseCode
+                        if(status==429 || status>=500) throw java.io.IOException("Google Диск: HTTP $status")
+                        check(if(done==0L) status==200 else status==206 &&
+                            c.getHeaderField("Content-Range")=="bytes $done-${file.size-1}/${file.size}") { "Google Диск: HTTP $status, неверный диапазон" }
+                        c.inputStream.use { input ->
+                            while(done<file.size) {
+                                currentCoroutineContext().ensureActive()
+                                val n=input.read(buf,0,minOf(buf.size.toLong(),file.size-done).toInt())
+                                if(n<0) throw java.io.EOFException("Соединение оборвалось")
+                                if(n==0) continue
+                                out.write(buf,0,n);sha.update(buf,0,n);done+=n;failures=0;progress(done,file.size)
+                            }
+                            check(input.read()==-1) { "Некорректный размер" }
+                        }
+                    } catch(e:java.io.IOException) {
+                        currentCoroutineContext().ensureActive()
+                        if(done==file.size || ++failures>5) throw e
+                        kotlinx.coroutines.delay(1000L*failures)
+                    } finally { c.disconnect() }
+                } while(done<file.size)
                 out.fd.sync()
-            } }
-            check(done==file.size) {"Файл скачан не полностью"}
-            file.sha?.let { check(hex(sha.digest()).equals(it,true)) {"Контрольная сумма не совпала"} }
+            }
+            check(done==file.size) { "Файл скачан не полностью" }
+            file.sha?.let { check(hex(sha.digest()).equals(it,true)) { "Контрольная сумма не совпала" } }
             val dot=name.lastIndexOf('.').takeIf { it>0 } ?: name.length
             for(i in 0..9999) {
                 val target=File(directory,if(i==0) name else name.substring(0,dot)+" ($i)"+name.substring(dot))
                 try { Files.move(temp.toPath(),target.toPath());return target } catch(_:FileAlreadyExistsException){}
             }
             error("Нет свободного имени файла")
-        }finally{c.disconnect();temp.delete()}
+        }finally{temp.delete()}
     }
 }

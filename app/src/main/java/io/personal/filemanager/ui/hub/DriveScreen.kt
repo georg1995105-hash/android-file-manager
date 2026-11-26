@@ -106,11 +106,33 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
         }
         message="Код истёк. Подключитесь снова."
     }
+    suspend fun freshToken():String {
+        val t=if(tv) withContext(Dispatchers.IO){auth.refresh()}?:error("Подключите аккаунт")
+        else kotlinx.coroutines.suspendCancellableCoroutine<String> { continuation ->
+            val c=client
+            if(c==null) continuation.resumeWith(Result.failure(IllegalStateException("Сервисы Google недоступны")))
+            else c.authorize(AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(DRIVE_SCOPE))).build())
+                .addOnSuccessListener { result ->
+                    if(continuation.isActive) {
+                        val value=result.accessToken
+                        if(result.hasResolution() || value==null) continuation.resumeWith(Result.failure(IllegalStateException("Обновите подключение Google Диска")))
+                        else continuation.resumeWith(Result.success(value))
+                    }
+                }.addOnFailureListener { if(continuation.isActive) continuation.resumeWith(Result.failure(it)) }
+        }
+        val owner=withContext(Dispatchers.IO){DriveApi(t).account()}
+        check(account==owner) { "Аккаунт изменился. Подключитесь заново." }
+        token=t
+        return t
+    }
     fun upload(uris:List<Uri>) {
-        val t=token?:return
+        if(token==null)return
         task("Подготовка…") {
-            withContext(Dispatchers.IO){uris.take(100).forEach{DriveApi(t).upload(context,it,::report)}}
-            refresh(t);message="Отправлено в Google Диск"
+            for(uri in uris.take(100)) {
+                val t=freshToken()
+                withContext(Dispatchers.IO){DriveApi(t).upload(context,uri,::report)}
+            }
+            refresh(freshToken());message="Отправлено в Google Диск"
         }
     }
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()){upload(it)}
@@ -153,7 +175,7 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
                                 Text(formatSize(file.size),style=MaterialTheme.typography.bodySmall)
                                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
                                     DriveAction("Скачать",!busy) { task("Скачивание…"){
-                                        val t=token?:error("Подключите аккаунт")
+                                        val t=freshToken()
                                         val f=withContext(Dispatchers.IO){DriveApi(t).download(file,container.transfer.receivedDirectory,::report)}
                                         container.transfer.rescan(f.absolutePath);message="Получено";nav.openFile(FileEntry.from(f))
                                     } }
@@ -176,8 +198,7 @@ internal fun DriveScreen(shared:List<Uri>,onSharedConsumed:()->Unit) {
             confirmButton={DriveAction("В корзину",!busy){
                 deleteTarget=null
                 task("Удаление…"){
-                    val t=token?:error("Подключите аккаунт")
-                    val current=if(tv) withContext(Dispatchers.IO){auth.refresh()}?:error("Подключите аккаунт") else t
+                    val current=freshToken()
                     withContext(Dispatchers.IO){DriveApi(current).trash(file)}
                     token=current
                     files=files.filterNot{it.id==file.id}

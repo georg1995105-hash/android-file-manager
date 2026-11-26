@@ -43,6 +43,7 @@ class FileManagerApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        io.personal.filemanager.data.transfer.LocalShareFiles.cleanAfterProcessRestart(this)
         container = AppContainer(this)
     }
 

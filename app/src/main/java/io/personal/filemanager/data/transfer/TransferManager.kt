@@ -23,6 +23,7 @@ class TransferManager(private val context: Context) {
         val fingerprint: String = "", val approvals: List<Approval> = emptyList(), val message: String = "",
         val shared: Int = 0, val progress: String = "")
     val discovery = TransferDiscovery(context)
+    internal val peerSession = TransferPeerSession()
     private val mutable = MutableStateFlow(State())
     val state = mutable.asStateFlow()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -32,7 +33,7 @@ class TransferManager(private val context: Context) {
     private val lock = Any()
     private data class Pairing(val name: String, val expires: Long, var token: String? = null)
     private data class Upload(val owner: String, val name: String, val size: Long, val hash: String, val batch: String,
-        var receiver: IncomingTransfer? = null, var done: Boolean = false)
+        var receiver: IncomingTransfer? = null, @Volatile var done: Boolean = false, var finishedAt: Long = 0)
     data class Shared(val file: File, val name: String, val size: Long, val modified: Long, val hash: String)
     private val pairs = ConcurrentHashMap<String, Pairing>()
     private val sessions = ConcurrentHashMap<String, Long>()
@@ -108,6 +109,7 @@ class TransferManager(private val context: Context) {
         mutable.value = mutable.value.copy(code = "%08d".format(random.nextInt(100_000_000)))
     }
     fun stop() {
+        peerSession.cancel()
         synchronized(lock) {
             generation++
             server?.close(); server = null
@@ -202,6 +204,23 @@ class TransferManager(private val context: Context) {
         require(r.length <= 16384) { "Слишком большой запрос" }
         return JSONObject(r.body.readBytes().toString(Charsets.UTF_8))
     }
+    /** Expired credentials and completed receipts cannot permanently exhaust the session tables. */
+    private fun pruneSessions() {
+        val t = now()
+        pairs.entries.removeIf { it.value.expires <= t }
+        sessions.entries.removeIf { it.value <= t }
+        tickets.entries.removeIf { !sessions.containsKey(it.value.first) }
+        for ((key, upload) in uploads.entries.filter { !sessions.containsKey(it.value.owner) }) {
+            if (uploads.remove(key, upload) && !upload.done) {
+                scope.launch { runCatching { upload.receiver?.close() } }
+            }
+        }
+        batches.entries.removeIf { !sessions.containsKey(it.value) }
+        approvedBatches.retainAll(batches.keys)
+        uploads.entries.filter { it.value.done }.sortedByDescending { it.value.finishedAt }
+            .drop(32).forEach { uploads.remove(it.key, it.value) }
+    }
+
     private fun handle(r: LocalHttpsServer.Request, out: OutputStream) {
         try {
             if (r.method == "GET" && r.path in listOf("/", "/appjs", "/style")) {
@@ -213,7 +232,8 @@ class TransferManager(private val context: Context) {
                 val value = body(r)
                 synchronized(lock) {
                     if (now() - window > 60_000) { window = now(); attempts = 0 }
-                    require(++attempts <= 5 && pairs.size < 10 && sessions.size < 10) { "Лимит попыток. Подождите минуту" }
+                    pruneSessions()
+                    require(++attempts <= 5 && pairs.size < 64 && sessions.size < 64) { "Лимит попыток. Подождите минуту" }
                     // По решению владельца — без кодов и подтверждений: устройство в той же сети подключается сразу.
                     val name = value.optString("name").take(60).ifBlank { "Браузер" }
                     val token = id(); sessions[token] = now() + 3600_000
@@ -236,7 +256,11 @@ class TransferManager(private val context: Context) {
                 java.nio.file.Files.newInputStream(item.file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS).use { it.copyTo(out, 65536) }; return
             }
             val token = r.headers["authorization"]?.removePrefix("Bearer ") ?: error("Требуется подключение")
-            require(sessions[token]?.let { it > now() } == true) { "Сеанс истёк" }
+            synchronized(lock) {
+                pruneSessions()
+                require(sessions[token]?.let { it > now() } == true) { "Сеанс истёк" }
+                sessions[token] = now() + 3600_000
+            }
             when {
                 r.path == "/files" && r.method == "GET" -> {
                     val array = JSONArray()
@@ -250,16 +274,21 @@ class TransferManager(private val context: Context) {
                     json(out, obj = JSONObject().put("url", "/download/$ticket"))
                 }
                 r.path == "/batch" && r.method == "POST" -> {
-                    require(batches.size < 100)
-                    val batch = id(); batches[batch] = token
-                    json(out, obj = JSONObject().put("id", batch))
+                    synchronized(lock) {
+                        val active = uploads.values.filter { !it.done }.map { it.batch }.toSet()
+                        batches.entries.removeIf { it.value == token && it.key !in active }
+                        approvedBatches.retainAll(batches.keys)
+                        require(batches.size < 100)
+                        val batch = id(); batches[batch] = token
+                        json(out, obj = JSONObject().put("id", batch))
+                    }
                 }
                 r.path == "/offer" && r.method == "POST" -> {
                     val v = body(r); val name = v.getString("name"); IncomingTransfer.validatePath(name)
                     val size = v.getLong("size"); require(size >= 0 && size <= context.filesDir.usableSpace - 64L * 1024 * 1024)
                     val hash = v.optString("sha256"); require(hash.isEmpty() || hash.matches(Regex("[0-9a-f]{64}")))
                     synchronized(lock) {
-                        require(uploads.size < 100 && uploads.values.count { it.owner == token && !it.done } < 8)
+                        require(uploads.values.count { !it.done } < 100 && uploads.values.count { it.owner == token && !it.done } < 8)
                         val batch = v.optString("batch").ifBlank { id().also { batches[it] = token } }
                         require(batches[batch] == token)
                         val key = id(); val upload = Upload(token, name, size, hash, batch); uploads[key] = upload
@@ -285,9 +314,18 @@ class TransferManager(private val context: Context) {
                             update { it.copy(progress = "${u.name}: ${receiver.offset()} / ${u.size}") }
                             json(out, obj = JSONObject().put("offset", receiver.offset()))
                         }
-                        "POST" -> { require(receiver != null && !u.done); val saved = receiver.finish(); u.done = true
-                            android.media.MediaScannerConnection.scanFile(context, arrayOf(saved.toString()), null, null)
-                            update { it.copy(progress = "Получен: ${saved.fileName} → Загрузки/Передача") }; json(out) }
+                        "POST" -> {
+                            require(receiver != null)
+                            synchronized(u) {
+                                if (!u.done) {
+                                    val saved = receiver.finish()
+                                    u.finishedAt = now(); u.done = true
+                                    android.media.MediaScannerConnection.scanFile(context, arrayOf(saved.toString()), null, null)
+                                    update { it.copy(progress = "Получен: ${saved.fileName} → Загрузки/Передача") }
+                                }
+                            }
+                            json(out)
+                        }
                         else -> error("Метод не поддерживается")
                     }
                 }

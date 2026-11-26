@@ -10,6 +10,12 @@ import java.io.File
 
 /** Stage only explicitly selected content URIs; never modify the original provider files. */
 internal object LocalShareFiles {
+    // Only this app's disposable cache; never remove user-selected originals.
+    fun cleanAfterProcessRestart(context: Context) {
+        File(context.cacheDir, "transfer-selected").deleteRecursively()
+        context.cacheDir.listFiles()?.filter { it.isFile && it.name.startsWith("drive-upload-") && it.name.endsWith(".tmp") }
+            ?.forEach { it.delete() }
+    }
     suspend fun stage(context:Context,uris:List<Uri>):List<File> {
         require(uris.size in 1..100)
         val root=File(context.cacheDir,"transfer-selected").apply { check(isDirectory || mkdirs()) }

@@ -72,6 +72,7 @@ class TransferClient(address: String, private val pin: String? = null) {
             val data = input?.use { it.boundedBytes(1024 * 1024 + 1) } ?: byteArrayOf()
             require(data.size <= 1024 * 1024) { "Слишком большой ответ" }
             val result = JSONObject(data.toString(Charsets.UTF_8))
+            if (status == 429 || status >= 500) throw IOException("Временная ошибка HTTP $status")
             require(status in 200..299) { result.optString("error", "Ошибка HTTP $status") }
             return result
         } finally { c.disconnect(); active = null }
@@ -111,7 +112,8 @@ class TransferClient(address: String, private val pin: String? = null) {
                     for (attempt in 0..4) {
                         currentCoroutineContext().ensureActive()
                         try {
-                            api("/upload/$key", "PUT", bytes = chunk, headers = mapOf("X-Offset" to "$offset", "X-SHA256" to hash))
+                            val response = api("/upload/$key", "PUT", bytes = chunk, headers = mapOf("X-Offset" to "$offset", "X-SHA256" to hash))
+                            check(response.getLong("offset") == offset + count) { "Неверное подтверждение блока" }
                             acknowledged = true; break
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
@@ -119,7 +121,7 @@ class TransferClient(address: String, private val pin: String? = null) {
                             val position = runCatching { api("/upload/$key").getLong("offset") }.getOrNull()
                             if (position == offset + count) { acknowledged = true; break }
                             if (attempt == 4) throw e
-                            delay(1000)
+                            delay(retryDelay(attempt))
                         }
                     }
                     check(acknowledged); offset += count; progress("${item.name}: $offset / ${item.size}")
@@ -132,7 +134,7 @@ class TransferClient(address: String, private val pin: String? = null) {
                     if (e is CancellationException || attempt == 4) throw e
                     // A previous peer may have finished the file even if the reply was lost.
                     if (runCatching { api("/upload/$key").getBoolean("done") }.getOrDefault(false)) break
-                    delay(1000)
+                    delay(retryDelay(attempt))
                 }
             }
             progress("Получен и проверен: ${item.name}")
@@ -158,6 +160,7 @@ class TransferClient(address: String, private val pin: String? = null) {
                 try {
                     if (offset > 0) c.setRequestProperty("Range", "bytes=$offset-")
                     val status = c.responseCode
+                    if (status == 429 || status >= 500) throw IOException("Временная ошибка HTTP $status")
                     val partial = status == 206 && offset > 0
                     check(if (partial) c.getHeaderField("Content-Range") == "bytes $offset-${size-1}/$size" &&
                         c.contentLengthLong == size-offset else status == 200 && c.contentLengthLong == size) { "Размер ответа изменился" }
@@ -189,7 +192,7 @@ class TransferClient(address: String, private val pin: String? = null) {
                 } catch (e: IOException) {
                     currentCoroutineContext().ensureActive()
                     if (++failures > 5) throw e
-                    delay(1000L * failures)
+                    delay(retryDelay(failures - 1))
                 } finally { c.disconnect(); active = null }
             } while (true)
             val saved = receiver.finish()
@@ -219,3 +222,5 @@ private fun InputStream.boundedBytes(limit: Int): ByteArray {
     }
     return output.toByteArray()
 }
+
+internal fun retryDelay(attempt: Int): Long = 1000L shl attempt.coerceIn(0, 4)

@@ -142,6 +142,10 @@ fun FileThumbnail(entry: FileEntry, size: Dp, modifier: Modifier = Modifier) {
                 }
             }
         }
+        FileKind.PDF -> Box(modifier.size(size).clip(RoundedCornerShape(size / 4))) {
+            KindBadge(entry.kind, size)
+            AsyncImage(model = PdfThumb.of(entry), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        }
         FileKind.APK -> ApkThumbnail(entry, size, modifier)
         else -> KindBadge(entry.kind, size, modifier)
     }
@@ -151,7 +155,7 @@ fun FileThumbnail(entry: FileEntry, size: Dp, modifier: Modifier = Modifier) {
 private fun ApkThumbnail(entry: FileEntry, size: Dp, modifier: Modifier) {
     val context = LocalContext.current
     val apps = remember { (context.applicationContext as FileManagerApp).container.apps }
-    val visual by produceState<Pair<Boolean, ImageBitmap?>?>(null, entry.path) {
+    val visual by produceState<Pair<Boolean, ImageBitmap?>?>(null, entry.path, entry.lastModified, entry.size) {
         value = if (entry.extension == "apk") {
             withContext(Dispatchers.IO) {
                 apps.apkArchive(entry.path)?.let { data ->

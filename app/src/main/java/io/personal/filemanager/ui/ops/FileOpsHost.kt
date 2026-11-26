@@ -59,6 +59,9 @@ import io.personal.filemanager.data.settings.UiConfig
 import io.personal.filemanager.ui.Routes
 import io.personal.filemanager.ui.appContainer
 import io.personal.filemanager.ui.components.card
+import io.personal.filemanager.ui.components.tvRemoteFocus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -123,10 +126,18 @@ fun FileOpsHost(
         }
     }
 
+    var checkingDestination by remember { mutableStateOf(false) }
     fun paste(dest: String) {
         val clip = clipboard ?: return
-        val names = operations.conflicts(clip.paths, File(dest))
-        if (names.isEmpty()) operations.paste(File(dest), ConflictPolicy.SKIP) else conflict = dest to names
+        if (checkingDestination) return
+        checkingDestination = true
+        scope.launch {
+            try {
+                val names = withContext(Dispatchers.IO) { operations.conflicts(clip.paths, File(dest)) }
+                if (operations.clipboard.value != clip) return@launch
+                if (names.isEmpty()) operations.paste(File(dest), ConflictPolicy.SKIP) else conflict = dest to names
+            } finally { checkingDestination = false }
+        }
     }
 
     CompositionLocalProvider(LocalFileOps provides controller) {
@@ -219,12 +230,12 @@ fun FileOpsHost(
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton(onClick = { operations.clearClipboard() }) { Text("Отмена") }
+                        TextButton(onClick = { operations.clearClipboard() }, modifier = Modifier.tvRemoteFocus()) { Text("Отмена") }
                         val folder = currentFolder
                         if (folder != null) {
-                            Button(onClick = { paste(folder) }) { Text("Вставить сюда") }
+                            Button(enabled = !checkingDestination, onClick = { paste(folder) }, modifier = Modifier.tvRemoteFocus()) { Text("Вставить сюда") }
                         } else {
-                            Button(onClick = { navigator.openSection(SectionId.FILES) }) { Text("Выбрать папку") }
+                            Button(onClick = { navigator.openSection(SectionId.FILES) }, modifier = Modifier.tvRemoteFocus()) { Text("Выбрать папку") }
                         }
                     }
                 }

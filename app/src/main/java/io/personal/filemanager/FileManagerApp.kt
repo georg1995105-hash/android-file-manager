@@ -52,6 +52,8 @@ class FileManagerApp : Application(), SingletonImageLoader.Factory {
                 add(VideoFrameDecoder.Factory())
                 add(MediaThumbFetcher.Factory())
                 add(MediaThumbFetcher.Key())
+                add(io.personal.filemanager.ui.components.PdfThumbFetcher.Factory())
+                add(io.personal.filemanager.ui.components.PdfThumbFetcher.Key())
             }
             .build()
 }

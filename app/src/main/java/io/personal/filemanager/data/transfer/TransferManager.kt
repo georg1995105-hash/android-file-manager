@@ -47,6 +47,8 @@ class TransferManager(private val context: Context) {
     private var window = 0L
     private var codeExpires = 0L
     private var generation = 0L
+    private var shareGeneration = 0L
+    private var shareJob: Job? = null
     /** Полученное — сразу в «Загрузки/Передача» с исходными именами (при доступе ко всем файлам), иначе в память приложения. */
     val receivedDirectory: File get() =
         if (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
@@ -112,6 +114,8 @@ class TransferManager(private val context: Context) {
         peerSession.cancel()
         synchronized(lock) {
             generation++
+            shareGeneration++
+            shareJob?.cancel()
             server?.close(); server = null
             browserServer?.close(); browserServer = null
             discovery.stop()
@@ -122,9 +126,11 @@ class TransferManager(private val context: Context) {
         }
     }
     private fun startReceiving(upload: Upload) {
-        if (upload.size > context.filesDir.usableSpace - 64L * 1024 * 1024) error("Недостаточно места")
-        upload.receiver = IncomingTransfer(stagingDirectory.toPath(),
-            receivedDirectory.toPath(), upload.name, upload.size, upload.hash, upload.size, true).renameOnConflict()
+        val target = receivedDirectory
+        check(target.isDirectory || target.mkdirs()) { "Не удалось открыть папку приёма" }
+        if (upload.size > target.usableSpace - 64L * 1024 * 1024) error("Недостаточно места")
+        upload.receiver = IncomingTransfer(File(target, ".staging").toPath(),
+            target.toPath(), upload.name, upload.size, upload.hash, upload.size, true).renameOnConflict()
     }
 
     fun approve(id: String, accept: Boolean) {
@@ -159,22 +165,27 @@ class TransferManager(private val context: Context) {
     fun activeReceives(): List<Approval> = uploads.entries.filter { it.value.receiver != null && !it.value.done }.map { Approval(it.key, it.value.name) }
     fun cancel(id: String) = approve(id, false)
     fun share(files: List<File>) {
-        scope.launch {
+        synchronized(lock) {
+            shareJob?.cancel()
+            val snapshot = generation
+            val selection = ++shareGeneration
+            shareJob = scope.launch {
             runCatching {
-                val snapshot = synchronized(lock) { generation }
+                val request = currentCoroutineContext()
                 val found = LinkedHashMap<String, Shared>()
                 for (root in files) {
                     val rootPath = root.toPath()
                     Files.walk(rootPath).use { paths ->
                         val iterator = paths.iterator()
                         while (iterator.hasNext()) {
+                            request.ensureActive()
                             val path = iterator.next()
                             if (Files.isSymbolicLink(path)) error("Символические ссылки не передаются")
                             if (!Files.isRegularFile(path)) continue
                             if (found.size >= 1000) error("За один раз можно выбрать до 1000 файлов")
                             val f = path.toFile()
                             val size = f.length(); val modified = f.lastModified()
-                            val hash = digest(f)
+                            val hash = digest(f) { request.ensureActive() }
                             check(size == f.length() && modified == f.lastModified()) { "Файл изменился: ${f.name}" }
                             val relative = if (root.isDirectory) root.name + "/" + rootPath.relativize(path) else root.name
                             found[id()] = Shared(f, relative, size, modified, hash)
@@ -182,19 +193,20 @@ class TransferManager(private val context: Context) {
                     }
                 }
                 synchronized(lock) {
-                    check(snapshot == generation) { "Сеанс остановлен" }
+                    check(snapshot == generation && selection == shareGeneration && request.isActive) { "Сеанс остановлен" }
                     shared.clear(); shared.putAll(found); tickets.clear()
                     mutable.value = mutable.value.copy(shared = shared.size, message = "Доступны только выбранные файлы: ${shared.size}")
                 }
-            }.onFailure { message("Не удалось подготовить: ${it.message}") }
+            }.onFailure { if (it !is CancellationException && synchronized(lock) { selection == shareGeneration }) message("Не удалось подготовить: ${it.message}") }
+            }
         }
     }
     fun selectedFiles(): List<Shared> = shared.values.toList()
-    fun clearShared() { shared.clear(); tickets.clear(); update { it.copy(shared = 0) } }
-    private fun digest(file: File): String {
+    fun clearShared() = synchronized(lock) { shareGeneration++; shareJob?.cancel(); shared.clear(); tickets.clear(); update { it.copy(shared = 0) } }
+    private fun digest(file: File, checkActive: () -> Unit = {}): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input -> val b = ByteArray(65536); while (true) {
-            val n = input.read(b); if (n < 0) break; digest.update(b, 0, n)
+            checkActive(); val n = input.read(b); if (n < 0) break; digest.update(b, 0, n)
         } }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
@@ -307,7 +319,7 @@ class TransferManager(private val context: Context) {
                 }
                 r.path == "/offer" && r.method == "POST" -> {
                     val v = body(r); val name = v.getString("name"); IncomingTransfer.validatePath(name)
-                    val size = v.getLong("size"); require(size >= 0 && size <= context.filesDir.usableSpace - 64L * 1024 * 1024)
+                    val size = v.getLong("size"); require(size >= 0)
                     val hash = v.optString("sha256"); require(hash.isEmpty() || hash.matches(Regex("[0-9a-f]{64}")))
                     synchronized(lock) {
                         require(uploads.values.count { !it.done } < 100 && uploads.values.count { it.owner == token && !it.done } < 8)

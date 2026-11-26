@@ -105,7 +105,7 @@ class FileOperations(
 
     /** Имена, которые уже существуют в папке назначения. */
     fun conflicts(sources: List<File>, destDir: File): List<String> =
-        sources.map { it.name }.filter { File(destDir, it).exists() }
+        independentSources(sources).map { it.name }.filter { File(destDir, it).exists() }.distinct()
 
     fun copy(
         sources: List<File>,
@@ -136,9 +136,10 @@ class FileOperations(
 
         // Проверки до начала: источник существует, нельзя копировать папку в саму себя.
         val failed = mutableListOf<Pair<String, String>>()
-        val valid = sources.filter { src ->
+        val valid = independentSources(sources).filter { src ->
             when {
                 !src.exists() -> { failed += src.path to "Источник не найден"; false }
+                Files.isSymbolicLink(src.toPath()) -> { failed += src.path to "Символическая ссылка не поддерживается"; false }
                 src.isDirectory && isInside(destDir, src) -> { failed += src.path to "Нельзя поместить папку внутрь самой себя"; false }
                 move && src.parentFile?.absolutePath == destDir.absolutePath -> { failed += src.path to "Файл уже в этой папке"; false }
                 else -> true
@@ -170,6 +171,10 @@ class FileOperations(
             ctx.current = src.name
             ctx.report()
             var target = File(destDir, src.name)
+            if (policy == ConflictPolicy.REPLACE && runCatching { target.canonicalFile == src.canonicalFile }.getOrDefault(false)) {
+                skipped += src.path
+                continue
+            }
             if (target.exists()) {
                 when (policy) {
                     ConflictPolicy.SKIP -> {
@@ -224,12 +229,13 @@ class FileOperations(
 
     private fun copyTree(src: File, target: File, ctx: Ctx, policy: ConflictPolicy, created: MutableList<String>) {
         ctx.checkCancel()
-        if (Files.isSymbolicLink(src.toPath())) return // ссылки не копируются и не обходятся
+        if (Files.isSymbolicLink(src.toPath())) throw IOException("Символическая ссылка не поддерживается: ${src.name}")
         if (src.isDirectory) {
             val createdHere = !target.exists()
             if (createdHere && !target.mkdir()) throw IOException("Не удалось создать папку «${target.name}»")
             try {
-                for (child in src.listFiles().orEmpty()) {
+                val children = src.listFiles() ?: throw IOException("Не удалось прочитать папку «${src.name}»")
+                for (child in children) {
                     val childTarget = File(target, child.name)
                     if (childTarget.exists() && !createdHere) {
                         // Слияние в существующую папку (REPLACE): старый файл — в корзину.
@@ -256,6 +262,8 @@ class FileOperations(
 
     private fun copyFile(src: File, target: File, ctx: Ctx) {
         val dir = target.parentFile ?: throw IOException("Нет папки назначения")
+        val originalSize = src.length()
+        val originalModified = src.lastModified()
         val tmp = File(dir, "$PARTIAL_PREFIX${target.name}-${Random.nextInt(0, Int.MAX_VALUE).toString(36)}")
         try {
             src.inputStream().use { input ->
@@ -271,7 +279,8 @@ class FileOperations(
                     out.fd.sync()
                 }
             }
-            if (tmp.length() != src.length()) throw IOException("Размер копии «${src.name}» не совпал с оригиналом")
+            if (tmp.length() != originalSize || src.length() != originalSize || src.lastModified() != originalModified)
+                throw IOException("Исходный файл изменился во время копирования: «${src.name}»")
             tmp.setLastModified(src.lastModified())
             if (target.exists()) throw IOException("«${target.name}» появился во время копирования — не перезаписан")
             if (!tmp.renameTo(target)) throw IOException("Не удалось завершить запись «${target.name}»")
@@ -351,10 +360,21 @@ class FileOperations(
 
         fun defaultVolumeRoot(file: File): String? = volumeRegex.find(file.absolutePath)?.groupValues?.get(1)
 
+        /** A folder selection already covers its children. */
+        fun independentSources(sources: List<File>): List<File> {
+            val unique = sources.distinctBy { it.absoluteFile.normalize().path }
+            val folders = unique.filter { it.isDirectory && !Files.isSymbolicLink(it.toPath()) }
+                .mapTo(HashSet()) { it.absoluteFile.normalize().path }
+            return unique.filter { source ->
+                generateSequence(source.absoluteFile.normalize().parentFile) { it.parentFile }
+                    .none { it.path in folders }
+            }
+        }
+
         /** true, если [child] — это [parent] или лежит внутри него. */
         fun isInside(child: File, parent: File): Boolean {
-            val c = child.absoluteFile.normalize().path
-            val p = parent.absoluteFile.normalize().path
+            val c = runCatching { child.canonicalPath }.getOrElse { child.absoluteFile.normalize().path }
+            val p = runCatching { parent.canonicalPath }.getOrElse { parent.absoluteFile.normalize().path }
             return c == p || c.startsWith("$p/")
         }
     }

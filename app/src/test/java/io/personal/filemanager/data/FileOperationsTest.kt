@@ -75,6 +75,39 @@ class FileOperationsTest {
     }
 
     @Test
+    fun replacingSourceWithItselfDoesNotTrashIt() {
+        val file = f(src, "заметка.md")
+        val report = ops.copy(listOf(file), src, ConflictPolicy.REPLACE)
+        assertEquals(1, report.skipped.size)
+        assertEquals("# привет", file.readText())
+        assertTrue(trash.list(listOf(trashRoot)).isEmpty())
+    }
+
+    @Test
+    fun selectedFolderAlreadyContainsSelectedChild() {
+        val parent = f(src, "папка")
+        val child = f(parent, "вложенная/a.txt")
+        assertEquals(listOf(parent), FileOperations.independentSources(listOf(child, parent, parent)))
+        val report = ops.copy(listOf(child, parent, parent), dst, ConflictPolicy.SKIP)
+        assertTrue(report.ok)
+        assertEquals("a", f(dst, "папка/вложенная/a.txt").readText())
+        assertFalse(f(dst, "a.txt").exists())
+    }
+
+    @Test
+    fun crossVolumeMoveDoesNotDiscardUncopiedSymlink() {
+        val source = f(src, "папка")
+        val link = f(source, "link")
+        java.nio.file.Files.createSymbolicLink(link.toPath(), f(src, "заметка.md").toPath())
+        val crossOps = FileOperations(trash) { file -> if (file.absolutePath.startsWith(dst.absolutePath)) "B" else "A" }
+        val report = crossOps.move(listOf(source), dst, ConflictPolicy.SKIP)
+        assertFalse(report.ok)
+        assertTrue(java.nio.file.Files.isSymbolicLink(link.toPath()))
+        assertEquals("b", f(source, "b.txt").readText())
+        assertFalse(f(dst, source.name).exists())
+    }
+
+    @Test
     fun cancelLeavesSourceAndNoPartialFiles() {
         var calls = 0
         val report = ops.copy(listOf(f(src, "big.bin")), dst, ConflictPolicy.SKIP, isCancelled = { ++calls > 3 })

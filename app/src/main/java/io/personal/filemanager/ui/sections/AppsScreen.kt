@@ -85,6 +85,8 @@ import io.personal.filemanager.ui.components.toImage
 import io.personal.filemanager.core.FileKind
 import io.personal.filemanager.core.SectionId
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -95,9 +97,14 @@ class AppsViewModel(private val container: AppContainer) : ViewModel() {
     private val _apps = MutableStateFlow<List<InstalledApp>?>(null)
     val apps: StateFlow<List<InstalledApp>?> = _apps.asStateFlow()
 
+    private var refreshJob: Job? = null
+
     fun refresh() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _apps.value = runCatching { container.apps.launchableApps() }.getOrDefault(emptyList())
+        if (refreshJob?.isActive == true) return
+        refreshJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { container.apps.launchableApps() }.getOrDefault(emptyList()) }
+            ensureActive()
+            _apps.value = result
         }
     }
 }

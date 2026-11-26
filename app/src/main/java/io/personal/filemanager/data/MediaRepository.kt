@@ -6,6 +6,12 @@ import android.database.ContentObserver
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.os.CancellationSignal
+import android.os.Environment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -32,7 +38,9 @@ data class CategoryStats(val totalBytes: Long, val count: Int)
  */
 class MediaRepository(context: Context) {
     private val resolver: ContentResolver = context.contentResolver
-    private val filesUri: Uri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    private val filesUri: Uri = MediaStore.Files.getContentUri("external")
+    // Keep background tile scans from competing with interactive searches for every I/O thread.
+    private val statsDispatcher = Dispatchers.IO.limitedParallelism(2)
 
     @Suppress("DEPRECATION")
     private val dataColumn = FileColumns.DATA
@@ -70,22 +78,27 @@ class MediaRepository(context: Context) {
             MediaCategory.DOCUMENTS -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.documentExtensions.map { "%.$it" })
             MediaCategory.ARCHIVES -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.archiveLikePatterns)
             MediaCategory.APKS -> likeAny(FileColumns.DISPLAY_NAME, FileTypes.apkExtensions.map { "%.$it" })
-            MediaCategory.DOWNLOADS -> Selection("${FileColumns.RELATIVE_PATH} LIKE ?", arrayOf("Download/%"))
+            MediaCategory.DOWNLOADS -> if (Build.VERSION.SDK_INT >= 29) {
+                Selection("${FileColumns.RELATIVE_PATH} LIKE ?", arrayOf("Download/%"))
+            } else {
+                val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+                Selection("$dataColumn LIKE ?", arrayOf("$path/%"))
+            }
         }
         return if (extra == null) Selection(base, emptyArray()) else Selection("$base AND ${extra.sql}", extra.args)
     }
 
-    private fun query(selection: Selection, sortOrder: String?, limit: Int, columns: Array<String> = projection): Cursor? {
+    private fun query(selection: Selection, sortOrder: String?, limit: Int, columns: Array<String> = projection, signal: CancellationSignal? = null): Cursor? {
         val args = Bundle().apply {
             putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection.sql)
             putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selection.args)
             if (sortOrder != null) putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
             if (limit > 0) putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
         }
-        return resolver.query(filesUri, columns, args, null)
+        return resolver.query(filesUri, columns, args, signal)
     }
 
-    private fun Cursor.readEntries(skipHidden: Boolean, maxItems: Int): List<FileEntry> {
+    private fun Cursor.readEntries(skipHidden: Boolean, maxItems: Int, signal: CancellationSignal? = null): List<FileEntry> {
         val iData = getColumnIndexOrThrow(dataColumn)
         val iName = getColumnIndexOrThrow(FileColumns.DISPLAY_NAME)
         val iSize = getColumnIndexOrThrow(FileColumns.SIZE)
@@ -94,13 +107,13 @@ class MediaRepository(context: Context) {
         val iMime = getColumnIndexOrThrow(FileColumns.MIME_TYPE)
         val iId = getColumnIndex(FileColumns._ID)
         val result = ArrayList<FileEntry>(maxItems.coerceAtMost(512))
-        while (moveToNext()) {
+        while (result.size < maxItems && moveToNext()) {
+            signal?.throwIfCanceled()
             val path = getString(iData) ?: continue
             // MediaScannerConnection is asynchronous: do not show stale index rows.
             if (!File(path).isFile) continue
             if (skipHidden && FileSystemRepository.hasHiddenSegment(path)) continue
             val name = getString(iName) ?: path.substringAfterLast('/')
-            if (result.size >= maxItems) break
             result += FileEntry(
                 path = path,
                 name = name,
@@ -115,20 +128,20 @@ class MediaRepository(context: Context) {
         return result
     }
 
-    fun list(category: MediaCategory, sort: MediaSort = MediaSort.ADDED, limit: Int = DEFAULT_LIMIT): List<FileEntry> {
+    fun list(category: MediaCategory, sort: MediaSort = MediaSort.ADDED, limit: Int = DEFAULT_LIMIT, signal: CancellationSignal? = null): List<FileEntry> {
         val sortOrder = when (sort) {
             MediaSort.ADDED -> "${FileColumns.DATE_ADDED} DESC"
             MediaSort.MODIFIED -> "${FileColumns.DATE_MODIFIED} DESC"
             MediaSort.SIZE -> "${FileColumns.SIZE} DESC"
             MediaSort.NAME -> "${FileColumns.DISPLAY_NAME} ASC"
         }
-        val entries = query(selectionFor(category), sortOrder, 0)?.use { it.readEntries(skipHidden = true, maxItems = limit) }.orEmpty()
+        val entries = query(selectionFor(category), sortOrder, 0, signal = signal)?.use { it.readEntries(skipHidden = true, maxItems = limit, signal = signal) }.orEmpty()
         // SQLite сравнивает имена побайтно (заглавные раньше строчных) — итог упорядочиваем без учёта регистра.
         return if (sort == MediaSort.NAME) entries.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }) else entries
     }
 
     /** Поиск по имени во всём индексе; спецсимволы LIKE экранируются. */
-    fun search(text: String, limit: Int = DEFAULT_LIMIT): List<FileEntry> {
+    fun search(text: String, limit: Int = DEFAULT_LIMIT, signal: CancellationSignal? = null): List<FileEntry> {
         val q = text.trim()
         if (q.isEmpty()) return emptyList()
         val escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -136,11 +149,11 @@ class MediaRepository(context: Context) {
             "${FileColumns.MIME_TYPE} IS NOT NULL AND ${FileColumns.DISPLAY_NAME} LIKE ? ESCAPE '\\'",
             arrayOf("%$escaped%"),
         )
-        return query(selection, "${FileColumns.DATE_MODIFIED} DESC", 0)?.use { it.readEntries(skipHidden = false, maxItems = limit) }.orEmpty()
+        return query(selection, "${FileColumns.DATE_MODIFIED} DESC", 0, signal = signal)?.use { it.readEntries(skipHidden = false, maxItems = limit, signal = signal) }.orEmpty()
     }
 
     /** Размер и количество файлов категории (для плиток главной). */
-    fun stats(category: MediaCategory, addedAfterSeconds: Long? = null): CategoryStats {
+    fun stats(category: MediaCategory, addedAfterSeconds: Long? = null, signal: CancellationSignal? = null): CategoryStats {
         var selection = selectionFor(category)
         if (addedAfterSeconds != null) {
             selection = Selection(
@@ -149,12 +162,13 @@ class MediaRepository(context: Context) {
             )
         }
         val columns = arrayOf(dataColumn, FileColumns.SIZE)
-        return query(selection, null, 0, columns)?.use { c ->
+        return query(selection, null, 0, columns, signal)?.use { c ->
             val iData = c.getColumnIndexOrThrow(dataColumn)
             val iSize = c.getColumnIndexOrThrow(FileColumns.SIZE)
             var total = 0L
             var count = 0
             while (c.moveToNext()) {
+                signal?.throwIfCanceled()
                 val path = c.getString(iData) ?: continue
                 if (!File(path).isFile || FileSystemRepository.hasHiddenSegment(path)) continue
                 total += c.getLong(iSize)
@@ -163,6 +177,15 @@ class MediaRepository(context: Context) {
             CategoryStats(total, count)
         } ?: CategoryStats(0, 0)
     }
+
+    suspend fun listCancellable(category: MediaCategory, sort: MediaSort = MediaSort.ADDED, limit: Int = DEFAULT_LIMIT): List<FileEntry> =
+        withContext(Dispatchers.IO) { cancellableMediaRead { list(category, sort, limit, it) } }
+
+    suspend fun searchCancellable(text: String): List<FileEntry> =
+        withContext(Dispatchers.IO) { cancellableMediaRead { search(text, signal = it) } }
+
+    suspend fun statsCancellable(category: MediaCategory, addedAfterSeconds: Long? = null): CategoryStats =
+        withContext(statsDispatcher) { cancellableMediaRead { stats(category, addedAfterSeconds, it) } }
 
     /** Сигнал об изменениях в индексе: экраны обновляются сами, без кнопки «Обновить». */
     fun changes(): Flow<Unit> = callbackFlow {
@@ -181,3 +204,16 @@ class MediaRepository(context: Context) {
         const val AUDIO_LIMIT = 25_000
     }
 }
+
+/** Cancel the provider query and stop cursor traversal when a newer screen request supersedes it. */
+internal suspend fun <T> cancellableMediaRead(block: (CancellationSignal) -> T): T =
+    suspendCancellableCoroutine { continuation ->
+        val signal = CancellationSignal()
+        continuation.invokeOnCancellation { signal.cancel() }
+        if (!continuation.isActive) return@suspendCancellableCoroutine
+        try {
+            continuation.resumeWith(Result.success(block(signal)))
+        } catch (e: Exception) {
+            continuation.resumeWith(Result.failure(e))
+        }
+    }

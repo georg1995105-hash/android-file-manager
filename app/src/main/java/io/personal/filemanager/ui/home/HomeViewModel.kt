@@ -13,6 +13,8 @@ import io.personal.filemanager.data.MediaSort
 import io.personal.filemanager.data.StorageInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -41,16 +43,17 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 
     fun refresh() {
         job?.cancel()
-        job = viewModelScope.launch(Dispatchers.IO) {
+        job = viewModelScope.launch {
             val access = container.storage.hasAllFilesAccess()
-            val storage = runCatching { container.storage.internalStorage() }.getOrNull()
+            val storage = withContext(Dispatchers.IO) { runCatching { container.storage.internalStorage() }.getOrNull() }
             _state.update { it.copy(storage = storage, hasAccess = access) }
             if (!access) {
                 _state.update { it.copy(stats = emptyMap(), recent = emptyList(), recentLoaded = true) }
                 return@launch
             }
-            val recent = runCatching { container.media.list(MediaCategory.RECENT, MediaSort.ADDED, limit = 16).take(4) }
+            val recent = runCatching { container.media.listCancellable(MediaCategory.RECENT, MediaSort.ADDED, limit = 16).take(4) }
                 .getOrDefault(emptyList())
+            ensureActive()
             _state.update { it.copy(recent = recent, recentLoaded = true) }
 
             val weekAgo = System.currentTimeMillis() / 1000 - 7 * 24 * 3600
@@ -62,14 +65,14 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                     SectionId.AUDIO to MediaCategory.AUDIO,
                     SectionId.DOCUMENTS to MediaCategory.DOCUMENTS,
                     SectionId.ARCHIVES to MediaCategory.ARCHIVES,
-                ).map { (id, cat) -> async { id to runCatching { container.media.stats(cat) }.getOrNull() } }
-                val recentStats = async { SectionId.RECENT to runCatching { container.media.stats(MediaCategory.RECENT, weekAgo) }.getOrNull() }
-                val appsStats = async {
+                ).map { (id, cat) -> async { id to runCatching { container.media.statsCancellable(cat) }.getOrNull() } }
+                val recentStats = async { SectionId.RECENT to runCatching { container.media.statsCancellable(MediaCategory.RECENT, weekAgo) }.getOrNull() }
+                val appsStats = async(Dispatchers.IO) {
                     SectionId.APPS to runCatching { container.apps.launchableStats() }.getOrNull()
                 }
                 (media + recentStats + appsStats).awaitAll()
             }
-            val personal = runCatching { container.personal.counts() }.getOrNull()
+            val personal = withContext(Dispatchers.IO) { runCatching { container.personal.counts() }.getOrNull() }
             val texts = buildMap {
                 personal?.let { (notes, links, favorites) ->
                     put(SectionId.NOTES, pluralRu(notes, "заметка", "заметки", "заметок"))
@@ -79,6 +82,7 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                 stats.forEach { (id, s) -> if (s != null) put(id, formatSizeAndCount(s.totalBytes, s.count)) }
                 storage?.let { put(SectionId.FILES, "занято ${formatSize(it.usedBytes)}") }
             }
+            ensureActive()
             _state.update { it.copy(stats = texts) }
         }
     }

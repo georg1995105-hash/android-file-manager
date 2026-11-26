@@ -7,8 +7,8 @@ plugins {
 }
 
 // ЕДИНСТВЕННОЕ место версий приложения. versionCode только растёт.
-val appVersionCode = 58
-val appVersionName = "0.13.10"
+val appVersionCode = 59
+val appVersionName = "0.13.11"
 // Optional Google Drive integration. Android OAuth client is registered by package and SHA-1.
 // TV limited-input credentials identify a public native client, not a confidential server.
 val driveEnabled = providers.environmentVariable("PFM_DRIVE_ENABLED").orElse("false").get() == "true"

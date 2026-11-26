@@ -24,17 +24,21 @@ sealed interface CreateFolderResult {
 /** Работа с файловой системой через java.io (требует доступа ко всем файлам). Без Android-зависимостей. */
 class FileSystemRepository {
 
-    fun list(path: String, prefs: BrowserPrefs): FolderResult {
+    fun list(path: String, prefs: BrowserPrefs, checkActive: () -> Unit = {}): FolderResult {
+        checkActive()
         val dir = File(path)
         if (isRestrictedByAndroid(dir)) return FolderResult.RestrictedByAndroid
         if (!dir.exists() || !dir.isDirectory) return FolderResult.NotFound
         val children = dir.listFiles() ?: return FolderResult.AccessDenied
         val entries = children
             .asSequence()
-            .filter { prefs.showHidden || !it.name.startsWith(".") }
+            .filter { checkActive(); prefs.showHidden || !it.name.startsWith(".") }
             .map { FileEntry.from(it, countChildren = true) }
             .toList()
-        return FolderResult.Ok(sort(entries, prefs))
+        checkActive()
+        val sorted = sort(entries, prefs)
+        checkActive()
+        return FolderResult.Ok(sorted)
     }
 
     fun sort(entries: List<FileEntry>, prefs: BrowserPrefs): List<FileEntry> {

@@ -51,6 +51,7 @@ import io.personal.filemanager.ui.theme.AppColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,9 +71,10 @@ class SearchViewModel(private val container: AppContainer) : ViewModel() {
             return
         }
         _state.value = _state.value.copy(query = query, loading = true)
-        job = viewModelScope.launch(Dispatchers.IO) {
+        job = viewModelScope.launch {
             delay(300) // не искать на каждую букву
-            val results = runCatching { container.media.search(query) }.getOrDefault(emptyList())
+            val results = runCatching { container.media.searchCancellable(query) }.getOrDefault(emptyList())
+            ensureActive()
             _state.value = SearchState(query = query, loading = false, results = results)
         }
     }

@@ -58,6 +58,7 @@ import io.personal.filemanager.ui.components.rememberAllFilesAccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -85,7 +86,7 @@ class MediaListViewModel(private val container: AppContainer, private val catego
     )
 
     private var job: Job? = null
-    private var lastRefreshAt = 0L
+    private var lastRefreshAt = -1000L
     private var generation = 0
 
     fun refresh(force: Boolean = false) {
@@ -95,15 +96,16 @@ class MediaListViewModel(private val container: AppContainer, private val catego
         lastRefreshAt = now
         val request = ++generation
         job?.cancel()
-        job = viewModelScope.launch(Dispatchers.IO) {
+        job = viewModelScope.launch {
             if (!container.storage.hasAllFilesAccess()) {
-                _state.update { it.copy(loading = false, entries = emptyList()) }
+                _state.update { it.copy(loading = false, entries = emptyList(), error = null) }
                 return@launch
             }
             val sort = MediaSort.valueOf(container.settings.mediaSort(category.name).first().name)
             val limit = if (category == MediaCategory.AUDIO) MediaRepository.AUDIO_LIMIT else MediaRepository.DEFAULT_LIMIT
-            val result = runCatching { container.media.list(category, sort, limit = limit) }
-            if (request != generation || !kotlinx.coroutines.currentCoroutineContext().isActive) return@launch
+            val result = runCatching { container.media.listCancellable(category, sort, limit = limit) }
+            ensureActive()
+            if (request != generation) return@launch
             _state.update {
                 MediaListState(
                     loading = false,

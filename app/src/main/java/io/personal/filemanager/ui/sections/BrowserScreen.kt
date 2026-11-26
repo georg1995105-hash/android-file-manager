@@ -81,6 +81,8 @@ import io.personal.filemanager.ui.components.card
 import io.personal.filemanager.ui.components.rememberAllFilesAccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -105,9 +107,14 @@ class BrowserViewModel(private val container: AppContainer) : ViewModel() {
         job?.cancel()
         if (loadedPath != path) _result.value = null
         loadedPath = path
-        job = viewModelScope.launch(Dispatchers.IO) {
+        job = viewModelScope.launch {
             val prefs = container.settings.browserPrefs.first()
-            _result.value = container.fileSystem.list(path, prefs)
+            val result = withContext(Dispatchers.IO) {
+                val request = currentCoroutineContext()
+                container.fileSystem.list(path, prefs) { request.ensureActive() }
+            }
+            ensureActive()
+            _result.value = result
         }
     }
 

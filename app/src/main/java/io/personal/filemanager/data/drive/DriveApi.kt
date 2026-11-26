@@ -127,6 +127,7 @@ internal class DriveApi(private val token:String) {
         override fun close() { try { input.close() } finally { temporary?.delete() } }
     }
     private suspend fun uploadSource(context:Context,uri:Uri):UploadSource {
+        io.personal.filemanager.data.transfer.LocalShareFiles.cleanAfterProcessRestart(context)
         val resolver=context.contentResolver
         // Restrict direct mode to a whole seekable descriptor; never read outside a provider asset.
         val afd=runCatching { resolver.openAssetFileDescriptor(uri,"r") }.getOrNull()

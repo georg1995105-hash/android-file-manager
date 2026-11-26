@@ -140,6 +140,21 @@ class FileSystemRepositoryTest {
     }
 
     @Test
+    fun cancelledListingStopsBeforePublishing() {
+        var checks = 0
+        try {
+            repo.list(root.path, BrowserPrefs()) {
+                if (++checks == 3) throw java.util.concurrent.CancellationException("new folder selected")
+            }
+            org.junit.Assert.fail("Cancelled folder scan returned a result")
+        } catch (_: java.util.concurrent.CancellationException) {
+            assertEquals(3, checks)
+        }
+        assertTrue(names().contains("Документы"))
+        assertEquals("в корне — то же имя", File(root, "одинаковое.txt").readText())
+    }
+
+    @Test
     fun hiddenSegments() {
         assertTrue(FileSystemRepository.hasHiddenSegment("/storage/emulated/0/DCIM/.thumbnails/1.jpg"))
         assertFalse(FileSystemRepository.hasHiddenSegment("/storage/emulated/0/Download/a.b.c.txt"))

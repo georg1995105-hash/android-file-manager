@@ -222,6 +222,7 @@ class TransferManager(private val context: Context) {
     }
 
     private fun handle(r: LocalHttpsServer.Request, out: OutputStream) {
+        var downloadStarted = false
         try {
             if (r.method == "GET" && r.path in listOf("/", "/appjs", "/style")) {
                 val asset = when (r.path) { "/appjs" -> "app.js"; "/style" -> "style.css"; else -> "index.html" }
@@ -262,6 +263,7 @@ class TransferManager(private val context: Context) {
                     java.nio.file.LinkOption.NOFOLLOW_LINKS).use { channel ->
                     check(channel.size() == item.size) { "Файл изменён; выберите его заново" }
                     channel.position(range.start)
+                    downloadStarted = true
                     LocalHttpsServer.downloadHeaders(out, range, item.size, rangeHeader != null)
                     val input = java.nio.channels.Channels.newInputStream(channel)
                     val buffer = ByteArray(65536)
@@ -287,9 +289,11 @@ class TransferManager(private val context: Context) {
                 }
                 r.path.startsWith("/ticket/") && r.method == "POST" -> {
                     val file = r.path.removePrefix("/ticket/"); require(shared.containsKey(file))
-                    require(tickets.size < 2000)
-                    val ticket = id(); tickets[ticket] = token to file
-                    json(out, obj = JSONObject().put("url", "/download/$ticket"))
+                    synchronized(lock) {
+                        val ticket = tickets.entries.firstOrNull { it.value == (token to file) }?.key
+                            ?: id().also { require(tickets.size < 2000); tickets[it] = token to file }
+                        json(out, obj = JSONObject().put("url", "/download/$ticket"))
+                    }
                 }
                 r.path == "/batch" && r.method == "POST" -> {
                     synchronized(lock) {
@@ -309,9 +313,10 @@ class TransferManager(private val context: Context) {
                         require(uploads.values.count { !it.done } < 100 && uploads.values.count { it.owner == token && !it.done } < 8)
                         val batch = v.optString("batch").ifBlank { id().also { batches[it] = token } }
                         require(batches[batch] == token)
-                        val key = id(); val upload = Upload(token, name, size, hash, batch); uploads[key] = upload
-                        // Файлы принимаются сразу, без вопроса (решение владельца).
+                        val key = id(); val upload = Upload(token, name, size, hash, batch)
+                        // Do not reserve an active slot if staging cannot be created (e.g. disk full).
                         startReceiving(upload)
+                        uploads[key] = upload
                         approvedBatches += batch
                         mutable.value = mutable.value.copy(message = "Приём: $name")
                         json(out, obj = JSONObject().put("id", key))
@@ -350,7 +355,8 @@ class TransferManager(private val context: Context) {
                 else -> json(out, 404, JSONObject().put("error", "Не найдено"))
             }
         } catch (e: Exception) {
-            json(out, 400, JSONObject().put("error", e.message?.take(200) ?: "Ошибка передачи"))
+            // A partial binary response must end at EOF, never with appended JSON bytes.
+            if (!downloadStarted) json(out, 400, JSONObject().put("error", e.message?.take(200) ?: "Ошибка передачи"))
         }
     }
 }

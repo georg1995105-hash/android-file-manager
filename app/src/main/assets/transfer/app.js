@@ -33,7 +33,11 @@ if(typeof document!=='undefined'){
   while(offset<c.file.size){if(cancelled)throw Error('cancel');
    try{const r=await api('/upload/'+c.id,'PUT',c.file.slice(offset,offset+CHUNK),{'X-Offset':String(offset)});offset=r.offset;failures=0;shown(offset);}
    catch(e){if(cancelled)throw Error('cancel');if(++failures>30)throw Error('Связь потеряна. Проверьте Wi-Fi и отправьте снова.');status('Связь прервалась — продолжаю…');await pause(2000);try{offset=(await api('/upload/'+c.id)).offset;}catch(_){}}}
-  await api('/upload/'+c.id,'POST');}
+  for(let attempt=0;;attempt++){
+   if(cancelled)throw Error('cancel');
+   try{await api('/upload/'+c.id,'POST');return;}
+   catch(e){if(cancelled||attempt>=4)throw e;try{if((await api('/upload/'+c.id)).done)return;}catch(_){}await pause(1000);}
+  }}
  $('send').onclick=async()=>{const files=chosen();if(busy||!files.length)return;busy=true;cancelled=false;abort=new AbortController();showChosen();$('job').hidden=false;$('cancel').hidden=false;$('progress').value=0;
   const total=files.reduce((a,f)=>a+f.size,0);let before=0;const started=Date.now();
   try{const batch=(await api('/batch','POST')).id;
@@ -43,7 +47,7 @@ if(typeof document!=='undefined'){
      $('jobinfo').textContent=Math.floor(all*100/Math.max(total,1))+'% · '+size(all)+' из '+size(total)+' · '+size(speed)+'/с · осталось '+time((total-all)/Math.max(speed,1));});
     before+=file.size;current=null;}
    $('progress').value=1;$('jobname').textContent='Готово';$('jobinfo').textContent='Отправлено: '+files.length+' · '+size(total);status('Готово. Файлы — в «Загрузки/Передача» на устройстве.');$('pick').value='';$('folder').value='';}
-  catch(e){status(cancelled?'Отправка отменена':e.message);$('jobname').textContent=cancelled?'Отменено':'Ошибка';}
+  catch(e){const c=current;if(c){try{await fetch('/upload/'+c.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});}catch(_){}}status(cancelled?'Отправка отменена':e.message);$('jobname').textContent=cancelled?'Отменено':'Ошибка';}
   finally{busy=false;abort=null;current=null;$('cancel').hidden=true;showChosen();}};
  $('cancel').onclick=async()=>{cancelled=true;abort?.abort();const c=current;current=null;if(c){try{await fetch('/upload/'+c.id,{method:'DELETE',headers:{Authorization:'Bearer '+token}});}catch(_){}}};
  showChosen();connect();

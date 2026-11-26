@@ -112,7 +112,12 @@ public final class IncomingTransfer implements AutoCloseable {
         ensureOpen();
         if (offset != size || Files.size(staging) != size) throw new IOException("Incomplete file");
         // The whole-file SHA-256 was accumulated while receiving — no second pass over a large file.
-        if (expectedHash != null && !MessageDigest.isEqual(expectedHash, whole.digest())) throw new IOException("File hash mismatch");
+        if (expectedHash != null) {
+            // A failed filesystem publication may be retried; do not consume the verified digest.
+            try {
+                if (!MessageDigest.isEqual(expectedHash, ((MessageDigest) whole.clone()).digest())) throw new IOException("File hash mismatch");
+            } catch (CloneNotSupportedException e) { throw new IOException(e); }
+        }
         try (FileChannel channel = FileChannel.open(staging, StandardOpenOption.WRITE)) { channel.force(true); }
         Path delivery = grouped ? destination : Files.createDirectory(destination.resolve(UUID.randomUUID().toString()));
         Path file = delivery.resolve(name);

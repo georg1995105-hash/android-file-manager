@@ -52,8 +52,11 @@ public class IncomingTransferCheck {
                 Path result = nested.finish();
                 check(result.equals(batch.toRealPath().resolve("folder/child.txt")));
             }
-            try (IncomingTransfer duplicate = new IncomingTransfer(staging, batch, "folder/child.txt", 0, hash(new byte[0]), 0, true)) {
+            try (IncomingTransfer duplicate = new IncomingTransfer(staging, batch, "folder/child.txt", data.length, hash(data), data.length, true)) {
+                duplicate.append(0,data.length,hash(data),new ByteArrayInputStream(data));
                 reject(duplicate::finish);
+                Files.delete(batch.resolve("folder/child.txt"));
+                check(Arrays.equals(Files.readAllBytes(duplicate.finish()),data));
             }
             reject(() -> IncomingTransfer.validatePath("folder/../escape"));
             reject(() -> IncomingTransfer.validatePath("/absolute"));

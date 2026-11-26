@@ -45,7 +45,7 @@ class SiteIconLoader(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun load(host: String): Bitmap? {
-        val name = sha1(host)
+        val name = sha1(host + "|v2")
         val ok = File(dir, "$name.png")
         val fail = File(dir, "$name.none")
         val now = System.currentTimeMillis()
@@ -120,11 +120,15 @@ class SiteIconLoader(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun decode(bytes: ByteArray): Bitmap? {
+        IcoIcon.decode(bytes)?.let { icon ->
+            icon.png?.let { return decode(it) }
+            icon.pixels?.let { return Bitmap.createBitmap(it, icon.width, icon.height, Bitmap.Config.ARGB_8888) }
+        }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
-        while (bounds.outWidth / (sample * 2) >= ICON_PX && bounds.outHeight / (sample * 2) >= ICON_PX) sample *= 2
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > ICON_PX * 2) sample *= 2
         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
             ?: return null
         if (bmp.width <= ICON_PX && bmp.height <= ICON_PX) return bmp

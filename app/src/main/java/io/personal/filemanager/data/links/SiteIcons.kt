@@ -13,6 +13,9 @@ object SiteIcons {
         return host.takeIf { it.isNotEmpty() && !it.contains(' ') }
     }
 
+    fun monogram(url: String): String =
+        hostOf(url)?.removePrefix("www.")?.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "↗"
+
     private val linkTag = Regex("<link\\b[^>]*>", RegexOption.IGNORE_CASE)
     private fun attr(tag: String, name: String): String? =
         Regex("\\b$name\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", RegexOption.IGNORE_CASE).find(tag)?.let { m ->

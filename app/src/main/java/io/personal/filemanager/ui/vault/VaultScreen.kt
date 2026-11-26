@@ -10,6 +10,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.asImageBitmap
+import coil3.request.ImageRequest
+import coil3.request.CachePolicy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -105,6 +112,7 @@ fun VaultScreen() {
 
     var configured by remember { mutableStateOf(vault.isConfigured()) }
     var unlocked by remember { mutableStateOf(false) }
+    var lockGeneration by remember { mutableStateOf(0L) }
     var pin by remember { mutableStateOf("") }
     var firstPin by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -132,8 +140,9 @@ fun VaultScreen() {
         scope.launch {
             busy = true
             try {
-                items = withContext(Dispatchers.IO) { vault.list() }
-                notice = null
+                val generation = lockGeneration
+                val result = withContext(Dispatchers.IO) { vault.list() }
+                if (unlocked && generation == lockGeneration) { items = result; notice = null }
             } catch (e: Exception) {
                 notice = e.message ?: "Ошибка чтения сейфа"
             } finally {
@@ -146,6 +155,7 @@ fun VaultScreen() {
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
+                lockGeneration++
                 unlocked = false
                 pin = ""
                 firstPin = null
@@ -227,10 +237,18 @@ fun VaultScreen() {
             scope.launch {
                 busy = true
                 try {
-                    val file = withContext(Dispatchers.IO) { vault.preview(item) }
-                    mediaPreview?.delete()
-                    mediaPreview = file
-                    previewKind = item.kind
+                    val generation = lockGeneration
+                    // Own the temporary file even if the composition is cancelled while decrypting.
+                    var pending: File? = null
+                    try {
+                        withContext(Dispatchers.IO) { pending = vault.preview(item) }
+                        if (unlocked && generation == lockGeneration) {
+                            mediaPreview?.delete()
+                            mediaPreview = pending
+                            pending = null
+                            previewKind = item.kind
+                        }
+                    } finally { pending?.delete() }
                 } catch (e: Exception) {
                     notice = e.message ?: "Не удалось открыть защищённый файл"
                 } finally { busy = false }
@@ -259,7 +277,8 @@ fun VaultScreen() {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (previewKind == VaultKind.PHOTO) {
                     AsyncImage(
-                        model = file,
+                        model = remember(file) { ImageRequest.Builder(context).data(file)
+                            .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.DISABLED).build() },
                         contentDescription = "Защищённое фото",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
@@ -288,6 +307,7 @@ fun VaultScreen() {
             actions = {
                 if (unlocked) {
                     TextButton(onClick = {
+                        lockGeneration++
                         unlocked = false
                         pin = ""
                         firstPin = null
@@ -508,12 +528,12 @@ fun VaultScreen() {
                     }
                 }
                 if (notice != null) Text(notice.orEmpty(), color = AppColors.Accent)
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                LazyColumn(Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (entries.isEmpty()) {
-                        Text("Пока пусто. Добавьте первый элемент.", color = AppColors.TextSecondary)
+                        item { Text("Пока пусто. Добавьте первый элемент.", color = AppColors.TextSecondary) }
                     }
-                    entries.forEach { item ->
+                    items(entries, key = { it.id }) { item ->
                         var menu by remember(item.id) { mutableStateOf(false) }
                         Card(
                             shape = RoundedCornerShape(16.dp),
@@ -522,8 +542,7 @@ fun VaultScreen() {
                         ) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Icon(vaultKindIcon(kind), contentDescription = null,
-                                    tint = vaultKindColor(kind), modifier = Modifier.size(44.dp))
+                                VaultThumbnail(vault, item)
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(item.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
@@ -688,4 +707,23 @@ private fun vaultKindColor(kind: VaultKind): Color = when (kind) {
     VaultKind.VIDEO -> Color(0xFFFF8D9A)
     VaultKind.LINK -> Color(0xFF72CEC3)
     VaultKind.NOTE -> Color(0xFFEFC27A)
+}
+
+/** Visible rows only; no Coil cache, network requests or persistent plaintext thumbnails. */
+private val vaultThumbnailIo = Dispatchers.IO.limitedParallelism(1)
+
+@Composable
+private fun VaultThumbnail(vault: PrivateVault, item: VaultItem) {
+    val bitmap by produceState<android.graphics.Bitmap?>(null, item.id) {
+        if (item.kind == VaultKind.PHOTO || item.kind == VaultKind.VIDEO) {
+            value = withContext(vaultThumbnailIo) { runCatching { vault.thumbnail(item) }.getOrNull() }
+        }
+    }
+    val image = remember(bitmap) { bitmap?.asImageBitmap() }
+    Box(Modifier.size(56.dp).clip(RoundedCornerShape(10.dp)).background(AppColors.AccentContainer),
+        contentAlignment = Alignment.Center) {
+        if (image != null) Image(image, contentDescription = null, contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize())
+        else Icon(vaultKindIcon(item.kind), contentDescription = null, tint = vaultKindColor(item.kind), modifier = Modifier.size(30.dp))
+    }
 }

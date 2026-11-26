@@ -26,6 +26,17 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.ui.text.font.FontWeight
+import io.personal.filemanager.data.settings.FileViewMode
+import io.personal.filemanager.data.settings.UiConfig
+import io.personal.filemanager.data.settings.viewMode
+import io.personal.filemanager.data.links.SiteIcons
+import io.personal.filemanager.ui.components.tvRemoteFocus
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.layout.Arrangement
@@ -94,6 +105,8 @@ fun LinksScreen() {
     var editing by remember { mutableStateOf<Link?>(null) }
     var deleting by remember { mutableStateOf<Link?>(null) }
     val iconsOn by container.settings.linkIcons.collectAsStateWithLifecycle(initialValue = true)
+    val config by container.settings.uiConfig.collectAsStateWithLifecycle(initialValue = UiConfig.defaults())
+    val grid = config.viewMode("LINKS") == FileViewMode.GRID
     var topMenu by remember { mutableStateOf(false) }
 
     fun newLink() = Link(0, "", "", "", 0, 0)
@@ -113,6 +126,12 @@ fun LinksScreen() {
                                 .onFailure { FileActions.toast(context, it.message ?: "Ошибка экспорта") }
                         }
                     }) { Text("Экспорт") }
+                }
+                IconButton(onClick = { scope.launch { container.settings.updateUiConfig {
+                    it.copy(viewModes = it.viewModes + ("LINKS" to (if (grid) FileViewMode.LIST else FileViewMode.GRID).name))
+                } } }, modifier = Modifier.tvRemoteFocus()) {
+                    Icon(if (grid) Icons.AutoMirrored.Filled.ViewList else Icons.Filled.GridView,
+                        contentDescription = if (grid) "Список" else "Сетка")
                 }
                 Box {
                     IconButton(onClick = { topMenu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Меню") }
@@ -139,31 +158,46 @@ fun LinksScreen() {
                     action = { Button(onClick = { editing = newLink() }) { Text("Добавить ссылку") } },
                 )
                 filtered.isEmpty() -> EmptyState(Icons.Filled.Search, "Ничего не найдено", "Измените запрос.")
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Adaptive(118.dp),
+                grid -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(104.dp),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(filtered, key = { it.id }) { link ->
-                        var focused by remember { mutableStateOf(false) }
-                        val shape = RoundedCornerShape(16.dp)
-                        Column(
-                            Modifier.fillMaxWidth().heightIn(min = 128.dp)
-                                .onFocusChanged { focused = it.isFocused }
-                                .clip(shape).background(AppColors.Card)
-                                .border(if (focused) 2.dp else 0.dp, AppColors.Accent, shape)
-                                .clickable { openUrl(context, link.url) }.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        Box(Modifier.fillMaxWidth().heightIn(min = 108.dp)
+                            .tvRemoteFocus(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(14.dp)).background(AppColors.Card)
+                            .clickable { openUrl(context, link.url) }) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SiteIcon(link.url, enabled = iconsOn, large = true)
+                                Text(link.displayTitle(), style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Box(Modifier.align(Alignment.TopEnd)) {
                                 LinkMenu(link, onEdit = { editing = link }, onDelete = { deleting = link })
                             }
-                            SiteIcon(link.url, enabled = iconsOn, large = true)
-                            Text(link.title.ifBlank { runCatching { java.net.URI(link.url).host }.getOrNull() ?: link.url },
-                                style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(filtered, key = { it.id }) { link ->
+                        Row(Modifier.fillMaxWidth().tvRemoteFocus(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(14.dp)).background(AppColors.Card)
+                            .clickable { openUrl(context, link.url) }.padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            SiteIcon(link.url, enabled = iconsOn)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(link.displayTitle(), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(link.url, style = MaterialTheme.typography.bodySmall, color = AppColors.TextSecondary,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            LinkMenu(link, onEdit = { editing = link }, onDelete = { deleting = link })
                         }
                     }
                 }
@@ -234,7 +268,7 @@ private fun LinkMenu(link: Link, onEdit: () -> Unit, onDelete: () -> Unit) {
     val context = LocalContext.current
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Действия") }
+        IconButton(onClick = { open = true }, modifier = Modifier.tvRemoteFocus()) { Icon(Icons.Filled.MoreVert, contentDescription = "Действия") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("Открыть в браузере") }, onClick = { open = false; openUrl(context, link.url) })
             DropdownMenuItem(text = { Text("Копировать адрес") }, onClick = {
@@ -316,25 +350,28 @@ private suspend fun exportLinks(container: io.personal.filemanager.AppContainer,
     target
 }
 
-/** Значок сайта слева от ссылки: загружается в фоне с кэшем; нет значка — стандартный. */
+private fun Link.displayTitle() = title.ifBlank { SiteIcons.hostOf(url) ?: url }
+
+/** Значок сайта: локальный кэш; без значка — узнаваемая монограмма домена. */
 @Composable
 internal fun SiteIcon(url: String, enabled: Boolean, large: Boolean = false) {
     val loader = appContainer().siteIcons
-    val bitmap by produceState(initialValue = if (enabled) loader.cached(url) else null, url, enabled) {
-        if (enabled && value == null) value = loader.icon(url)
+    val bitmap by produceState<android.graphics.Bitmap?>(null, url, enabled) {
+        value = if (enabled) loader.cached(url) ?: loader.icon(url) else null
     }
     val image = remember(bitmap) { bitmap?.asImageBitmap() }
     Box(
         Modifier
             .size(if (large) 56.dp else 40.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(AppColors.Card),
+            .background(AppColors.AccentContainer),
         contentAlignment = Alignment.Center,
     ) {
         if (image != null) {
-            Image(image, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(if (large) 40.dp else 28.dp))
+            Image(image, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(if (large) 46.dp else 30.dp))
         } else {
-            Icon(Icons.Filled.Language, contentDescription = null, tint = AppColors.Accent, modifier = Modifier.size(22.dp))
+            Text(SiteIcons.monogram(url), color = AppColors.Accent, fontWeight = FontWeight.SemiBold,
+                style = if (large) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium)
         }
     }
 }

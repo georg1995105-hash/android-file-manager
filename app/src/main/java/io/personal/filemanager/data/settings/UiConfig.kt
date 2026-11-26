@@ -57,7 +57,7 @@ enum class FileViewMode { LIST, GRID }
 object FileViewPrefs {
     val PHONE_COLUMNS = 2..5
     val TABLET_COLUMNS = 3..7
-    private val gridByDefault = setOf("PHOTOS", "VIDEOS")
+    private val gridByDefault = setOf("PHOTOS", "VIDEOS", "LINKS")
 
     fun defaultMode(section: String): FileViewMode = if (section in gridByDefault) FileViewMode.GRID else FileViewMode.LIST
     fun range(tablet: Boolean): IntRange = if (tablet) TABLET_COLUMNS else PHONE_COLUMNS

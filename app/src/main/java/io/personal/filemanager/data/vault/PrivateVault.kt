@@ -2,6 +2,11 @@ package io.personal.filemanager.data.vault
 
 import android.content.Context
 import android.net.Uri
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import android.os.Build
+import android.util.Size
 import android.provider.OpenableColumns
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -291,6 +296,13 @@ class PrivateVault(private val context: Context) {
                 target.delete()
                 throw e
             }
+            // Thumbnail generation is optional; never roll back the encrypted original on a decode failure.
+            runCatching {
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val bitmap = context.contentResolver.loadThumbnail(uri, Size(192, 192), null)
+                    try { storeThumbnail(item, bitmap) } finally { bitmap.recycle() }
+                }
+            }
             return item
         } finally {
             temp.delete()
@@ -304,12 +316,77 @@ class PrivateVault(private val context: Context) {
         // Index is updated first; a failed index write never loses the only copy of a file.
         writeIndex(old.filterNot { it.id == item.id })
         safeFile(item.id).delete()
+        thumbnailFile(item).delete()
     }
 
     fun export(item: VaultItem, uri: Uri) {
         val output = context.contentResolver.openOutputStream(uri)
             ?: throw IOException("Не удалось открыть место назначения")
         output.use { readEncrypted(safeFile(item.id), it) }
+    }
+
+    private fun thumbnailFile(item: VaultItem): File {
+        UUID.fromString(item.id)
+        return File(dir, item.id + ".thumb.pfm")
+    }
+
+    private fun storeThumbnail(item: VaultItem, bitmap: Bitmap) {
+        val scale = minOf(1f, 192f / maxOf(bitmap.width, bitmap.height))
+        val small = if (scale < 1f) Bitmap.createScaledBitmap(bitmap,
+            (bitmap.width * scale).toInt().coerceAtLeast(1), (bitmap.height * scale).toInt().coerceAtLeast(1), true) else bitmap
+        val encoded = ByteArrayOutputStream()
+        try {
+            check(small.compress(Bitmap.CompressFormat.PNG, 100, encoded))
+            val bytes = encoded.toByteArray()
+            val temp = File.createTempFile("thumb-", ".tmp", dir)
+            try {
+                ByteArrayInputStream(bytes).use { writeEncrypted(it, temp) }
+                Files.move(temp.toPath(), thumbnailFile(item).toPath(), StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                bytes.fill(0)
+                temp.delete()
+            }
+        } finally { if (small !== bitmap) small.recycle() }
+    }
+
+    /** Called only by visible, unlocked rows on I/O. Thumbnails are never written as plaintext. */
+    @Synchronized
+    fun thumbnail(item: VaultItem): Bitmap? {
+        require(item.kind == VaultKind.PHOTO || item.kind == VaultKind.VIDEO)
+        val encrypted = thumbnailFile(item)
+        if (encrypted.isFile && encrypted.length() <= 1024 * 1024) {
+            val cached = runCatching {
+                val bytes = ByteArrayOutputStream().also { readEncrypted(encrypted, it) }.toByteArray()
+                try { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) } finally { bytes.fill(0) }
+            }.getOrNull()
+            if (cached != null) return cached
+        }
+        // Existing vaults have no thumbnail sidecar. Decode once, then encrypt it for future access.
+        // Legacy media uses the same private temporary preview as the existing viewer, deleted in finally.
+        val temp = preview(item)
+        try {
+            val bitmap = if (item.kind == VaultKind.PHOTO) {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(temp.path, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 384) sample *= 2
+                BitmapFactory.decodeFile(temp.path, BitmapFactory.Options().apply { inSampleSize = sample })
+            } else {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(temp.absolutePath)
+                    if (Build.VERSION.SDK_INT >= 27) retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 192, 192)
+                    else retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                } finally { retriever.release() }
+            } ?: return null
+            val scale = minOf(1f, 192f / maxOf(bitmap.width, bitmap.height))
+            val small = if (scale < 1f) Bitmap.createScaledBitmap(bitmap,
+                (bitmap.width * scale).toInt().coerceAtLeast(1), (bitmap.height * scale).toInt().coerceAtLeast(1), true) else bitmap
+            if (small !== bitmap) bitmap.recycle()
+            runCatching { storeThumbnail(item, small) }
+            return small
+        } finally { temp.delete() }
     }
 
     /** Temporary app-private preview, deleted by the UI on close and on next vault launch. */
@@ -323,7 +400,7 @@ class PrivateVault(private val context: Context) {
             "video/quicktime" -> "mov"
             else -> if (item.kind == VaultKind.PHOTO) "jpg" else "mp4"
         }
-        val temp = File(previewDir, item.id + "." + ext)
+        val temp = File.createTempFile(item.id + "-", "." + ext, previewDir)
         try {
             FileOutputStream(temp).use { readEncrypted(safeFile(item.id), it) }
             return temp

@@ -206,21 +206,6 @@ fun TileSettingsContent(
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
-            if (onTrashShortcut != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Показывать корзину в меню ⋮", style = MaterialTheme.typography.titleSmall)
-                        Text("Скрывает пункт меню, но не удаляет содержимое корзины и не отключает безопасное удаление.",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(checked = showTrashShortcut, onCheckedChange = onTrashShortcut)
-                }
-            }
-            TextButton(onClick = { navigator.open(io.personal.filemanager.ui.Routes.TRASH) },
-                modifier = Modifier.padding(horizontal = 16.dp)) { Text("Открыть корзину") }
             Spacer(Modifier.height(8.dp))
             ReorderableColumn(
                 items = list,

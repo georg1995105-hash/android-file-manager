@@ -10,7 +10,7 @@ class BrowserHistoryTest {
         val root = tmp.newFolder("root")
         val nested = File(root, "nested").apply { mkdir() }
         val outside = tmp.newFolder("root-other")
-        assertEquals(nested.canonicalPath, BrowserHistory.safeRestoredPath(root.path, nested.path))
+        assertEquals(nested.absolutePath, BrowserHistory.safeRestoredPath(root.path, nested.path))
         assertEquals(root.path, BrowserHistory.safeRestoredPath(root.path, outside.path))
         assertEquals(root.path, BrowserHistory.safeRestoredPath(root.path, File(root,"missing").path))
         val link = File(root,"link")

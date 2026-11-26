@@ -171,6 +171,10 @@ class FileOperations(
             ctx.current = src.name
             ctx.report()
             var target = File(destDir, src.name)
+            if (Files.isSymbolicLink(target.toPath())) {
+                failed += src.path to "Назначение является символической ссылкой"
+                continue
+            }
             if (policy == ConflictPolicy.REPLACE && runCatching { target.canonicalFile == src.canonicalFile }.getOrDefault(false)) {
                 skipped += src.path
                 continue
@@ -229,6 +233,7 @@ class FileOperations(
 
     private fun copyTree(src: File, target: File, ctx: Ctx, policy: ConflictPolicy, created: MutableList<String>) {
         ctx.checkCancel()
+        if (Files.isSymbolicLink(target.toPath())) throw IOException("Назначение является символической ссылкой")
         if (Files.isSymbolicLink(src.toPath())) throw IOException("Символическая ссылка не поддерживается: ${src.name}")
         if (src.isDirectory) {
             val createdHere = !target.exists()

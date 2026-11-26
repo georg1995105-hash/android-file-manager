@@ -48,7 +48,7 @@ class MediaThumbFetcher(private val data: MediaThumb, private val options: Optio
         val resolver = options.context.contentResolver
         val primary = Environment.getExternalStorageDirectory().absolutePath.trimEnd('/') + "/"
         val bitmap = data.mediaId?.takeIf { Build.VERSION.SDK_INT >= 29 && data.path.startsWith(primary) }?.let { id ->
-            val base = if (data.isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val base = if (data.isVideo) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             runCatching { resolver.loadThumbnail(ContentUris.withAppendedId(base, id), size, signal) }.getOrNull()
         } ?: run {
             signal.throwIfCanceled()

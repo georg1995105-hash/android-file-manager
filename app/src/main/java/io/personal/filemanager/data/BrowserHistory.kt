@@ -36,7 +36,7 @@ class BrowserHistory(context: Context) {
                 val base = File(root).canonicalFile.toPath()
                 val target = File(saved).canonicalFile
                 if (target.isDirectory && target.toPath().startsWith(base) &&
-                    !FileSystemRepository.isRestrictedByAndroid(target)) target.absolutePath else root
+                    !FileSystemRepository.isRestrictedByAndroid(target)) File(root, base.relativize(target.toPath()).toString()).absolutePath else root
             }.getOrDefault(root)
         }
     }

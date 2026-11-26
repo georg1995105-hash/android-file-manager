@@ -77,6 +77,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.snapshotFlow
+import io.personal.filemanager.data.ScrollPosition
+import androidx.compose.material.icons.filled.SwapHoriz
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -226,7 +232,7 @@ fun FileRow(
         if (onDelete != null && !selectionMode) {
             FileDeleteButton(entry.name, onDelete)
         }
-        IconButton(onClick = onMenu, enabled = !selectionMode) {
+        IconButton(onClick = onMenu, enabled = !selectionMode, modifier = Modifier.tvRemoteFocus()) {
             Icon(Icons.Filled.MoreVert, contentDescription = "Действия с «${entry.name}»")
         }
     }
@@ -430,6 +436,8 @@ fun FileListPane(
     contentPadding: PaddingValues = PaddingValues(bottom = 16.dp),
     header: (LazyListScope.() -> Unit)? = null,
     selection: SelectionState = remember { SelectionState() },
+    initialPosition: ScrollPosition = ScrollPosition(),
+    onScrollPosition: ((Int, Int) -> Unit)? = null,
 ) {
     val navigator = LocalNavigator.current
     val tvUi = isTelevisionUi()
@@ -440,7 +448,11 @@ fun FileListPane(
     BackHandler(enabled = selection.active) { selection.clear() }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(initialPosition.index.coerceAtMost(entries.lastIndex.coerceAtLeast(0)), initialPosition.offset)
+    if (onScrollPosition != null) {
+        DisposableEffect(listState) { onDispose { onScrollPosition(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) } }
+        LaunchedEffect(listState) { snapshotFlow { if (listState.isScrollInProgress) null else listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }.filterNotNull().distinctUntilChanged().collect { onScrollPosition(it.first, it.second) } }
+    }
 
     // Выбранные, но исчезнувшие из списка файлы снимаются с выбора.
     LaunchedEffect(entries) {
@@ -510,6 +522,8 @@ fun FileGridPane(
     contentPadding: PaddingValues = PaddingValues(bottom = 16.dp),
     header: (LazyGridScope.() -> Unit)? = null,
     selection: SelectionState = remember { SelectionState() },
+    initialPosition: ScrollPosition = ScrollPosition(),
+    onScrollPosition: ((Int, Int) -> Unit)? = null,
 ) {
     val navigator = LocalNavigator.current
     val tvUi = isTelevisionUi()
@@ -518,7 +532,11 @@ fun FileGridPane(
     val open: (FileEntry) -> Unit = onOpen ?: { navigator.openFile(it, files) }
     var detailsFor by remember { mutableStateOf<FileEntry?>(null) }
     var menuFor by remember { mutableStateOf<FileEntry?>(null) }
-    val gridState = rememberLazyGridState()
+    val gridState = rememberLazyGridState(initialPosition.index.coerceAtMost(entries.lastIndex.coerceAtLeast(0)), initialPosition.offset)
+    if (onScrollPosition != null) {
+        DisposableEffect(gridState) { onDispose { onScrollPosition(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset) } }
+        LaunchedEffect(gridState) { snapshotFlow { if (gridState.isScrollInProgress) null else gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }.filterNotNull().distinctUntilChanged().collect { onScrollPosition(it.first, it.second) } }
+    }
     BackHandler(enabled = selection.active) { selection.clear() }
     LaunchedEffect(entries) {
         val present = entries.mapTo(HashSet()) { it.path }
@@ -528,11 +546,11 @@ fun FileGridPane(
     BoxWithConstraints(modifier.fillMaxSize()) {
         val monthGroups = remember(entries, dateShown, galleryMode) {
             if (galleryMode) {
+                val monthFormatter = java.text.SimpleDateFormat("LLLL yyyy", java.util.Locale.forLanguageTag("ru"))
                 entries.groupBy { entry ->
                     val timestamp = entry.stampTime(dateShown).first
                     if (timestamp != null && timestamp > 0L) {
-                        java.text.SimpleDateFormat("LLLL yyyy", java.util.Locale.forLanguageTag("ru"))
-                            .format(java.util.Date(timestamp))
+                        monthFormatter.format(java.util.Date(timestamp))
                             .replaceFirstChar { it.titlecase(java.util.Locale.forLanguageTag("ru")) }
                     } else "Без даты"
                 }
@@ -837,6 +855,7 @@ private fun GridCell(
 private fun LabeledAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Column(
         Modifier
+            .tvRemoteFocus(RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 6.dp),
@@ -875,11 +894,11 @@ fun SelectionBar(
             .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { selection.clear() }) {
+            IconButton(onClick = { selection.clear() }, modifier = Modifier.tvRemoteFocus()) {
                 Icon(Icons.Filled.Close, contentDescription = "Отменить выбор")
             }
             Text("Выбрано: ${chosen.size}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            IconButton(onClick = { selection.set(entries.map { it.path }) }) {
+            IconButton(onClick = { selection.set(entries.map { it.path }) }, modifier = Modifier.tvRemoteFocus()) {
                 Icon(Icons.Filled.SelectAll, contentDescription = "Выбрать все")
             }
         }
@@ -887,7 +906,6 @@ fun SelectionBar(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            LabeledAction(Icons.Filled.Share, "Поделиться") { FileActions.share(context, chosen) }
             LabeledAction(Icons.Filled.ContentCopy, "Копировать") { fileOps.copy(chosen); selection.clear() }
             LabeledAction(Icons.AutoMirrored.Filled.DriveFileMove, "Переместить") { fileOps.move(chosen); selection.clear() }
             // Выбор не сбрасывается: при «Отмене» в диалоге он остаётся; удалённые файлы уходят из выбора сами.
@@ -895,6 +913,7 @@ fun SelectionBar(
             Box {
                 LabeledAction(Icons.Filled.MoreVert, "Ещё") { more = true }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                    DropdownMenuItem(text = { Text("Поделиться") }, onClick = { more = false; FileActions.share(context, chosen) })
                     DropdownMenuItem(text = { Text("Передать") }, onClick = {
                         more = false; transferManager.share(chosen.map { java.io.File(it.path) }); transferNavigator.openSection(io.personal.filemanager.core.SectionId.TRANSFER)
                     })
@@ -947,7 +966,7 @@ fun FileActionsSheet(
         HorizontalDivider(color = AppColors.Divider)
         Column(Modifier.verticalScroll(rememberScrollState())) {
             SheetAction(Icons.AutoMirrored.Filled.OpenInNew, "Открыть") { onDismiss(); onOpen() }
-            SheetAction(Icons.Filled.Share, "Передать") {
+            SheetAction(Icons.Filled.SwapHoriz, "Передать") {
                 onDismiss(); transferManager.share(listOf(java.io.File(entry.path))); transferNavigator.openSection(io.personal.filemanager.core.SectionId.TRANSFER)
             }
             if (!entry.isDirectory) {
@@ -989,7 +1008,7 @@ private fun SheetAction(icon: ImageVector, text: String, onClick: () -> Unit) {
         headlineContent = { Text(text) },
         leadingContent = { Icon(icon, contentDescription = null) },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.tvRemoteFocus().clickable(onClick = onClick),
     )
 }
 

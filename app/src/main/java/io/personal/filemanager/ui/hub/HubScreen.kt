@@ -213,6 +213,7 @@ internal fun HubHome() {
                 HubCard("Личное облако","Google Диск",Icons.Filled.Cloud,Modifier.fillMaxWidth(),compact=true) { nav.open(Routes.CLOUD) }
             }
         }
+        RemovableStorageCards()
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
             Text("Недавние файлы",style=MaterialTheme.typography.titleMedium,modifier=Modifier.weight(1f))
             TextButton(onClick=openReceived, modifier=Modifier.tvRemoteFocus()) { Text("Все") }
@@ -275,7 +276,7 @@ private fun HubCard(title: String, subtitle: String, icon: ImageVector, modifier
     Row(modifier.onFocusChanged { focused = it.isFocused }.clip(shape)
         .background(if (focused) Blue.copy(alpha = .16f) else Panel)
         .border(1.dp, AppColors.CardBorder, shape).tvFocusOutline(focused, shape, Blue)
-        .clickable(role = Role.Button, onClick = onClick).heightIn(min = if (compact) 64.dp else 104.dp)
+        .clickable(role = Role.Button, onClick = onClick).heightIn(min = if (compact) 58.dp else 88.dp)
         .padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Icon(icon, null, tint = Blue, modifier = Modifier.size(if (compact) 26.dp else 34.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -297,5 +298,36 @@ private fun HubDeleteButton(name:String,onClick:()->Unit) {
     IconButton(onClick=onClick,modifier=Modifier.onFocusChanged { focused=it.isFocused }
         .tvFocusOutline(focused, RoundedCornerShape(10.dp), Blue)) {
         Icon(Icons.Filled.Delete,"Удалить «$name»")
+    }
+}
+
+@Composable
+private fun RemovableStorageCards() {
+    val context = LocalContext.current
+    val storage = appContainer().storage
+    val nav = LocalNavigator.current
+    var revision by remember { mutableIntStateOf(0) }
+    io.personal.filemanager.ui.components.RefreshWhileVisible(null) { revision++ }
+    DisposableEffect(context) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context, intent: android.content.Intent) { revision++ }
+        }
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_MEDIA_MOUNTED)
+            addAction(android.content.Intent.ACTION_MEDIA_UNMOUNTED)
+            addAction(android.content.Intent.ACTION_MEDIA_REMOVED)
+            addAction(android.content.Intent.ACTION_MEDIA_EJECT)
+            addAction(android.content.Intent.ACTION_MEDIA_BAD_REMOVAL)
+            addDataScheme("file")
+        }
+        val registered = runCatching { androidx.core.content.ContextCompat.registerReceiver(context, receiver, filter, androidx.core.content.ContextCompat.RECEIVER_EXPORTED) }.isSuccess
+        onDispose { if (registered) context.unregisterReceiver(receiver) }
+    }
+    val volumes by produceState<List<io.personal.filemanager.data.RemovableVolume>>(emptyList(), revision) {
+        value = withContext(Dispatchers.IO) { storage.removableVolumes() }
+    }
+    volumes.forEach { volume ->
+        HubCard(volume.title, if(volume.readOnly) "Только чтение" else "Внешний накопитель",
+            Icons.Filled.Storage, Modifier.fillMaxWidth(), compact = true) { nav.open(Routes.browser(volume.path)) }
     }
 }

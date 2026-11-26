@@ -225,7 +225,9 @@ class OperationsManager(
     fun trashRoots(): List<File> {
         val sm = context.getSystemService(StorageManager::class.java)
         val dirs = runCatching { sm.storageVolumes.mapNotNull { it.directory } }.getOrDefault(emptyList())
-        return dirs.map { File(it, TrashStore.TRASH_DIR) }.filter { it.isDirectory }
+        val storage = io.personal.filemanager.data.StorageRepository(context)
+        val roots = dirs.map { it.absolutePath } + storage.rootPath + storage.removableVolumes().map { it.path }
+        return roots.distinct().map { File(it, TrashStore.TRASH_DIR) }.filter { it.isDirectory }
     }
 
     suspend fun trashItems(): List<TrashItem> = withContext(Dispatchers.IO) { trash.list(trashRoots()) }

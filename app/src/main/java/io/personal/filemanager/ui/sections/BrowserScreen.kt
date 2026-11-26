@@ -43,6 +43,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import io.personal.filemanager.data.BrowserHistory
+import io.personal.filemanager.ui.components.tvRemoteFocus
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -152,6 +155,8 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     val result by vm.result.collectAsStateWithLifecycle()
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     var path by rememberSaveable(rootPath) { mutableStateOf(rootPath) }
+    var restored by remember(rootPath) { mutableStateOf(false) }
+    val history = remember(context.applicationContext) { BrowserHistory(context.applicationContext) }
     var sortMenu by remember { mutableStateOf(false) }
     var createMenu by remember { mutableStateOf(false) }
     var actionsMenu by remember { mutableStateOf(false) }
@@ -167,22 +172,31 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
     val view = rememberFileView(viewKey)
 
     // Доступ проверяется системой при каждом чтении, поэтому после выдачи разрешения список появится сам.
-    RefreshWhileVisible(null) { vm.load(path) }
+    LaunchedEffect(rootPath, hasAccess) {
+        restored = false
+        if (hasAccess) {
+            path = withContext(Dispatchers.IO) { history.restorePath(rootPath) }
+            restored = true
+            vm.load(path)
+        }
+    }
+    RefreshWhileVisible(null) { if (restored && hasAccess) vm.load(path) }
 
     // После операций (копирование, удаление…) содержимое папки перечитывается.
     val operations = appContainer().operations
     val opsVersion by operations.version.collectAsStateWithLifecycle()
     val clipboard by operations.clipboard.collectAsStateWithLifecycle()
     val running by operations.running.collectAsStateWithLifecycle()
-    LaunchedEffect(opsVersion) { if (opsVersion > 0) vm.load(path) }
+    LaunchedEffect(opsVersion) { if (opsVersion > 0 && restored && hasAccess) vm.load(path) }
     val fileOps = LocalFileOps.current
-    DisposableEffect(path, hasAccess) {
-        if (hasAccess) fileOps.setCurrentFolder(path)
+    DisposableEffect(path, hasAccess, restored) {
+        if (hasAccess && restored) fileOps.setCurrentFolder(path)
         onDispose { fileOps.setCurrentFolder(null) }
     }
 
     fun go(newPath: String) {
         path = newPath
+        history.savePath(rootPath, newPath)
         vm.load(newPath)
     }
 
@@ -199,11 +213,11 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
             subtitle = if (relative.isEmpty() && title == "Полученные файлы") "Файлы с ваших устройств" else if (relative.isEmpty()) path else "$title/$relative",
             onBack = { if (canGoUp) File(path).parent?.let { go(it) } else navigator.back() },
             actions = {
-                IconButton(onClick = { navigator.openSearch() }) {
+                IconButton(onClick = { navigator.openSearch() }, modifier = Modifier.tvRemoteFocus()) {
                     Icon(Icons.Filled.Search, contentDescription = "Поиск")
                 }
                 ViewModeButton(view)
-                IconButton(onClick = { actionsMenu = true }) {
+                IconButton(onClick = { actionsMenu = true }, modifier = Modifier.tvRemoteFocus()) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
                 }
                 DropdownMenu(expanded = actionsMenu, onDismissRequest = { actionsMenu = false }) {
@@ -221,7 +235,7 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
             return@Column
         }
         Column(Modifier.weight(1f)) {
-            when (val r = result) {
+            when (val r = if (restored) result else null) {
                 null -> LoadingBox()
                 FolderResult.RestrictedByAndroid -> EmptyState(
                     Icons.Filled.Lock,
@@ -234,12 +248,13 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                 is FolderResult.Ok -> if (r.entries.isEmpty()) {
                     EmptyState(Icons.Filled.FolderOpen, "Пустая папка", "Здесь нет файлов" + if (!prefs.showHidden) " (скрытые не показаны)." else ".")
                 } else {
-                    FilesPane(
+                    key(path) { FilesPane(
                         entries = r.entries,
+                        scrollKey = "folder:$path",
                         view = view,
                         dateShown = DateShown.MODIFIED,
                         onOpen = { entry -> if (entry.isDirectory) go(entry.path) else navigator.openFile(entry, r.entries) },
-                    )
+                    ) }
                 }
             }
         }
@@ -256,7 +271,7 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row {
-                    TextButton(onClick = { sortMenu = true }) {
+                    TextButton(onClick = { sortMenu = true }, modifier = Modifier.tvRemoteFocus()) {
                         @Suppress("DEPRECATION")
                         Icon(Icons.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -280,7 +295,7 @@ fun BrowserScreen(title: String, rootPath: String, viewKey: String = "FILES") {
                         )
                     }
                 }
-                IconButton(onClick = { vm.updatePrefs(path) { it.copy(showHidden = !it.showHidden) } }) {
+                IconButton(onClick = { vm.updatePrefs(path) { it.copy(showHidden = !it.showHidden) } }, modifier = Modifier.tvRemoteFocus()) {
                     Icon(
                         if (prefs.showHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
                         contentDescription = if (prefs.showHidden) "Скрыть скрытые файлы" else "Показать скрытые файлы",

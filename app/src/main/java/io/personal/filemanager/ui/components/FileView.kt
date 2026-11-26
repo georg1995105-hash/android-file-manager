@@ -22,6 +22,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
+import io.personal.filemanager.data.BrowserHistory
+import io.personal.filemanager.data.ScrollPosition
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -147,8 +154,19 @@ fun FilesPane(
     onOpen: ((FileEntry) -> Unit)? = null,
     headerText: String? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 16.dp),
+    scrollKey: String? = null,
 ) {
+    val context = LocalContext.current
+    val history = remember(context.applicationContext) { BrowserHistory(context.applicationContext) }
+    val positionKey = scrollKey?.let { "$it:${view.mode.name}" }
+    val position = key(positionKey) {
+        produceState<ScrollPosition?>(if (positionKey == null) ScrollPosition() else null) {
+            value = if (positionKey == null) ScrollPosition() else withContext(Dispatchers.IO) { history.readScroll(positionKey) }
+        }.value
+    }
     val selection = remember { SelectionState() }
+    if (position == null) { LoadingBox(); return }
+    val persist: ((Int, Int) -> Unit)? = positionKey?.let { k -> { index, offset -> history.saveScroll(k, index, offset) } }
     val headerStyle = MaterialTheme.typography.bodySmall
     val headerColor = MaterialTheme.colorScheme.onSurfaceVariant
     if (view.mode == FileViewMode.GRID) {
@@ -171,6 +189,8 @@ fun FilesPane(
             contentPadding = contentPadding,
             header = gridHeader,
             selection = selection,
+            initialPosition = position,
+            onScrollPosition = persist,
         )
     } else {
         val listHeader: (LazyListScope.() -> Unit)? = if (headerText == null) {
@@ -190,6 +210,8 @@ fun FilesPane(
             contentPadding = contentPadding,
             header = listHeader,
             selection = selection,
+            initialPosition = position,
+            onScrollPosition = persist,
         )
     }
 }

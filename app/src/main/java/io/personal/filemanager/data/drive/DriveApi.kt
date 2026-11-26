@@ -8,7 +8,9 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import org.json.JSONObject
 import java.io.File
-import java.io.RandomAccessFile
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.net.URL
 import java.net.URLEncoder
 import java.security.MessageDigest
@@ -94,11 +96,63 @@ internal class DriveApi(private val token:String) {
         } finally { c.disconnect() }
     }
 
-    suspend fun upload(context:Context,uri:Uri,progress:(Long,Long)->Unit) {
+    /** Seekable Android providers can be streamed directly. Pipes and unknown lengths still need a private snapshot. */
+    private class UploadSource(val input:FileInputStream,val length:Long,val initialSize:Long,val temporary:File?):java.io.Closeable {
+        private val channel:FileChannel = input.channel
+        fun read(offset:Long,count:Int):ByteArray {
+            val bytes=ByteArray(count)
+            val buffer=ByteBuffer.wrap(bytes)
+            while(buffer.hasRemaining()) {
+                val n=channel.read(buffer,offset+buffer.position())
+                if(n<=0)throw java.io.EOFException("Исходный файл изменился")
+            }
+            return bytes
+        }
+        suspend fun verify(c:HttpsURLConnection) {
+            check(channel.size()==initialSize) { "Исходный файл изменился" }
+            val result=c.inputStream.bufferedReader().use { JSONObject(it.readText()) }
+            if(result.has("size"))check(result.getLong("size")==length) { "Google Диск: размер не совпал" }
+            val expected=result.optString("sha256Checksum")
+            if(expected.isNotBlank()) {
+                val sha=MessageDigest.getInstance("SHA-256")
+                var offset=0L
+                while(offset<length) {
+                    currentCoroutineContext().ensureActive()
+                    val bytes=read(offset,minOf(CHUNK.toLong(),length-offset).toInt())
+                    sha.update(bytes);offset+=bytes.size
+                }
+                check(hex(sha.digest()).equals(expected,true) && channel.size()==initialSize) { "Google Диск: исходный файл или контрольная сумма изменились" }
+            }
+        }
+        override fun close() { try { input.close() } finally { temporary?.delete() } }
+    }
+    private suspend fun uploadSource(context:Context,uri:Uri):UploadSource {
         val resolver=context.contentResolver
-        val name=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { if(it.moveToFirst()) it.getString(0) else null }?.let(::validName)
-            ?: error("Не удалось определить имя файла")
-        val mime=resolver.getType(uri)?.takeIf { it.matches(Regex("[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+")) } ?: "application/octet-stream"
+        // Restrict direct mode to a whole seekable descriptor; never read outside a provider asset.
+        val afd=runCatching { resolver.openAssetFileDescriptor(uri,"r") }.getOrNull()
+        if(afd!=null) {
+            var stream:FileInputStream?=null
+            var retained=false
+            try {
+                val length=afd.length
+                if(afd.startOffset==0L && length>=0L) {
+                    val opened=afd.createInputStream()
+                    stream=opened
+                    val size=opened.channel.size()
+                    if(size==length) {
+                        opened.channel.position(0)
+                        retained=true
+                        return UploadSource(opened,length,size,null)
+                    }
+                }
+            } catch(_:java.io.IOException) {
+                // Pipes cannot seek; fall back to a disposable copy.
+            } catch(_:UnsupportedOperationException) {
+            }
+            finally {
+                if(!retained)runCatching { if(stream!=null)stream.close() else afd.close() }
+            }
+        }
         val temp=File.createTempFile("drive-upload-",".tmp",context.cacheDir)
         try {
             (resolver.openInputStream(uri) ?: error("Файл недоступен")).use { input ->
@@ -112,7 +166,16 @@ internal class DriveApi(private val token:String) {
                     }
                 }
             }
-            val size=temp.length()
+            return UploadSource(FileInputStream(temp),temp.length(),temp.length(),temp)
+        } catch(e:Exception) { temp.delete();throw e }
+    }
+    suspend fun upload(context:Context,uri:Uri,progress:(Long,Long)->Unit) {
+        val resolver=context.contentResolver
+        val name=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { if(it.moveToFirst()) it.getString(0) else null }?.let(::validName)
+            ?: error("Не удалось определить имя файла")
+        val mime=resolver.getType(uri)?.takeIf { it.matches(Regex("[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+")) } ?: "application/octet-stream"
+        uploadSource(context,uri).use { source ->
+            val size=source.length
             val meta=JSONObject().put("name",name).put("appProperties",JSONObject().put("pfm","transfer-v1"))
             val init=connection("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,size,sha256Checksum","POST")
             val session=try {
@@ -123,14 +186,13 @@ internal class DriveApi(private val token:String) {
                 check(init.responseCode in 200..299) {"Google Диск: HTTP ${init.responseCode}"}
                 requireNotNull(init.getHeaderField("Location")).also { require(allowedSession(it)) }
             }finally{init.disconnect()}
-            RandomAccessFile(temp,"r").use { input ->
+            run {
                 var offset=0L
                 var retries=0
                 while(true) {
                     currentCoroutineContext().ensureActive()
                     val count=minOf(CHUNK.toLong(),size-offset).toInt()
-                    val chunk=ByteArray(count)
-                    input.seek(offset);input.readFully(chunk)
+                    val chunk=source.read(offset,count)
                     val c=connection(session,"PUT")
                     var code=0
                     var range:String?=null
@@ -139,7 +201,7 @@ internal class DriveApi(private val token:String) {
                         c.setRequestProperty("Content-Range",if(size==0L) "bytes */0" else "bytes $offset-${offset+count-1}/$size")
                         c.setFixedLengthStreamingMode(count);c.outputStream.use { it.write(chunk) }
                         code=c.responseCode;range=c.getHeaderField("Range")
-                        if(code in 200..299) { progress(size,size);return }
+                        if(code in 200..299) { source.verify(c);progress(size,size);return }
                     }catch(e:java.io.IOException) { if(++retries>3)throw e }
                     finally{c.disconnect()}
                     if(code==308) {
@@ -154,7 +216,7 @@ internal class DriveApi(private val token:String) {
                             check.doOutput=true;check.setRequestProperty("Content-Range","bytes */$size");check.setFixedLengthStreamingMode(0)
                             check.outputStream.close()
                             when(val status=check.responseCode) {
-                                in 200..299 -> {progress(size,size);return}
+                                in 200..299 -> {source.verify(check);progress(size,size);return}
                                 308 -> {offset=nextOffset(check.getHeaderField("Range"),size);progress(offset,size)}
                                 else -> error("Google Диск: HTTP $status")
                             }
@@ -162,7 +224,7 @@ internal class DriveApi(private val token:String) {
                     } else error("Google Диск: HTTP $code")
                 }
             }
-        }finally{temp.delete()}
+        }
     }
     suspend fun download(file:DriveFile,directory:File,progress:(Long,Long)->Unit):File {
         val name=validName(file.name)
@@ -191,7 +253,8 @@ internal class DriveApi(private val token:String) {
                                 val n=input.read(buf,0,minOf(buf.size.toLong(),file.size-done).toInt())
                                 if(n<0) throw java.io.EOFException("Соединение оборвалось")
                                 if(n==0) continue
-                                out.write(buf,0,n);sha.update(buf,0,n);done+=n;failures=0;progress(done,file.size)
+                                try { out.write(buf,0,n) } catch(e:java.io.IOException) { throw IllegalStateException("Не удалось записать файл",e) }
+                                sha.update(buf,0,n);done+=n;failures=0;progress(done,file.size)
                             }
                             check(input.read()==-1) { "Некорректный размер" }
                         }

@@ -37,8 +37,10 @@ fun TransferPeerPanel(manager: TransferManager) {
         runCatching { context.startForegroundService(android.content.Intent(context, io.personal.filemanager.data.transfer.TransferService::class.java)) }
             .onFailure { message = "Не удалось включить фоновую передачу: ${it.message}"; return }
         busy = true
-        job = scope.launch(Dispatchers.IO) {
-            try { action() } catch (e: CancellationException) { throw e } catch (e: Exception) { message = e.message ?: "Ошибка подключения" }
+        job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try { withContext(Dispatchers.IO) { action() } }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { message = e.message ?: "Ошибка подключения" }
             finally { busy = false }
         }
     }
@@ -57,6 +59,7 @@ fun TransferPeerPanel(manager: TransferManager) {
         message = "Подключение к «$name»…"
         val probe = TransferClient(rawAddress)
         val fingerprint = probe.inspect()
+        currentCoroutineContext().ensureActive()
         // Первое подключение запоминает сертификат устройства; если у того же устройства он сменился — останавливаемся.
         val known = prefs.getString(name, null)
         if (known != null && known != fingerprint) {

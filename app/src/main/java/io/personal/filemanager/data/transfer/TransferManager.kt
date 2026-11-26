@@ -249,11 +249,29 @@ class TransferManager(private val context: Context) {
             }
             if (r.path.startsWith("/download/") && r.method == "GET") {
                 val ticket = tickets[r.path.removePrefix("/download/")] ?: error("Ссылка истекла")
-                require(sessions[ticket.first]?.let { it > now() } == true)
+                synchronized(lock) {
+                    require(sessions[ticket.first]?.let { it > now() } == true)
+                    sessions[ticket.first] = now() + 3600_000
+                }
                 val item = shared[ticket.second] ?: error("Файл больше не доступен")
                 require(item.size == item.file.length() && item.modified == item.file.lastModified()) { "Файл изменён; выберите его заново" }
-                LocalHttpsServer.headers(out, 200, "application/octet-stream", item.size)
-                java.nio.file.Files.newInputStream(item.file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS).use { it.copyTo(out, 65536) }; return
+                val rangeHeader = r.headers["range"]
+                val range = try { LocalHttpsServer.parseRange(rangeHeader, item.size) }
+                    catch (_: java.io.IOException) { LocalHttpsServer.unsatisfiedRange(out, item.size); return }
+                java.nio.file.Files.newByteChannel(item.file.toPath(), java.nio.file.StandardOpenOption.READ,
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS).use { channel ->
+                    check(channel.size() == item.size) { "Файл изменён; выберите его заново" }
+                    channel.position(range.start)
+                    LocalHttpsServer.downloadHeaders(out, range, item.size, rangeHeader != null)
+                    val input = java.nio.channels.Channels.newInputStream(channel)
+                    val buffer = ByteArray(65536)
+                    var remaining = range.length()
+                    while (remaining > 0) {
+                        val n = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                        if (n < 0) break
+                        if (n > 0) { out.write(buffer, 0, n); remaining -= n }
+                    }
+                }; return
             }
             val token = r.headers["authorization"]?.removePrefix("Bearer ") ?: error("Требуется подключение")
             synchronized(lock) {

@@ -93,9 +93,41 @@ public final class LocalHttpsServer implements AutoCloseable {
         }
         throw new IOException("Line too long");
     }
+    static final class ByteRange {
+        final long start, end;
+        ByteRange(long start,long end){this.start=start;this.end=end;}
+        long length(){return end-start+1;}
+    }
+    static ByteRange parseRange(String value,long size) throws IOException {
+        if(size<0)throw new IOException("Invalid size");
+        if(value==null)return new ByteRange(0,size-1);
+        if(size==0 || !value.matches("bytes=[0-9]{0,19}-[0-9]{0,19}"))throw new IOException("Invalid byte range");
+        String[] ends=value.substring(6).split("-",-1);
+        try {
+            if(ends[0].isEmpty()){
+                long count=Long.parseLong(ends[1]);
+                if(count<=0)throw new IOException("Invalid suffix");
+                return new ByteRange(Math.max(0,size-count),size-1);
+            }
+            long start=Long.parseLong(ends[0]),end=ends[1].isEmpty()?size-1:Math.min(size-1,Long.parseLong(ends[1]));
+            if(start<0 || start>=size || end<start)throw new IOException("Unsatisfiable byte range");
+            return new ByteRange(start,end);
+        }catch(NumberFormatException e){throw new IOException("Invalid byte range",e);}
+    }
+    static void downloadHeaders(OutputStream out,ByteRange range,long size,boolean partial)throws IOException{
+        String extra="Accept-Ranges: bytes\r\n";
+        if(partial)extra+="Content-Range: bytes "+range.start+"-"+range.end+"/"+size+"\r\n";
+        headers(out,partial?206:200,"application/octet-stream",range.length(),extra);
+    }
+    static void unsatisfiedRange(OutputStream out,long size)throws IOException{
+        headers(out,416,"text/plain",0,"Content-Range: bytes */"+size+"\r\nAccept-Ranges: bytes\r\n");
+    }
     public static void headers(OutputStream out,int status,String type,long length) throws IOException {
+        headers(out,status,type,length,"");
+    }
+    private static void headers(OutputStream out,int status,String type,long length,String extra) throws IOException {
         out.write(("HTTP/1.1 "+status+" Response\r\nContent-Type: "+type+"\r\nContent-Length: "+length+
-            "\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"+
+            "\r\n"+extra+"Connection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"+
             "Referrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
     }
     public static void reply(OutputStream out,int status,String type,byte[] bytes) throws IOException {

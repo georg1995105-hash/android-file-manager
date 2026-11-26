@@ -89,7 +89,11 @@ class TransferIntegrationTest {
             val uploaded = org.json.JSONObject(request("PUT", "/upload/$id", expected, auth + ("X-Offset" to "0")))
             assertEquals(expected.size.toLong(), uploaded.getLong("offset"))
             request("POST", "/upload/$id", headers = auth)
+            // Retrying a lost completion acknowledgement must not publish a duplicate.
+            request("POST", "/upload/$id", headers = auth)
+            assertTrue(org.json.JSONObject(request("GET", "/upload/$id", headers = auth)).getBoolean("done"))
             assertArrayEquals(expected, File(manager.receivedDirectory, name).readBytes())
+            assertFalse(File(manager.receivedDirectory,name.removeSuffix(".bin")+" (1).bin").exists())
         } finally {
             manager.stop()
             File(manager.receivedDirectory, name).delete()

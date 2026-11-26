@@ -13,6 +13,19 @@ public class HttpTransportCheck {
   reject("GET /../../secret HTTP/1.1\r\n"+host+"\r\n");
   reject("GET / HTTP/1.1\n"+host+"\r\n");
   reject("GET / HTTP/1.1\r\n"+host+"X: "+"a".repeat(5000)+"\r\n\r\n");
-  System.out.println("PASS: strict HTTP framing, origin, DNS rebinding and bounded body checks");
+  var r=LocalHttpsServer.parseRange("bytes=8-",10);
+  if(r.start!=8||r.end!=9||r.length()!=2)throw new AssertionError("range");
+  r=LocalHttpsServer.parseRange("bytes=-3",10);
+  if(r.start!=7||r.length()!=3)throw new AssertionError("suffix");
+  r=LocalHttpsServer.parseRange("bytes=3-6",10);
+  if(r.start!=3||r.end!=6)throw new AssertionError("bounded range");
+  if(LocalHttpsServer.parseRange(null,0).length()!=0)throw new AssertionError("empty file");
+  for(String bad:new String[]{"bytes=10-","bytes=-0","bytes=9-2","bytes=1-,3-","bytes=9999999999999999999-"}) {
+   try { LocalHttpsServer.parseRange(bad,10); throw new AssertionError(bad); } catch(IOException expected) {}
+  }
+  var response=new ByteArrayOutputStream();LocalHttpsServer.downloadHeaders(response,LocalHttpsServer.parseRange("bytes=8-",10),10,true);
+  String range=response.toString("US-ASCII");
+  if(!range.contains("206 Response")||!range.contains("Content-Length: 2")||!range.contains("Content-Range: bytes 8-9/10"))throw new AssertionError(range);
+  System.out.println("PASS: strict HTTP framing, origin, DNS rebinding, bounded body and Range checks");
  }
 }

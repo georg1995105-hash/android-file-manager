@@ -149,25 +149,52 @@ class TransferClient(address: String, private val pin: String? = null) {
         IncomingTransfer(staging.toPath(), target.toPath(), name, size, file.getString("sha256"), target.usableSpace - 64L * 1024 * 1024, true).renameOnConflict().use { receiver ->
             val path = api("/ticket/${file.getString("id")}", "POST").getString("url")
             require(path.matches(Regex("/download/[a-f0-9]{64}")))
-            val c = connection(path, "GET")
-            try {
-                check(c.responseCode == 200 && c.contentLengthLong == size) { "Размер ответа изменился" }
-                c.inputStream.use { input ->
-                    val buffer = ByteArray(1024 * 1024)
-                    while (receiver.offset() < size) {
-                        currentCoroutineContext().ensureActive()
-                        val n = input.readChunk(buffer, minOf(buffer.size.toLong(), size - receiver.offset()).toInt())
-                        check(n > 0) { "Соединение оборвалось" }
-                        val chunk = buffer.copyOf(n)
-                        val hash = MessageDigest.getInstance("SHA-256").digest(chunk).joinToString("") { "%02x".format(it) }
-                        receiver.append(receiver.offset(), n, hash, ByteArrayInputStream(chunk))
-                        progress("$name: ${receiver.offset()} / $size")
+            val buffer = ByteArray(1024 * 1024)
+            var failures = 0
+            do {
+                currentCoroutineContext().ensureActive()
+                val offset = receiver.offset()
+                val c = connection(path, "GET")
+                try {
+                    if (offset > 0) c.setRequestProperty("Range", "bytes=$offset-")
+                    val status = c.responseCode
+                    val partial = status == 206 && offset > 0
+                    check(if (partial) c.getHeaderField("Content-Range") == "bytes $offset-${size-1}/$size" &&
+                        c.contentLengthLong == size-offset else status == 200 && c.contentLengthLong == size) { "Размер ответа изменился" }
+                    c.inputStream.use { input ->
+                        // Older peers ignore Range; discard the already verified prefix.
+                        if (!partial) {
+                            var skip = offset
+                            while (skip > 0) {
+                                currentCoroutineContext().ensureActive()
+                                val n = input.readChunk(buffer, minOf(buffer.size.toLong(),skip).toInt())
+                                if (n <= 0) throw EOFException("Соединение оборвалось")
+                                skip -= n
+                            }
+                        }
+                        while (receiver.offset() < size) {
+                            currentCoroutineContext().ensureActive()
+                            val n = input.readChunk(buffer, minOf(buffer.size.toLong(), size-receiver.offset()).toInt())
+                            if (n <= 0) throw EOFException("Соединение оборвалось")
+                            val chunk = buffer.copyOf(n)
+                            val hash = MessageDigest.getInstance("SHA-256").digest(chunk).joinToString("") { "%02x".format(it) }
+                            try {
+                                receiver.append(receiver.offset(), n, hash, ByteArrayInputStream(chunk))
+                            } catch (e: IOException) { throw IllegalStateException("Не удалось записать файл", e) }
+                            failures = 0
+                            progress("$name: ${receiver.offset()} / $size")
+                        }
                     }
-                    val saved = receiver.finish()
-                    manager.rescan(saved.toString())
-                    progress("Сохранено: ${saved.fileName} → Загрузки/Передача")
-                }
-            } finally { c.disconnect(); active = null }
+                    break
+                } catch (e: IOException) {
+                    currentCoroutineContext().ensureActive()
+                    if (++failures > 5) throw e
+                    delay(1000L * failures)
+                } finally { c.disconnect(); active = null }
+            } while (true)
+            val saved = receiver.finish()
+            manager.rescan(saved.toString())
+            progress("Сохранено: ${saved.fileName} → Загрузки/Передача")
         }
     }
 }
